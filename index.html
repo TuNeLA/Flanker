@@ -960,7 +960,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       uRockA: { value: P.rockA || 0.28 }, uRockB: { value: P.rockB || 0.5 },
       uSnowH: { value: P.snowH === undefined ? 1e6 : P.snowH }, uSnowF: { value: P.snowF || 60 }, uSnowCol: { value: v3(P.snow || 0xeef3f8) }, uSnowSlope: { value: P.snowSlope || 0.62 },
       uSandH: { value: P.sandH || 0 }, uSandCol: { value: v3(P.sand || 0xcdbb94) },
-      uFaceN: { value: P.faceN === undefined ? 1 : P.faceN }
+      uFaceN: { value: P.faceN === undefined ? 1 : P.faceN }, uAux: { value: ctx.def.urban ? 0 : 1 }, uIce: { value: v3(P.ice || 0xa9bccb) }
     };
     ctx.terrainU = TU;
     const mat = new THREE.MeshStandardMaterial({ vertexColors: true, map: ctx.detailTex, roughness: P.roughness || 0.95, metalness: 0 });
@@ -975,7 +975,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         '#include <common>', 'varying float vUrban; varying vec3 vWN;',
         'uniform sampler2D uRockMap; uniform sampler2D uStrataMap; uniform float uStrataOn; uniform float uStrataSpan; uniform float uStrataOff;',
         'uniform float uRockOn; uniform vec3 uRock1; uniform vec3 uRock2; uniform float uRockA; uniform float uRockB;',
-        'uniform float uSnowH; uniform float uSnowF; uniform vec3 uSnowCol; uniform float uSnowSlope; uniform float uSandH; uniform vec3 uSandCol; uniform float uFaceN;',
+        'uniform float uSnowH; uniform float uSnowF; uniform vec3 uSnowCol; uniform float uSnowSlope; uniform float uSandH; uniform vec3 uSandCol; uniform float uFaceN; uniform float uAux; uniform vec3 uIce;',
         'vec3 gFN;'].join('\n'))
         .replace('#include <map_fragment>', [
           '#ifdef USE_MAP',
@@ -989,7 +989,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
           '  float ul = dt.g / 0.784;',
           '  vec3 uc = diffuseColor.rgb * sp * ul;',
           '  uc = mix(uc, vec3(0.06,0.08,0.035), dt.b * 0.6);',
-          '  vec3 col = mix(diffuseColor.rgb * sp, uc, vUrban);',
+          '  vec3 col = mix(diffuseColor.rgb * sp, uc, vUrban * (1.0 - uAux));',
           '  diffuseColor.rgb = col;',
           '#endif'].join('\n'))
         .replace('#include <color_fragment>', [
@@ -1008,10 +1008,12 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
           '  float rockK = smoothstep(uRockA, uRockB, steep) * uRockOn;',
           '  float sandK = (1.0 - smoothstep(uSandH * 0.45, uSandH, vFW.y)) * smoothstep(0.75, 0.9, upF) * step(0.01, uSandH) * step(-0.5, vFW.y);',
           '  col = mix(col, uSandCol * (0.9 + 0.2 * dt.r), sandK);',
-          '  col = mix(col, rock, rockK);',
           '  float sh_ = vFW.y + (dt2.r - 0.5) * uSnowF * 2.2 + (rkA - 0.5) * uSnowF * 0.8;',
           '  float snowK = smoothstep(uSnowH - uSnowF, uSnowH + uSnowF, sh_) * smoothstep(uSnowSlope - 0.12, uSnowSlope + 0.06, upF + (dt.r - 0.5) * 0.12);',
+          '  float ice_ = vUrban * uAux; snowK *= 1.0 - ice_; rockK *= 1.0 - ice_;',
+          '  col = mix(col, rock, rockK);',
           '  col = mix(col, uSnowCol * (0.9 + 0.1 * dt.r) * (0.93 + 0.07 * rkB), snowK);',
+          '  col = mix(col, uIce * (0.85 + 0.3 * dt.r) * (0.9 + 0.2 * rkB), ice_);',
           '  diffuseColor.rgb = col;',
           '#endif'].join('\n'))
         .replace('#include <normal_fragment_begin>', [
@@ -1092,7 +1094,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     let nVert = 0; for (const g of grids) { g.vOff = nVert; nVert += g.NV * g.NV; }
     const skirtOff = nVert; nVert += 4 * N;
     const pos = new Float32Array(nVert * 3), nrm = new Float32Array(nVert * 3), col = new Float32Array(nVert * 3);
-    const urb = def.urban ? new Float32Array(nVert) : null;
+    const urb = new Float32Array(nVert);
     const tmp = [0, 0, 0];
     for (const g of grids) {
       const nv = g.NV, H = g.H, c = g.cell;
@@ -1143,7 +1145,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     geo.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
     geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-    if (urb) geo.setAttribute('urban', new THREE.BufferAttribute(urb, 1));
+    geo.setAttribute('urban', new THREE.BufferAttribute(urb, 1));
     geo.setIndex(new THREE.Uint32BufferAttribute(index, 1));
     geo.computeBoundingSphere();
     const mat = terrainMaterial(ctx);
@@ -1203,7 +1205,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
           '  diffuseColor.rgb = mix(diffuseColor.rgb, uShallow, smoothstep(0.55, 0.97, dep) * uShallowK);',
           '  float fn = fnoise(vFW.xz * 0.05 + vec2(uTime * 0.21, -uTime * 0.13)) * 0.6 + fnoise(vFW.xz * 0.19 - vec2(uTime * 0.37, uTime * 0.11)) * 0.4;',
           '  float wave = 0.5 + 0.5 * sin(dep * 42.0 - uTime * 1.7 + fn * 4.0);',
-          '  float foam = smoothstep(0.86, 0.985, dep) * smoothstep(0.35, 0.75, fn * 0.7 + wave * 0.45) * uFoam;',
+          '  float foam = smoothstep(0.9, 0.99, dep) * smoothstep(0.35, 0.75, fn * 0.7 + wave * 0.45) * uFoam;',
           '  float fd = length(vFW - cameraPosition);',
           '  foam *= 1.0 - smoothstep(6000.0, 20000.0, fd) * 0.6;',
           '  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.86, 0.9, 0.92), clamp(foam, 0.0, 1.0));'].join('\n'))
@@ -1730,9 +1732,9 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     mk(bGlass, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.08, metalness: 0.85 }), true);
     mk(bIn, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, metalness: 0, emissive: new THREE.Color(0.5, 0.47, 0.42) }));
     if (bGlow.nv) { const gm = new THREE.MeshBasicMaterial({ color: new THREE.Color(5, 4.8, 4.4) }); mk(bGlow, gm); }
-    const sp = toW(-L / 2 + 80, 0), gate = toW(gateX, FZ0 - 60);
+    const sp = toW(-L / 2 + 80, 0), gate = toW(gateX, FZ0 - 20), gateOut = toW(gateX, FZ0 - 650);
     return {
-      spec: spec, group: g, hangar: hangar, gate: gate,
+      spec: spec, group: g, hangar: hangar, gate: gate, gateOut: gateOut,
       runway: { e: spec.e, n: spec.n, hdgDeg: ((hdg % 180) + 180) % 180, len: L, w: W, nameW: pad(hdg % 180 < 90 ? n1 : n2), nameE: pad(hdg % 180 < 90 ? n2 : n1) },
       spawn: { e: sp[0], n: sp[1], hdgDeg: hdg }
     };
@@ -1829,7 +1831,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       const e = -half + (i + 0.5) * gc, n = -half + (j + 0.5) * gc, k = j * G + i;
       let hmin = 1e9, hmax = -1e9, wat = 0;
       for (const [oe, on] of [[0, 0], [-160, -160], [160, -160], [-160, 160], [160, 160]]) { const h = sampleH(e + oe, n + on); hmin = Math.min(hmin, h); hmax = Math.max(hmax, h); if (h < 1.0) wat = 1; }
-      Hn[k] = sampleH(e, n); Wn[k] = wat || (net.block && net.block(e, n)) ? 1 : 0;
+      let blk = 0; for (const b of ctx.bases || []) { const f = b.spec._flat; if (f && flatMask({ e: f.e, n: f.n, ue: f.ue, un: f.un, re: f.re, rn: f.rn, x0: f.x0, x1: f.x1, z0: f.z0, z1: f.z1, blend: 1 }, e, n) > 0) blk = 1; }
+      Hn[k] = sampleH(e, n); Wn[k] = wat || blk || (net.block && net.block(e, n)) ? 1 : 0;
       if (hmax - hmin > 220) Hn[k] += (hmax - hmin) * 2; // rugged cell: expensive
     }
     const cellOf = (p) => clamp(Math.floor((p[1] + half) / gc), 0, G - 1) * G + clamp(Math.floor((p[0] + half) / gc), 0, G - 1);
@@ -1846,6 +1849,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       roads.push(path); kinds.push(L[2] || 'road');
     }
     for (const S of net.streets || []) { roads.push(resample(S, 12)); kinds.push('street'); }
+    for (const b of ctx.bases || []) { roads.push(resample([b.gate, b.gateOut], 12)); kinds.push('road'); }
     // ribbons
     const bH = new Builder(), bR = new Builder(), wC = [1, 1, 1], rd3 = [];
     for (let r = 0; r < roads.length; r++) {
@@ -2125,6 +2129,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       zones: zones,
       hillZones: hillZones,
       sunDir: SK.sunDir,
+      _debug: EX.debug || {},
       sun: SK.sun,
       cameraCloud: 0,
       buildMs: 0,
@@ -2276,7 +2281,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     const cSand = lin(0xcdbb94), cUrban = lin(0x958b7c), cUrban2 = lin(0x7e786f), cPark = lin(0x5a6436), cOlive = lin(0x6a6a3c), cBrown = lin(0x86704c),
       cValley = lin(0x3e4b25), cRock = lin(0x857a68), cRock2 = lin(0x6b6152), cGrass = lin(0x7a7a4a), cSeabed = lin(0x6e6650), cWet = lin(0xb8a888), cDesert = lin(0xa89a74);
     const t1 = [0, 0, 0];
-    const BASE = { name: 'Rosamond AFB', e: -40500, n: 42200, hdg: 78, len: 3200, w: 50, seed: 31, blend: 900 };
+    const BASE = { name: 'Rosamond AFB', e: -40500, n: 42200, hdg: 258, len: 3200, w: 50, seed: 31, blend: 900 };
     const def = {
       name: 'Los Angeles', region: 'California, USA', urban: true, N: N,
       sky: { sunAz: 225, sunEl: 28, fog: 0xc3cad0, fogD: 0.0000135, hfogA: 0.000026, hfogB: 1 / 650, zenith: [0.035, 0.11, 0.36], glow: [1.0, 0.70, 0.42] },
@@ -2352,7 +2357,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
           [34000, 15000, 5500, 4000, 900, 2400], [-41000, 19000, 6500, 4200, 1000, 2200], [11000, 3000, 5000, 3500, 600, 3200]]
       },
       roads: function (ctx) {
-        const g = ctx.bases[0].gate;
+        const g = ctx.bases[0].gateOut;
         const nodes = [g, [-30000, 30000], [-15000, 27000], [-2000, 24500], [15170, 12900], [3500, 2800], [20500, -16500], [24000, 31000], [-12000, 8000], [32000, 4000]];
         return { nodes: nodes, links: [[0, 1, 'hwy'], [1, 2, 'hwy'], [2, 3, 'hwy'], [3, 4, 'hwy'], [4, 5, 'hwy'], [5, 6, 'hwy'], [4, 7, 'hwy'], [2, 8, 'road'], [8, 5, 'road'], [4, 9, 'hwy']], bridgeK: 0 };
       },
@@ -2687,6 +2692,156 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     return def;
   };
 
+  // ================================================================ MAP: Norway Winter Fjords (Nordland, around Saltfjorden / Bodø)
+  MAPDEFS.fjords = function () {
+    // fjords: [points, halfWidthMouth, halfWidthHead, depth]
+    const FJ = [
+      [[[-40000, -8500], [-30000, -7000], [-18000, -5500], [-6000, -4000], [6000, -7000], [16000, -9500], [26000, -6000], [33000, -2000]], 700, 420, 220, 'Saltfjorden'],
+      [[[-3000, -4500], [1000, 2000], [5000, 9000], [9000, 13500], [13500, 18000]], 380, 260, 140, 'Sjunkfjorden'],
+      [[[-40000, -31500], [-28000, -30000], [-18000, -28500], [-9000, -29000], [0, -33000], [7000, -40000]], 620, 380, 180, 'Beiarfjorden'],
+      [[[-14000, -28800], [-13000, -22000], [-12000, -15500]], 300, 230, 90, 'Misværfjorden'],
+      [[[-40000, 20500], [-28000, 22000], [-16000, 24500], [-6000, 27000], [3000, 32000], [10000, 39500]], 680, 380, 200, 'Folda'],
+      [[[-14000, 25000], [-16500, 33000], [-19500, 43000]], 360, 250, 120, 'Nordfolda'],
+      [[[-40000, 36500], [-31000, 37000], [-24000, 39000]], 420, 280, 100, 'Kjerringøyfjorden']];
+    // dry valleys: [points, halfWidth, floorStart, floorEnd]
+    const VA = [
+      [[[13500, 18000], [11000, 24000], [7000, 29000], [4500, 32500]], 420, 30, 60],
+      [[[33000, -2000], [38000, 1000], [42500, 4000], [49000, 8500]], 650, 25, 160],
+      [[[7000, -40000], [11000, -32000], [12500, -24500], [14500, -16000], [16000, -9500]], 480, 20, 30],
+      [[[10000, 39500], [18000, 37000], [26000, 33000], [31000, 28000], [36000, 20000], [41000, 13000], [47000, 9000]], 520, 20, 160],
+      [[[-12000, -15500], [-13500, -11000], [-15000, -5800]], 380, 30, 30],
+      [[[-24000, 39000], [-20500, 41500]], 350, 30, 40]];
+    const LAKES = [[12500, -24500, 1700], [30000, 29000, 2000], [41000, 13000, 1300], [6500, 29500, 1000]];
+    const HEADS = [[33000, -2000, 'Fauske'], [13500, 18000, 'Sjunkhatten'], [7000, -40000, 'Beiarn'], [-12000, -15500, 'Misvær'], [10000, 39500, 'Sørfold'], [-19500, 43000, 'Nordfold'], [-24000, 39000, 'Kjerringøy']];
+    const fIdx = makeSegIndex(FJ.map((f) => f[0]), 2000, 3200), vIdx = makeSegIndex(VA.map((v) => v[0]), 2000, 3000);
+    const SPOTS = HEADS.map((h) => {
+      // flat delta ground just beyond the head along the fjord direction
+      let P = null; for (const f of FJ) { const L = f[0][f[0].length - 1]; if (L[0] === h[0] && L[1] === h[1]) P = f[0]; }
+      let de = 0, dn = 0; if (P) { const a = P[P.length - 2], b = P[P.length - 1], l = Math.hypot(b[0] - a[0], b[1] - a[1]); de = (b[0] - a[0]) / l; dn = (b[1] - a[1]) / l; }
+      return [h[0] + de * 450, h[1] + dn * 450, 850, 6];
+    });
+    const coastE = (n) => -35500 + 3600 * (fbm(n / 9000 + 3, 7.7, 3, 211) - 0.5) + 900 * Math.sin(n / 3100);
+    const BASE = { name: 'Bodø Main Air Station', e: -32800, n: -18200, hdg: 2, len: 2900, w: 45, seed: 41, blend: 700, minH: 9, q: 0.5 };
+    const EBASE = { name: 'Sulitjelma', e: 41000, n: 3600, hdg: 57, len: 1900, w: 40, seed: 42, blend: 500, mini: true, enemy: true, minH: 30, q: 0.45 };
+    let lastIce = 0;
+    function mount(e, n) {
+      const r = ridged(e / 5200 + 3.3, n / 5200 - 1.7, 5, 201), f = fbm(e / 17000 + 1, n / 17000 + 5, 3, 203);
+      return 260 + 1480 * Math.pow(r, 1.35) * (0.5 + 0.75 * f) + 120 * (fbm(e / 2200, n / 2200, 2, 207) - 0.5);
+    }
+    function raw(e, n) {
+      lastIce = 0;
+      const ce = coastE(n), dx = e - ce;
+      let h;
+      if (dx < -400) {
+        const isl = fbm(e / 1500 + 9, n / 1500 - 4, 3, 221), isl2 = fbm(e / 5000, n / 5000, 2, 223);
+        h = -70 - Math.min(-dx, 9000) * 0.008 + 110 * sstep(0.56, 0.74, isl) * sstep(0.35, 0.6, isl2) * (1 - sstep(4000, 12000, -dx));
+      } else {
+        const k = sstep(-400, 7500, dx);
+        const strand = sstep(-38500, -36500, e) * (1 - sstep(-30500, -28500, e)) * sstep(-27500, -25000, n) * (1 - sstep(-11500, -9500, n));
+        h = 3 + 22 * fbm(e / 1200, n / 1200, 2, 225) + mount(e, n) * Math.pow(k, 1.5) * (1 - 0.97 * strand);
+        if (dx < 300) h = Math.min(h, -2 + (dx + 400) / 700 * 6);
+      }
+      // dry valleys (U-shaped)
+      let d = vIdx.query(e, n);
+      if (SQ.p >= 0) {
+        const V = VA[SQ.p], fr = SQ.s / SQ.len, hw = V[1] * (0.85 + 0.3 * vnoise(SQ.s / 2500, SQ.p, 231)), floor = V[2] + (V[3] - V[2]) * fr + 25 * (fbm(SQ.s / 1800, SQ.p * 3, 2, 233) - 0.5);
+        const wall = 260 + 0.22 * Math.max(h - floor, 0);
+        if (d < hw + wall && h > floor) {
+          const t = d < hw ? 0 : sstep(0, 1, (d - hw) / wall), fl = floor + 22 * Math.pow(Math.min(d / hw, 1), 2);
+          h = fl + (h - fl) * Math.pow(t, 0.9);
+        }
+      }
+      // fjords
+      d = fIdx.query(e, n);
+      if (SQ.p >= 0) {
+        const F = FJ[SQ.p], fr = SQ.s / SQ.len, hw = (F[1] + (F[2] - F[1]) * fr) * (0.85 + 0.35 * vnoise(SQ.s / 3000, SQ.p, 241)), floor = -F[3] * (1 - 0.7 * fr) - 20;
+        const wall = 220 + 0.2 * Math.max(h, 0);
+        if (d < hw + wall) {
+          const t = d < hw * 0.55 ? 0 : sstep(0, 1, (d - hw * 0.55) / (hw * 0.45 + wall));
+          const fl = floor * (1 - Math.min(d / hw, 1) * 0.6);
+          if (h > fl) h = fl + (h - fl) * Math.pow(t, 1.25);
+        }
+      }
+      // fjord-head deltas (flat village ground)
+      for (let i = 0; i < SPOTS.length; i++) {
+        const s = SPOTS[i], dd = Math.hypot(e - s[0], n - s[1]);
+        if (dd < s[2]) { const w = 1 - sstep(s[2] * 0.45, s[2], dd); h += (s[3] + 10 * (fbm(e / 400, n / 400, 2, 251) - 0.3) - h) * w; }
+      }
+      // frozen lakes
+      for (let i = 0; i < LAKES.length; i++) {
+        const L = LAKES[i], dd = Math.hypot(e - L[0], n - L[1]);
+        if (dd < L[2] * 1.3) {
+          const lev = LAKES[i][3];
+          const w = 1 - sstep(L[2] * 0.85, L[2] * 1.3, dd);
+          if (h > lev) h = lev + (h - lev) * (1 - w);
+          if (dd < L[2] * 0.95) lastIce = 1;
+        }
+      }
+      return h;
+    }
+    // lake levels: valley floor at the lake centre (computed without the lake term)
+    { const rad = LAKES.map((L) => L[2]); for (const L of LAKES) { L[2] = -1; L[3] = 0; } for (let i = 0; i < LAKES.length; i++) { LAKES[i][3] = Math.max(raw(LAKES[i][0], LAKES[i][1]), 8) + 2; LAKES[i][2] = rad[i]; } }
+    const cLow = lin(0x3a4630), cLow2 = lin(0x4e5236), cMid = lin(0x6a6a62), cSea = lin(0x2a3a3a), cShore = lin(0x6a665a), cSnowUnder = lin(0xa9b2ba);
+    const def = {
+      name: 'Norway Winter Fjords', region: 'Nordland, Norway', N: 400,
+      sky: { sunAz: 205, sunEl: 7, fog: 0xaab6c2, fogD: 0.0000125, hfogA: 0.00006, hfogB: 1 / 520, zenith: [0.10, 0.14, 0.22], glow: [0.9, 0.55, 0.35], glowW: 0.3, sunCol: [1.0, 0.8, 0.6], disk: 18,
+        sunHex: 0xffd9b0, sunI: 1.6, hemiSky: 0xb9c8da, hemiGround: 0x5a6068, hemiI: 0.55, white: 0xdfe4ea, envGround: [0.18, 0.2, 0.23] },
+      ground: { rockOn: 1, rock1: 0x3f4246, rock2: 0x6c6f72, rockA: 0.42, rockB: 0.62, snowH: 135, snowF: 45, snow: 0xeef3f8, snowSlope: 0.6, faceN: 1, ice: 0xa7bfcf },
+      water: { color: 0x0a1a22, shallow: 0x1f3a40, foam: 0.35, shallowK: 0.35, roughness: 0.18 },
+      bases: [BASE, EBASE],
+      raw: raw,
+      levels: [{ tile: 2000, cell: 100, select: (e0, n0, e1, n1) => { const e = (e0 + e1) / 2, n = (n0 + n1) / 2; if (Math.abs(e - BASE.e) < 4000 && Math.abs(n - BASE.n) < 4000) return true; const a = fIdx.query(e, n), b = vIdx.query(e, n); return Math.min(a, b) < 2300; } }],
+      color: function (e, n, h, il, curv, o, cell, k) {
+        if (h < 0) { mix3(o, cSea, cShore, sstep(-25, -1, h)); return 0; }
+        mix3(o, cLow, cLow2, fbm(e / 700, n / 700, 2, 261));
+        mix3(o, o, cMid, sstep(250, 600, h));
+        mix3(o, o, cSnowUnder, sstep(700, 1100, h));
+        mix3(o, o, cShore, (1 - sstep(1, 6, h)) * 0.7);
+        return lastIceAt(e, n);
+      },
+      zones: [
+        { id: 'saltstraumen', name: 'Saltstraumen', e: -24000, n: -6500, r: 4000, type: 'coast' },
+        { id: 'skjerstad', name: 'Skjerstadfjorden', e: 14000, n: -8500, r: 4500, type: 'valley' },
+        { id: 'sjunk', name: 'Sjunkfjorden', e: 5000, n: 9000, r: 3500, type: 'valley' },
+        { id: 'beiarn', name: 'Beiarfjorden', e: -9000, n: -29000, r: 4500, type: 'valley' },
+        { id: 'misvaer', name: 'Misvær', e: -12500, n: -15000, r: 2500, type: 'city' },
+        { id: 'borvass', name: 'Børvasstindan', e: -22000, n: -19000, r: 5000, type: 'mountain' },
+        { id: 'folda', name: 'Folda', e: -12000, n: 25500, r: 4500, type: 'coast' },
+        { id: 'blamannen', name: 'Blåmannsisen', e: 30000, n: 19000, r: 6000, type: 'mountain' },
+        { id: 'fauske', name: 'Fauske', e: 33500, n: -1500, r: 2500, type: 'port' },
+        { id: 'sulitjelma', name: 'Sulitjelma airfield (enemy)', e: EBASE.e, n: EBASE.n, r: 2500, type: 'airbase', enemy: true },
+        { id: 'kjerringoy', name: 'Kjerringøy', e: -26000, n: 38500, r: 3000, type: 'coast' }],
+      towns: HEADS.map((h, i) => ({ e: SPOTS[i][0], n: SPOTS[i][1], r: 600, count: 26 + (i === 0 ? 30 : 0), style: 'nordic', church: true, harbor: true, maxSlope: 0.4, seed: 300 + i }))
+        .concat([{ e: -31000, n: -12000, r: 1100, count: 60, style: 'nordic', church: true, harbor: true, seed: 320 }]),
+      roads: function (ctx) {
+        const g = ctx.bases[0].gateOut, nodes = [g, [-31000, -12000], [SPOTS[3][0], SPOTS[3][1]], [SPOTS[0][0], SPOTS[0][1]], ctx.bases[1].gateOut, [SPOTS[2][0], SPOTS[2][1]], [SPOTS[1][0], SPOTS[1][1]], [SPOTS[4][0], SPOTS[4][1]]];
+        return { nodes: nodes, links: [[0, 1, 'hwy'], [0, 2, 'road'], [3, 4, 'road'], [5, 3, 'road'], [6, 7, 'road'], [3, 6, 'road']], bridgeK: 0 };
+      },
+      traffic: 120,
+      veg: [
+        { kind: 'snowpine', per: 340, scale: [0.7, 1.25], cap: 9000, test: (e, n, h, sl) => h > 4 && h < 420 && sl < 0.75 ? 0.85 * (1 - sstep(250, 420, h)) + 0.1 : 0 },
+        { kind: 'rock', per: 40, scale: [0.6, 2.2], cap: 2000, shadow: false, test: (e, n, h, sl) => h > 2 && sl < 1.2 ? 0.5 : 0 }],
+      clouds: {
+        seed: 811, cumulus: 40, cuBase: [2300, 2900], cuSize: 1.5, cling: true, lit: [0.92, 0.9, 0.9], shadow: [0.42, 0.45, 0.5], opacity: 0.94,
+        banks: [[-20000, -16000, 9000, 5000, 600, 850], [8000, 2000, 8000, 5000, 600, 1000], [22000, 22000, 10000, 6000, 700, 1100], [-6000, 36000, 9000, 5000, 600, 950],
+          [30000, -24000, 9000, 6000, 700, 1050], [-2000, -40000, 8000, 5000, 600, 900], [40000, 36000, 8000, 6000, 700, 1200], [-30000, 30000, 7000, 4000, 500, 700]]
+      },
+      particles: { count: 2600, box: 240, col: [0.95, 0.97, 1.0], size: 1.8, fall: 2.2, drift: [2.5, 0.8], maxY: 2600 },
+      extras: function (ctx) {
+        const P = FJ[0][0];
+        const lanes = [FJ[0][0].slice(0, 6), FJ[4][0].slice(0, 5), FJ[2][0].slice(0, 5)];
+        const cl = []; for (let n = -44000; n <= 44000; n += 4000) cl.push([coastE(n) - 2200, n]);
+        lanes.push(cl);
+        const a = P[1], b = P[2];
+        return { seaLanes: lanes, debug: { fjordView: [a[0] + (b[0] - a[0]) * 0.3, a[1] + (b[1] - a[1]) * 0.3, Math.atan2(b[0] - a[0], b[1] - a[1]) / DEG] } };
+      }
+    };
+    function lastIceAt(e, n) {
+      for (let i = 0; i < LAKES.length; i++) { const L = LAKES[i], dd = Math.hypot(e - L[0], n - L[1]); if (dd < L[2] * 1.05) return 1 - sstep(L[2] * 0.85, L[2] * 1.05, dd); }
+      return 0;
+    }
+    return def;
+  };
 })();
 
 </script>
@@ -5291,17 +5446,17 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   root.FL.createPhysics = function (T, world) {
     var DEG = Math.PI / 180, G = 9.81, GEAR_H = 2.4;
     // Per-aircraft spec (FL.AIRCRAFT entry) + upgrade mods. Defaults = Su-27.
-    var M = 22000, S = 62, TMIL = 150000, TAB = 310000;
+    var M = 22000, S = 62, TMIL = 150000, TAB = 310000, baseM = 22000, storesKg = 0;
     var RR = 290, PR = 115, YR = 50, DRIFT = 1, CD0 = 0.021, MACHMAX = 2.35, ROUGH = 0.25;
     var turb = new T.Vector3();
     var spec = null, mods = { thrustMul: 1, rateMul: 1, boostMul: 1, boostDuration: 9, boostRecharge: 8 };
     function setSpec(s, m) {
       if (s) spec = s; if (m) mods = m;
       var a = spec || {}, tm = (a.arcadeThrust || 1) * (mods.thrustMul || 1), rm = mods.rateMul || 1;
-      M = a.mass || 22000; S = a.wingArea || 62;
+      baseM = a.mass || 22000; S = a.wingArea || 62;
       TMIL = (a.thrustMil || 150000) * tm; TAB = (a.thrustAB || 310000) * tm;
       RR = (a.rollRate || 290) * rm; PR = (a.pitchRate || 115) * rm; YR = (a.yawRate || 50) * rm;
-      var tsm = mods.topSpeedMul || 1; M *= (mods.massMul || 1);
+      var tsm = mods.topSpeedMul || 1; baseM *= (mods.massMul || 1); M = baseM + storesKg;
       DRIFT = a.drift || 1; CD0 = (a.cd0 || 0.021) / (tsm * tsm); MACHMAX = (a.machMax || 2.35) * tsm; ROUGH = a.roughness != null ? a.roughness : 0.25;
     }
     function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
@@ -5497,7 +5652,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     }
 
     return {
-      st: st, step: step, reset: reset, setSpec: setSpec, setWorld: function (w) { world = w; }, spec: function () { return spec; }, crash: crash, startCobra: startCobra, GEAR_H: GEAR_H, thrustN: thrustN,
+      st: st, step: step, reset: reset, setSpec: setSpec, setStoresMass: function (kg) { storesKg = Math.max(0, kg || 0); M = baseM + storesKg; st.storesKg = storesKg; }, mass: function () { return M; }, setWorld: function (w) { world = w; }, spec: function () { return spec; }, crash: crash, startCobra: startCobra, GEAR_H: GEAR_H, thrustN: thrustN,
       axes: function () { axes(); return { fwd: fwd, up: up, right: right }; }
     };
   };
@@ -8731,27 +8886,27 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   // Consumed generically by combat.js. Ranges in m, speeds in m/s, rate in shots/s, ammo per slot.
   function W(o) {
     var d = { guidance: 'none', targets: ['air', 'ground'], aspect: 'all', range: 1000, minRange: 0, speed: 900, g: 0, lockTimeMul: 1,
-      damage: 10, blast: 0, needsBombsOK: false, ammo: 1, salvo: 1, rate: 1, price: 0, unlockLevel: 1, desc: '' };
+      damage: 10, blast: 0, weight: 0 /*kg per round/unit*/, needsBombsOK: false, ammo: 1, salvo: 1, rate: 1, price: 0, unlockLevel: 1, desc: '' };
     for (var k in o) d[k] = o[k];
     return d;
   }
   var WEAPON_LIST = [
-    W({ id: 'gsh23', name: 'GSh-23 23 mm', type: 'gun', range: 1000, speed: 715, damage: 14, rate: 50, ammo: 900, price: 0, unlockLevel: 1, desc: 'MiG-21 twin-barrel. Short bursts. Watch the ammo.' }),
-    W({ id: 'aden', name: 'ADEN 30 mm', type: 'gun', range: 1100, speed: 790, damage: 22, rate: 20, ammo: 900, price: 2500, unlockLevel: 2, desc: 'Saab cannon. Solid hits, average rate.' }),
-    W({ id: 'gsh30', name: 'GSh-30-1 30 mm', type: 'gun', range: 1300, speed: 870, damage: 34, rate: 25, ammo: 700, blast: 2, price: 6000, unlockLevel: 6, desc: 'Flanker cannon. Slow fire, heavy hits.' }),
-    W({ id: 'm61', name: 'M61 Vulcan 20 mm', type: 'gun', range: 1000, speed: 1030, damage: 9, rate: 100, ammo: 2400, price: 8000, unlockLevel: 8, desc: 'Six barrels. A wall of lead.' }),
-    W({ id: 'r60', name: 'R-60 Aphid', type: 'missile', guidance: 'ir', targets: ['air'], aspect: 'rear', range: 5000, minRange: 300, speed: 750, g: 30, lockTimeMul: 1.1, damage: 100, blast: 10, ammo: 2, price: 0, unlockLevel: 1, desc: 'Old IR missile. Rear aspect only. Get on his six.' }),
-    W({ id: 'r73', name: 'R-73 Archer', type: 'missile', guidance: 'ir', targets: ['air'], aspect: 'all', range: 8000, minRange: 300, speed: 850, g: 45, lockTimeMul: 1, damage: 100, blast: 15, ammo: 2, price: 5000, unlockLevel: 3, desc: 'All-aspect dogfight missile. Very agile.' }),
-    W({ id: 'r77', name: 'R-77 Adder', type: 'missile', guidance: 'radar', targets: ['air'], range: 20000, minRange: 800, speed: 1100, g: 35, lockTimeMul: 1.3, damage: 100, blast: 18, ammo: 2, price: 14000, unlockLevel: 10, desc: 'Active radar. Fire and forget at 20 km.' }),
-    W({ id: 'r27er', name: 'R-27ER Alamo', type: 'missile', guidance: 'sarh', targets: ['air'], range: 30000, minRange: 1000, speed: 1200, g: 25, lockTimeMul: 1.5, damage: 110, blast: 20, ammo: 2, price: 18000, unlockLevel: 14, desc: 'Long range. Keep the lock until impact.' }),
-    W({ id: 'kh31p', name: 'Kh-31P Krypton', type: 'missile', guidance: 'arm', targets: ['ground', 'sea'], range: 25000, minRange: 1500, speed: 1000, g: 15, lockTimeMul: 0.8, damage: 160, blast: 22, ammo: 2, price: 12000, unlockLevel: 8, desc: 'Anti-radiation. Locks only SAM and radar emitters.' }),
-    W({ id: 'kh35', name: 'Kh-35 Uran', type: 'missile', guidance: 'antiship', targets: ['sea'], range: 22000, minRange: 1500, speed: 270, g: 10, lockTimeMul: 1, damage: 400, blast: 25, ammo: 2, needsBombsOK: true, price: 13000, unlockLevel: 9, desc: 'Sea skimmer. Kills frigates in one hit.' }),
-    W({ id: 'kh29', name: 'Kh-29 Kedge', type: 'missile', guidance: 'laser', targets: ['ground', 'sea'], range: 10000, minRange: 800, speed: 600, g: 12, lockTimeMul: 1.2, damage: 350, blast: 30, ammo: 2, needsBombsOK: true, price: 9000, unlockLevel: 5, desc: 'Heavy AGM. Cracks bunkers and compounds.' }),
-    W({ id: 's8', name: 'S-8 80 mm pod', type: 'rocket', targets: ['ground', 'sea'], range: 3000, minRange: 200, speed: 600, damage: 40, blast: 10, ammo: 40, salvo: 4, rate: 10, price: 1500, unlockLevel: 1, desc: 'Unguided salvo. Point the nose and ripple.' }),
-    W({ id: 's13', name: 'S-13 122 mm pod', type: 'rocket', targets: ['ground', 'sea'], range: 4000, minRange: 300, speed: 650, damage: 120, blast: 16, ammo: 10, salvo: 2, rate: 4, needsBombsOK: true, price: 4000, unlockLevel: 4, desc: 'Heavy rockets. Can hurt hardened targets.' }),
-    W({ id: 'fab500', name: 'FAB-500 bomb', type: 'bomb', targets: ['ground', 'sea'], range: 0, speed: 0, damage: 500, blast: 35, ammo: 2, rate: 2, needsBombsOK: true, price: 0, unlockLevel: 1, desc: 'Dumb iron bomb. Fly level over the target.' }),
-    W({ id: 'rbk500', name: 'RBK-500 cluster', type: 'bomb', targets: ['ground'], range: 0, speed: 0, damage: 160, blast: 90, ammo: 2, rate: 2, price: 4500, unlockLevel: 4, desc: 'Cluster bomb. Wide area. Great vs convoys.' }),
-    W({ id: 'kab500', name: 'KAB-500L guided', type: 'bomb', guidance: 'laser', targets: ['ground', 'sea'], range: 0, speed: 0, g: 6, damage: 520, blast: 32, ammo: 2, rate: 1, needsBombsOK: true, price: 10000, unlockLevel: 7, desc: 'Laser-guided. Steers to the designated target.' })
+    W({ id: 'gsh23', weight: 0.33, name: 'GSh-23 23 mm', type: 'gun', range: 1000, speed: 715, damage: 14, rate: 50, ammo: 900, price: 0, unlockLevel: 1, desc: 'MiG-21 twin-barrel. Short bursts. Watch the ammo.' }),
+    W({ id: 'aden', weight: 0.37, name: 'ADEN 30 mm', type: 'gun', range: 1100, speed: 790, damage: 22, rate: 20, ammo: 900, price: 2500, unlockLevel: 2, desc: 'Saab cannon. Solid hits, average rate.' }),
+    W({ id: 'gsh30', weight: 0.39, name: 'GSh-30-1 30 mm', type: 'gun', range: 1300, speed: 870, damage: 34, rate: 25, ammo: 700, blast: 2, price: 6000, unlockLevel: 6, desc: 'Flanker cannon. Slow fire, heavy hits.' }),
+    W({ id: 'm61', weight: 0.26, name: 'M61 Vulcan 20 mm', type: 'gun', range: 1000, speed: 1030, damage: 9, rate: 100, ammo: 2400, price: 8000, unlockLevel: 8, desc: 'Six barrels. A wall of lead.' }),
+    W({ id: 'r60', weight: 44, name: 'R-60 Aphid', type: 'missile', guidance: 'ir', targets: ['air'], aspect: 'rear', range: 5000, minRange: 300, speed: 750, g: 30, lockTimeMul: 1.1, damage: 100, blast: 10, ammo: 2, price: 0, unlockLevel: 1, desc: 'Old IR missile. Rear aspect only. Get on his six.' }),
+    W({ id: 'r73', weight: 105, name: 'R-73 Archer', type: 'missile', guidance: 'ir', targets: ['air'], aspect: 'all', range: 8000, minRange: 300, speed: 850, g: 45, lockTimeMul: 1, damage: 100, blast: 15, ammo: 2, price: 5000, unlockLevel: 3, desc: 'All-aspect dogfight missile. Very agile.' }),
+    W({ id: 'r77', weight: 175, name: 'R-77 Adder', type: 'missile', guidance: 'radar', targets: ['air'], range: 20000, minRange: 800, speed: 1100, g: 35, lockTimeMul: 1.3, damage: 100, blast: 18, ammo: 2, price: 14000, unlockLevel: 10, desc: 'Active radar. Fire and forget at 20 km.' }),
+    W({ id: 'r27er', weight: 350, name: 'R-27ER Alamo', type: 'missile', guidance: 'sarh', targets: ['air'], range: 30000, minRange: 1000, speed: 1200, g: 25, lockTimeMul: 1.5, damage: 110, blast: 20, ammo: 2, price: 18000, unlockLevel: 14, desc: 'Long range. Keep the lock until impact.' }),
+    W({ id: 'kh31p', weight: 600, name: 'Kh-31P Krypton', type: 'missile', guidance: 'arm', targets: ['ground', 'sea'], range: 25000, minRange: 1500, speed: 1000, g: 15, lockTimeMul: 0.8, damage: 160, blast: 22, ammo: 2, price: 12000, unlockLevel: 8, desc: 'Anti-radiation. Locks only SAM and radar emitters.' }),
+    W({ id: 'kh35', weight: 520, name: 'Kh-35 Uran', type: 'missile', guidance: 'antiship', targets: ['sea'], range: 22000, minRange: 1500, speed: 270, g: 10, lockTimeMul: 1, damage: 400, blast: 25, ammo: 2, needsBombsOK: true, price: 13000, unlockLevel: 9, desc: 'Sea skimmer. Kills frigates in one hit.' }),
+    W({ id: 'kh29', weight: 660, name: 'Kh-29 Kedge', type: 'missile', guidance: 'laser', targets: ['ground', 'sea'], range: 10000, minRange: 800, speed: 600, g: 12, lockTimeMul: 1.2, damage: 350, blast: 30, ammo: 2, needsBombsOK: true, price: 9000, unlockLevel: 5, desc: 'Heavy AGM. Cracks bunkers and compounds.' }),
+    W({ id: 's8', weight: 11, name: 'S-8 80 mm pod', type: 'rocket', targets: ['ground', 'sea'], range: 3000, minRange: 200, speed: 600, damage: 40, blast: 10, ammo: 40, salvo: 4, rate: 10, price: 1500, unlockLevel: 1, desc: 'Unguided salvo. Point the nose and ripple.' }),
+    W({ id: 's13', weight: 69, name: 'S-13 122 mm pod', type: 'rocket', targets: ['ground', 'sea'], range: 4000, minRange: 300, speed: 650, damage: 120, blast: 16, ammo: 10, salvo: 2, rate: 4, needsBombsOK: true, price: 4000, unlockLevel: 4, desc: 'Heavy rockets. Can hurt hardened targets.' }),
+    W({ id: 'fab500', weight: 500, name: 'FAB-500 bomb', type: 'bomb', targets: ['ground', 'sea'], range: 0, speed: 0, damage: 500, blast: 35, ammo: 2, rate: 2, needsBombsOK: true, price: 0, unlockLevel: 1, desc: 'Dumb iron bomb. Fly level over the target.' }),
+    W({ id: 'rbk500', weight: 430, name: 'RBK-500 cluster', type: 'bomb', targets: ['ground'], range: 0, speed: 0, damage: 160, blast: 90, ammo: 2, rate: 2, price: 4500, unlockLevel: 4, desc: 'Cluster bomb. Wide area. Great vs convoys.' }),
+    W({ id: 'kab500', weight: 530, name: 'KAB-500L guided', type: 'bomb', guidance: 'laser', targets: ['ground', 'sea'], range: 0, speed: 0, g: 6, damage: 520, blast: 32, ammo: 2, rate: 1, needsBombsOK: true, price: 10000, unlockLevel: 7, desc: 'Laser-guided. Steers to the designated target.' })
   ];
   FL.WEAPONS = {}; FL.WEAPON_ORDER = [];
   WEAPON_LIST.forEach(function (w) { FL.WEAPONS[w.id] = w; FL.WEAPON_ORDER.push(w.id); });
@@ -8769,11 +8924,11 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     { id: 'stealth', name: 'Stealth', tag: 'STL', base: 2600, desc: 'Enemy radars see you later.', v: { detectMul: [1, 0.92, 0.84, 0.76, 0.68, 0.6] } },
     { id: 'armor', name: 'Armor', tag: 'ARM', base: 1800, desc: 'Take less damage from every hit.', v: { armorMul: [1, 0.9, 0.8, 0.7, 0.6, 0.5] } },
     { id: 'repair', name: 'Damage control', tag: 'DCS', base: 2200, desc: 'Self-repair in flight.', v: { repairPerSec: [0, 0.4, 0.8, 1.2, 1.6, 2] } },
-    { id: 'missiles', name: 'Missiles', tag: 'MSL', base: 1700, desc: 'Faster, more agile missiles. More rails.', v: { missileSpeed: [650, 730, 810, 890, 970, 1050], missileG: [28, 32.4, 36.8, 41.2, 45.6, 50], missileBonus: [0, 2, 3, 5, 6, 8], missileSeekerMul: [1, 1.06, 1.12, 1.18, 1.24, 1.3] } },
+    { id: 'missiles', name: 'Missiles', tag: 'MSL', base: 1700, desc: 'Faster, more agile missiles. Extra air-to-air rounds.', v: { missileSpeed: [650, 730, 810, 890, 970, 1050], missileG: [28, 32.4, 36.8, 41.2, 45.6, 50], missileBonus: [0, 2, 3, 5, 6, 8], missileSeekerMul: [1, 1.06, 1.12, 1.18, 1.24, 1.3] } },
     { id: 'gun', name: 'Gun', tag: 'GUN', base: 1200, desc: 'Harder hits. Less barrel heat.', v: { gunDamageMul: [1, 1.16, 1.32, 1.48, 1.64, 1.8], gunHeatMul: [1, 0.92, 0.84, 0.76, 0.68, 0.6] } },
     { id: 'cm', name: 'Countermeasures', tag: 'CMS', base: 900, desc: 'More flares. Better decoys.', v: { flares: [20, 28, 36, 44, 52, 60], flareEff: [1, 1.1, 1.2, 1.3, 1.4, 1.5] } },
     { id: 'hardpoints', name: 'Hardpoints', tag: 'HPT', base: 3000, desc: 'Extra pylons and more ammo per pylon.', v: { hardpointBonus: [0, 1, 1, 1, 2, 2], specialAmmoMul: [1, 1.1, 1.2, 1.3, 1.4, 1.5] } },
-    { id: 'bombs', name: 'Bomb racks', tag: 'BMB', base: 1000, desc: 'Extra bombs on every bomb slot.', v: { bombBonus: [0, 2, 4, 6, 8, 10] } }
+    { id: 'bombs', name: 'Bomb racks', tag: 'BMB', base: 1000, desc: 'Extra bombs, spread over your bomb pylons.', v: { bombBonus: [0, 2, 4, 6, 8, 10] } }
   ];
   var UPG = {}; UPGRADES.forEach(function (u) { UPG[u.id] = u; });
   function upgPrice(u, lvl) { return lvl >= 5 ? 0 : Math.round(u.base * LV[lvl] / 50) * 50; }
@@ -8782,7 +8937,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     thrustMul: ['Thrust', 'pct'], boostMul: ['Boost', 'pct'], boostDuration: ['Burn time', 's'], boostRecharge: ['Recharge', 's'],
     rateMul: ['Turn', 'pct'], maxGAdd: ['Max G', 'addg'], lockTime: ['Lock', 's'], seekerCone: ['Cone', 'deg'], multiLock: ['Multi', 'n'],
     lockRange: ['Range', 'pct'], detectMul: ['Seen at', 'pct'], armorMul: ['Damage in', 'pct'], repairPerSec: ['Repair', 'hps'],
-    missileSpeed: ['Speed', 'ms'], missileG: ['Pull', 'g'], missileBonus: ['Rails', 'plus'], missileSeekerMul: ['Seeker', 'pct'],
+    missileSpeed: ['Speed', 'ms'], missileG: ['Pull', 'g'], missileBonus: ['AAM', 'plus'], missileSeekerMul: ['Seeker', 'pct'],
     gunDamageMul: ['Damage', 'pct'], gunHeatMul: ['Heat', 'pct'], flares: ['Flares', 'n'], flareEff: ['Decoy', 'pct'],
     hardpointBonus: ['Pylons', 'plus'], specialAmmoMul: ['Ammo', 'pct'], bombBonus: ['Bombs', 'plus']
   };
@@ -8819,7 +8974,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       ['m_head', 'Warhead', '+2% missile damage.', 5, 'missileDamageMul*0.02'],
       ['m_motor', 'Hot Motors', '+1.5% missile speed.', 3, 'missileSpeedMul*0.015'], ['m_seek', 'Better Seeker', '+2% seeker tracking.', 3, 'missileSeekerMul*0.02'], ['m_fins', 'Big Fins', '+2% missile G.', 3, 'missileGMul*0.02'],
       ['m_cycle', 'Quick Cycle', '-3% time between shots.', 3, 'missileCycleMul*-0.03'], ['m_fuse', 'Prox Fuse', '+4% fuse radius.', 3, 'missileFuseMul*0.04'], ['m_range', 'Long Shot', '+2% missile range.', 3, 'missileRangeMul*0.02'],
-      ['m_eccm', 'ECCM', '+3% resist enemy flares.', 3, 'missileFlareResist+0.03'], ['m_rails', 'Extra Rail', '+1 basic missile.', 1, 'missiles+1'], ['m_lock', 'Quick Tone', '-2% lock time.', 3, 'lockTime*-0.02'],
+      ['m_eccm', 'ECCM', '+3% resist enemy flares.', 3, 'missileFlareResist+0.03'], ['m_rails', 'Extra Rail', '+1 air-to-air missile.', 1, 'missiles+1'], ['m_lock', 'Quick Tone', '-2% lock time.', 3, 'lockTime*-0.02'],
       ['m_ace', 'Missile Ace', '+3% missile damage and speed.', 1, 'missileDamageMul*0.03 missileSpeedMul*0.03']] },
     { id: 'ord', name: 'Ordnance', s: [
       ['o_iron', 'Heavy Iron', '+2% bomb damage.', 5, 'bombDamageMul*0.02'],
@@ -8917,7 +9072,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     function newProfile() {
       var s = starterAc();
       return { v: 2, credits: 2500, xp: 0, level: 1, sp: 0, upg: {}, skills: {}, ownedAc: [s], ac: s, map: null,
-        ownedW: { gsh23: 1, r60: 1, fab500: 1 }, eq: { gun: 'gsh23', missile: 'r60', slots: ['fab500', null] }, mastery: {},
+        ownedW: { gsh23: 1, r60: 1, fab500: 1 }, eq: { v: 3, gun: 'gsh23', slots: ['r60', 'fab500'] }, mastery: {}, mirror: true,
         missions: 0, failed: 0, best: 0, earned: 0, kills: 0 };
     }
     function save() {
@@ -8935,6 +9090,13 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       var base = newProfile();
       if (d && typeof d === 'object') for (var k in base) if (d[k] != null) base[k] = d[k];
       if (!base.eq || !base.eq.slots) base.eq = newProfile().eq;
+      if (base.eq.v !== 3) {   // v2 save: fixed missile rails + pylons -> missile goes on the first pylons
+        var old = (base.eq.slots || []).filter(function (x) { return !!x; }), mi = base.eq.missile;
+        var ns = mi ? [mi] : [];
+        if (mi && old.length < 1) ns.push(mi);
+        base.eq = { v: 3, gun: base.eq.gun || 'gsh23', slots: ns.concat(old) };
+        if (mi) base.ownedW[mi] = 1;
+      }
       if (!base.mastery || typeof base.mastery !== 'object') base.mastery = {};
       P = base;
       if (!(P.credits >= 0)) P.credits = 0;
@@ -8960,7 +9122,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       var s = {
         thrustMul: 1, rateMul: 1, rollMul: 1, maxG: 9, armorMul: 1, repairPerSec: 0, detectMul: 1, lowDetectMul: 1,
         lockTime: 6, seekerCone: 20, lockRange: 1, multiLock: 1, flares: 20, flareEff: 1,
-        missileSpeed: 650, missileG: 28, missileSpeedMul: 1, missileGMul: 1, missileSeekerMul: 1, missiles: 10, missileCycleMul: 1,
+        missileSpeed: 650, missileG: 28, missileSpeedMul: 1, missileGMul: 1, missileSeekerMul: 1, missiles: 0, missileCycleMul: 1,
         missileFuseMul: 1, missileRangeMul: 1, missileDamageMul: 1, missileFlareResist: 0,
         gunDamageMul: 1, gunHeatMul: 1, gunSpreadMul: 1, gunRateMul: 1, gunAmmoMul: 1, gunRangeMul: 1, gunArmorMul: 1, gunGroundMul: 1, gunLead: 0,
         bombs: 0, bombBonus: 0, specialAmmoMul: 1, masteryLevel: 1, masteryBonus: 0, bombDamageMul: 1, blastMul: 1, rocketDamageMul: 1, rocketSalvoAdd: 0, bombAimAssist: 0, laserGuideMul: 1,
@@ -8974,7 +9136,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       };
       var spec = acSpec(P.ac), ai = spec ? acInfo(spec, acIdx(P.ac)) : { rails: 2 };
       if (spec && spec.maxG) s.maxG = spec.maxG;
-      s.missiles = ai.rails; s.hardpoints = ai.hardpoints || 2; s.hardpointBonus = 0;
+      s.hardpoints = ai.hardpoints || 2; s.hardpointBonus = 0; s.jetMass = (spec && spec.mass) || 15000;
       // upgrades
       UPGRADES.forEach(function (u) {
         var l = upgLevel(u.id);
@@ -9000,41 +9162,60 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       s.missileSpeed *= s.missileSpeedMul; s.missileG *= s.missileGMul;
       s.missileSpeedMul = s.missileSpeed / 650; s.missileGMul = s.missileG / 28;
       s.lockTime = Math.max(0.6, s.lockTime); s.detectMul = clamp(s.detectMul, 0.35, 1); s.armorMul = clamp(s.armorMul, 0.3, 1);
-      s.boostRecharge = Math.max(2.5, s.boostRecharge); s.multiLock = Math.min(6, Math.round(s.multiLock)); s.missiles = Math.round(s.missiles);
+      s.boostRecharge = Math.max(2.5, s.boostRecharge); s.multiLock = Math.min(6, Math.round(s.multiLock)); s.aamBonus = Math.round(s.missiles);
       s.flares = Math.round(s.flares); s.hardpoints = clamp(Math.round(s.hardpoints), 1, 10);
       s.lockTime = Math.round(s.lockTime * 100) / 100;
-      s.bombs = loadoutCalc(s).filter(function (w) { return w.spec.type === 'bomb'; }).reduce(function (a, w) { return a + w.ammo; }, 0);
+      var lo = loadoutCalc(s), sum = function (f) { return lo.filter(f).reduce(function (a, w) { return a + w.ammo; }, 0); };
+      s.missiles = sum(function (w) { return isAAM(w.spec); });
+      s.bombs = sum(function (w) { return w.spec.type === 'bomb'; });
+      s.storesMass = Math.round(lo.reduce(function (a, w) { return a + w.mass; }, 0));
+      s.handling01 = handling(s.storesMass, s.jetMass);
       s.aircraftId = P.ac;
       return s;
     }
 
     // ---------------------------------------------------------------- loadout
-    function slotAccepts(slot, w) {
-      if (!w) return false;
-      if (slot === 'gun') return w.type === 'gun';
-      if (slot === 'missile') return w.type === 'missile' && w.targets.indexOf('air') >= 0;
-      return w.type !== 'gun';
-    }
+    // Pylons: slots[] index order = L1, R1, L2, R2, … (pair 1 = outer / wingtip), an odd last one = C (centerline).
+    // Every pylon takes any owned non-gun weapon. The gun is its own fixed slot.
+    function isAAM(w) { return !!w && w.type === 'missile' && w.targets.indexOf('air') >= 0; }
+    function pylonName(i, n) { if (n % 2 && i === n - 1) return 'C'; return (i % 2 ? 'R' : 'L') + (Math.floor(i / 2) + 1); }
+    function pairOf(i, n) { if (n % 2 && i === n - 1) return -1; var j = i % 2 ? i - 1 : i + 1; return j < n && !(n % 2 && j === n - 1) ? j : -1; }
+    function handling(kg, jet) { return clamp(1 - kg / (jet * 0.35), 0, 1); }
     function loadoutCalc(s) {
-      var out = [], eq = P.eq;
-      var g = FL.WEAPONS[eq.gun] || FL.WEAPONS.gsh23;
-      out.push({ slot: 'gun', id: g.id, spec: g, ammo: Math.round(g.ammo * s.gunAmmoMul) });
-      var m = FL.WEAPONS[eq.missile] || FL.WEAPONS.r60;
-      out.push({ slot: 'missile', id: m.id, spec: m, ammo: s.missiles });
-      for (var i = 0; i < s.hardpoints; i++) {
-        var w = FL.WEAPONS[eq.slots[i]]; if (!w) continue;
-        var a = Math.round(w.ammo * s.specialAmmoMul);
-        if (w.type === 'bomb') a += s.bombBonus;
-        out.push({ slot: 's' + (i + 1), id: w.id, spec: w, ammo: a });
+      var out = [], eq = P.eq, n = s.hardpoints;
+      var g = FL.WEAPONS[eq.gun] || FL.WEAPONS.gsh23, ga = Math.round(g.ammo * s.gunAmmoMul);
+      out.push({ slot: 'gun', pylon: 'GUN', id: g.id, spec: g, ammo: ga, mass: ga * g.weight });
+      var aamIdx = [], bombIdx = [];
+      for (var i = 0; i < n; i++) {
+        var w = FL.WEAPONS[eq.slots[i]]; if (!w || w.type === 'gun') continue;
+        var a = isAAM(w) ? w.ammo : Math.max(1, Math.round(w.ammo * s.specialAmmoMul));
+        var e = { slot: 's' + (i + 1), pylon: pylonName(i, n), id: w.id, spec: w, ammo: a, mass: 0 };
+        if (isAAM(w)) aamIdx.push(out.length); if (w.type === 'bomb') bombIdx.push(out.length);
+        out.push(e);
       }
+      // upgrade/skill bonuses are spread over the matching pylons (pair by pair)
+      for (var k = 0; k < (s.aamBonus || 0) && aamIdx.length; k++) out[aamIdx[k % aamIdx.length]].ammo++;
+      for (var b2 = 0; b2 < (s.bombBonus || 0) && bombIdx.length; b2++) out[bombIdx[b2 % bombIdx.length]].ammo++;
+      out.forEach(function (e) { if (e.slot !== 'gun') e.mass = Math.round(e.ammo * (e.spec.weight || 0)); else e.mass = Math.round(e.mass); });
       return out;
+    }
+    // one entry per weapon type for the in-flight cycle (gun first, then pylon order), ammo summed
+    function cycleOf(lo) {
+      var map = {}, list = [];
+      lo.forEach(function (e) {
+        var c = map[e.id];
+        if (!c) { c = map[e.id] = { id: e.id, spec: e.spec, ammo: 0, pylons: [], mass: 0 }; list.push(c); }
+        c.ammo += e.ammo; c.mass += e.mass; c.pylons.push(e.pylon);
+      });
+      return list;
     }
     function loadout() { return loadoutCalc(stats()); }
 
     function applyAll(isLoad) {
       var s = stats(), lo = loadoutCalc(s);
       var payload = {}; for (var k in s) payload[k] = s[k];
-      payload.weapons = lo; payload.gun = lo[0].id; payload.missile = lo[1].id;
+      payload.weapons = lo; payload.cycle = cycleOf(lo); payload.gun = lo[0].id;
+      var firstAAM = lo.filter(function (e) { return isAAM(e.spec); })[0]; payload.missile = firstAAM ? firstAAM.id : null;
       try { if (combat.setLoadout) combat.setLoadout(payload); } catch (e) { console.warn('setLoadout', e); }
       try { if (opt.onUpgradesChanged) opt.onUpgradesChanged(s); } catch (e) { console.warn('onUpgradesChanged', e); }
       if (!isLoad) save();
@@ -14136,8 +14317,10 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       updateLead();
       if (pAlive && combat.active) slowReload(dt);
       netTick(dt);
-      setLoop('locking', pAlive && !!desig && !locked && lockT > 0);
-      setLoop('locked', pAlive && !!desig && locked);
+      var swl = selW() ? selW().spec : null;
+      var canLock = !!swl && ((swl.type === 'missile' && swl.guidance && swl.guidance !== 'none') || (swl.type === 'bomb' && swl.guidance === 'laser'));
+      setLoop('locking', canLock && pAlive && !!desig && !locked && lockT > 0);
+      setLoop('locked', canLock && pAlive && !!desig && locked);
       var inc = 0;
       for (i = 0; i < missiles.length; i++) { var m = missiles[i]; if (m.alive && !m.ghost && m.target === LP && m.side !== 'player') inc++; }
       setLoop('missileWarning', pAlive && inc > 0);
@@ -14185,6 +14368,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         lock: { target: desig ? desig.aim : null, designated: desig ? desig.aim : null, progress01: desig ? Math.min(1, lockT / lockNeed(s)) : 0, locked: !!desig && locked,
                 kind: desig ? desig.kind : null, label: desig ? desig.label : null, id: desig ? desig.id : null, dist: desig ? desig.aim.distanceTo(player.pos) : 0,
                 candidates: cands, multi: mlist, aspectOK: aspectOK,
+                canLock: !!(s && ((s.type === 'missile' && s.guidance && s.guidance !== 'none') || (s.type === 'bomb' && s.guidance === 'laser'))),
                 weaponOK: !!(desig && s && (s.type !== 'missile' || (tgtOK(desig, s) && aspectFine(desig, s) && desig.aim.distanceTo(player.pos) <= rangeOf(desig, s)))) },
         targets: targets, incoming: incoming, spiked: spiked, hidden: hidden, enemiesLeft: enemiesLeft(),
         playerInCloud: pCloud > C.cloudNoGuns, waypoint: waypoint, team: team, repair: LO.repairPerSec,
@@ -16982,8 +17166,9 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     var lk = ch.lock || {}, locked = !!lk.locked, prog = lk.target ? (lk.progress01 || 0) : 0;
     if (locked) HS.lock = 1; else if (prog <= 0) HS.lock = 0; else HS.lock += (prog - HS.lock) * Math.min(1, dt * 14);
     // seeker: faint cone brackets at the nose; big SEGMENTED box around the designated target (Ace Combat style)
-    var desig = lk.designated || lk.target || null;
-    if (combat.active && !n.behind && !desig) {
+    var canLock = lk.canLock !== false;
+    var desig = canLock ? (lk.designated || lk.target || null) : null;
+    if (canLock && combat.active && !n.behind && !desig) {
       var r0 = rSeek, c0 = r0 * 0.22;
       hx.beginPath();
       hx.moveTo(n.x - r0, n.y - r0 + c0); hx.lineTo(n.x - r0, n.y - r0); hx.lineTo(n.x - r0 + c0, n.y - r0);
@@ -17031,11 +17216,12 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     for (i = 0; i < tg.length; i++) {
       var t = tg[i], p = projTo(t.pos, TPj[i] || (TPj[i] = {}));
       var vc = closingKmh(t);
-      var tc = t.locked ? RED : t.detectingPlayer ? AMB : HC;
+      var tLk = t.locked && canLock;
+      var tc = tLk ? RED : t.detectingPlayer ? AMB : HC;
       var on = !p.behind && p.x > edge && p.x < W - edge && p.y > edge && p.y < H - edge;
       if (on) {
         var air = isAirKind(t.kind), s = (air ? 10 : 8) * u * (t.dist < 3000 ? 1.25 : 1);
-        var far = t.dist > 12000 && !t.locked, path = t.locked ? pR : t.detectingPlayer ? pA : far ? pD : pG;
+        var far = t.dist > 12000 && !tLk, path = tLk ? pR : t.detectingPlayer ? pA : far ? pD : pG;
         if (far) s *= 0.7;
         // convoy / formation declutter: one box for contacts that overlap on screen
         var dup = false;
@@ -17045,7 +17231,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
           path.rect(p.x - s, p.y - s, s * 2, s * 2);
           if (!air) { path.moveTo(p.x - s - 3 * u, p.y + s + 4 * u); path.lineTo(p.x + s + 3 * u, p.y + s + 4 * u); }
         }
-        if (t.locked) s = 26 * u;
+        if (tLk) s = 26 * u;
         // declutter: skip the label if a nearer target's label is close
         var free = true;
         for (var j = 0; j < i; j++) { var q = TPj[j]; if (q.lab && Math.abs(q.x - p.x) < 60 * u && Math.abs(q.y - p.y) < 22 * u) { free = false; break; } }
@@ -17068,7 +17254,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     ln(HCdim, 1.2); hx.stroke(pD); ln(HC, 1.5); hx.stroke(pG); ln(AMB, 1.6); hx.stroke(pA); ln(RED, 2.2); hx.stroke(pR);
     ln(HC, 2); hx.stroke(aG); ln(AMB, 2.2); hx.stroke(aA); ln(RED, 3); hx.stroke(aR);
     // lock candidate (converging chevrons) / locked target (bold red diamond + LOCK tag)
-    if (lk.target) {
+    if (lk.target && canLock) {
       var lp = projTo(lk.target, P3);
       if (!lp.behind && lp.x > -50 && lp.x < W + 50 && lp.y > -50 && lp.y < H + 50) {
         if (locked) {
@@ -17494,6 +17680,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       simTime += dt;
       towerCheck();
       if (combat.setLocalVisual) combat.setLocalVisual({ thr: st.thr, ab: st.ab, gearT: st.gearT });
+      storesT += dt; if (storesT > 0.25) { storesT = 0; phys.setStoresMass(storesMass()); }
       combat.update(dt);
       if (campaign) campaign.update(dt);
       var sc = combat.hud().score || 0;
@@ -17653,7 +17840,18 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       boost01: st.crashed ? 0 : st.ab, cloud01: world.cameraCloud || 0, sunWorld: sunV, sunVisible: sunVis
     };
   }
-  var killFlash = 0, lastPopN = 0;
+  var killFlash = 0, lastPopN = 0, storesT = 0;
+  // weapons weigh something: fired missiles / dropped bombs make the jet lighter
+  var WFALL = { missile: 120, bomb: 500, rocket: 20, gun: 0.33 };
+  function storesMass() {
+    var ch = combat.hud(), wl = ch.weapons || [], kg = 0;
+    for (var i = 0; i < wl.length; i++) {
+      var w = wl[i], spec = FL.WEAPONS && FL.WEAPONS[w.id];
+      var per = spec && spec.weight != null ? spec.weight : (WFALL[spec ? spec.type : 'missile'] || 100);
+      if (w.ammo > 0) kg += w.ammo * per;
+    }
+    return kg;
+  }
 
   // ---------------------------------------------------------------- co-op lobby (PeerJS via net.js)
   var net = null;
