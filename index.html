@@ -1048,9 +1048,11 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       for (let j = 0; j < L; j++) for (let i = 0; i < L; i++) {
         const e0 = -HALF + i * lv.tile, n0 = HALF - j * lv.tile;
         if (parent) { const pi = Math.floor((e0 + 1 + HALF) / parent.TS), pj = Math.floor((HALF - (n0 - 1)) / parent.TS); if (parent.idx[pj * parent.L + pi] < 0) continue; }
+        if (lv.score) { const sc = lv.score(e0, n0 - lv.tile, e0 + lv.tile, n0, base); if (sc > 0) sel.push([i, j, sc]); continue; }
         if (!lv.select(e0, n0 - lv.tile, e0 + lv.tile, n0)) continue;
         sel.push([i, j]);
       }
+      if (lv.max && sel.length > lv.max) { sel.sort((a, b) => b[2] - a[2]); sel.length = lv.max; }
       const nc = Math.round(lv.tile / lv.cell), level = { TS: lv.tile, cell: lv.cell, L: L, idx: idx, nc: nc };
       for (const [i, j] of sel) { idx[j * L + i] = grids.length; grids.push({ e0: -HALF + i * lv.tile, n0: HALF - j * lv.tile, cell: lv.cell, nc: nc, NV: nc + 1, H: null, lvl: levels.length + 1 }); }
       const pl = lookup;
@@ -1948,6 +1950,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
           const e = (i + hash2(i * 7 + q, j, 11 + k.ki * 7)) * TS, nn = (j + hash2(i, j * 7 + q, 23 + k.ki * 7)) * TS;
           const h = sampleH(e, nn); if (h < (d.minH === undefined ? 1 : d.minH) || h > (d.maxH || 1e5)) continue;
           const sl = Math.abs(sampleH(e + 6, nn) - sampleH(e - 6, nn)) / 12 + Math.abs(sampleH(e, nn + 6) - sampleH(e, nn - 6)) / 12;
+          if (ctx.vegBlock && ctx.vegBlock(e, nn)) continue;
           const p = d.test(e, nn, h, sl, hash2(q, i * 31 + j, 77));
           if (!(p > 0) || hash2(i * 13 + q, j * 17, 91 + k.ki) > p) continue;
           const s = d.scale[0] + (d.scale[1] - d.scale[0]) * hash2(q, i + j * 3, 5);
@@ -2058,6 +2061,15 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       TF = buildTraffic(ctx, RD.r3, def.traffic === undefined ? 220 : def.traffic);
     }
     ctx.mark('roads');
+    {
+      const fl = bases.map((b) => b.spec._flat).concat(def.flats || []);
+      const rIdx = RD.roads.length ? makeSegIndex(RD.roads, 1000, 30) : null;
+      ctx.vegBlock = function (e, n) {
+        for (let i = 0; i < fl.length; i++) if (flatMask(fl[i], e, n) > 0.02) return true;
+        if (rIdx && rIdx.query(e, n) < 14) return true;
+        return def.vegBlock ? def.vegBlock(e, n) : false;
+      };
+    }
     const VG = buildVeg(ctx, def.veg);
     ctx.mark('veg');
     const CL = buildClouds(ctx, def.clouds || {});
@@ -2694,128 +2706,90 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
 
   // ================================================================ MAP: Norway Winter Fjords (Nordland, around Saltfjorden / Bodø)
   MAPDEFS.fjords = function () {
-    // fjords: [points, halfWidthMouth, halfWidthHead, depth]
-    const FJ = [
-      [[[-40000, -8500], [-30000, -7000], [-18000, -5500], [-6000, -4000], [6000, -7000], [16000, -9500], [26000, -6000], [33000, -2000]], 700, 420, 220, 'Saltfjorden'],
-      [[[-3000, -4500], [1000, 2000], [5000, 9000], [9000, 13500], [13500, 18000]], 380, 260, 140, 'Sjunkfjorden'],
-      [[[-40000, -31500], [-28000, -30000], [-18000, -28500], [-9000, -29000], [0, -33000], [7000, -40000]], 620, 380, 180, 'Beiarfjorden'],
-      [[[-14000, -28800], [-13000, -22000], [-12000, -15500]], 300, 230, 90, 'Misværfjorden'],
-      [[[-40000, 20500], [-28000, 22000], [-16000, 24500], [-6000, 27000], [3000, 32000], [10000, 39500]], 680, 380, 200, 'Folda'],
-      [[[-14000, 25000], [-16500, 33000], [-19500, 43000]], 360, 250, 120, 'Nordfolda'],
-      [[[-40000, 36500], [-31000, 37000], [-24000, 39000]], 420, 280, 100, 'Kjerringøyfjorden']];
-    // dry valleys: [points, halfWidth, floorStart, floorEnd]
-    const VA = [
-      [[[13500, 18000], [11000, 24000], [7000, 29000], [4500, 32500]], 420, 30, 60],
-      [[[33000, -2000], [38000, 1000], [42500, 4000], [49000, 8500]], 650, 25, 160],
-      [[[7000, -40000], [11000, -32000], [12500, -24500], [14500, -16000], [16000, -9500]], 480, 20, 30],
-      [[[10000, 39500], [18000, 37000], [26000, 33000], [31000, 28000], [36000, 20000], [41000, 13000], [47000, 9000]], 520, 20, 160],
-      [[[-12000, -15500], [-13500, -11000], [-15000, -5800]], 380, 30, 30],
-      [[[-24000, 39000], [-20500, 41500]], 350, 30, 40]];
-    const LAKES = [[12500, -24500, 1700], [30000, 29000, 2000], [41000, 13000, 1300], [6500, 29500, 1000]];
-    const HEADS = [[33000, -2000, 'Fauske'], [13500, 18000, 'Sjunkhatten'], [7000, -40000, 'Beiarn'], [-12000, -15500, 'Misvær'], [10000, 39500, 'Sørfold'], [-19500, 43000, 'Nordfold'], [-24000, 39000, 'Kjerringøy']];
-    const fIdx = makeSegIndex(FJ.map((f) => f[0]), 2000, 3200), vIdx = makeSegIndex(VA.map((v) => v[0]), 2000, 3000);
-    const SPOTS = HEADS.map((h) => {
-      // flat delta ground just beyond the head along the fjord direction
-      let P = null; for (const f of FJ) { const L = f[0][f[0].length - 1]; if (L[0] === h[0] && L[1] === h[1]) P = f[0]; }
-      let de = 0, dn = 0; if (P) { const a = P[P.length - 2], b = P[P.length - 1], l = Math.hypot(b[0] - a[0], b[1] - a[1]); de = (b[0] - a[0]) / l; dn = (b[1] - a[1]) / l; }
-      return [h[0] + de * 450, h[1] + dn * 450, 850, 6];
-    });
     const coastE = (n) => -35500 + 3600 * (fbm(n / 9000 + 3, 7.7, 3, 211) - 0.5) + 900 * Math.sin(n / 3100);
-    const BASE = { name: 'Bodø Main Air Station', e: -32800, n: -18200, hdg: 2, len: 2900, w: 45, seed: 41, blend: 700, minH: 9, q: 0.5 };
-    const EBASE = { name: 'Sulitjelma', e: 41000, n: 3600, hdg: 57, len: 1900, w: 40, seed: 42, blend: 500, mini: true, enemy: true, minH: 30, q: 0.45 };
-    let lastIce = 0;
-    function mount(e, n) {
-      const r = ridged(e / 5200 + 3.3, n / 5200 - 1.7, 5, 201), f = fbm(e / 17000 + 1, n / 17000 + 5, 3, 203);
-      return 260 + 1480 * Math.pow(r, 1.35) * (0.5 + 0.75 * f) + 120 * (fbm(e / 2200, n / 2200, 2, 207) - 0.5);
+    function chan(e, n, sc, seed) {
+      const wx = e / sc + 1.4 * fbm(e / (sc * 1.7) + 5.2, n / (sc * 1.7) + 1.3, 3, seed), wy = n / sc + 1.4 * fbm(e / (sc * 1.7) - 3.7, n / (sc * 1.7) + 9.1, 3, seed + 2);
+      return Math.abs(2 * fbm(wx, wy, 3, seed + 4) - 1) * sc * 0.9;
     }
+    const BASE = { name: 'Bodø Main Air Station', e: -32600, n: -18500, hdg: 2, len: 2900, w: 45, seed: 41, blend: 600, minH: 8, q: 0.5 };
+    let lastIce = 0;
+    function strandK(e, n) { return sstep(-39000, -37000, e) * (1 - sstep(-30500, -28800, e)) * sstep(-27000, -24500, n) * (1 - sstep(-12000, -9500, n)); }
     function raw(e, n) {
+      const dx = e - coastE(n), inland = Math.max(dx, 0);
+      const r = ridged(e / 4200 + 3.3, n / 4200 - 1.7, 5, 201), f = fbm(e / 15000 + 1, n / 15000 + 5, 3, 203);
+      let m = 320 + 1500 * Math.pow(r, 1.25) * (0.55 + 0.7 * f) + 60 * (fbm(e / 1300, n / 1300, 2, 207) - 0.5);
+      m *= sstep(-3000, 6000, dx) * 0.75 + 0.25;
+      const sk = strandK(e, n);
+      m = m * (1 - 0.985 * sk) + sk * (6 + 14 * fbm(e / 900, n / 900, 2, 209));
+      const c1 = chan(e, n, 9000, 301), c2 = chan(e + 7000, n - 3000, 4200, 331);
+      const fl1 = -180 + inland * 0.0065, fl2 = Math.max(-60 + inland * 0.0085, fl1 + 30);
+      const w1 = 520 + 260 * fbm(e / 6000, n / 6000, 2, 341), w2 = 260 + 120 * fbm(e / 5000, n / 5000, 2, 343);
+      const p1 = sstep(w1 * 0.45, w1 * 1.25, c1), p2 = sstep(w2 * 0.45, w2 * 1.3, c2);
+      let h = fl1 + (m - fl1) * Math.pow(p1, 1.4);
+      const h2 = fl2 + (m - fl2) * Math.pow(p2, 1.4); if (h2 < h) h = h2;
+      // frozen lakes on inland channel floors
       lastIce = 0;
-      const ce = coastE(n), dx = e - ce;
-      let h;
-      if (dx < -400) {
-        const isl = fbm(e / 1500 + 9, n / 1500 - 4, 3, 221), isl2 = fbm(e / 5000, n / 5000, 2, 223);
-        h = -70 - Math.min(-dx, 9000) * 0.008 + 110 * sstep(0.56, 0.74, isl) * sstep(0.35, 0.6, isl2) * (1 - sstep(4000, 12000, -dx));
-      } else {
-        const k = sstep(-400, 7500, dx);
-        const strand = sstep(-38500, -36500, e) * (1 - sstep(-30500, -28500, e)) * sstep(-27500, -25000, n) * (1 - sstep(-11500, -9500, n));
-        h = 3 + 22 * fbm(e / 1200, n / 1200, 2, 225) + mount(e, n) * Math.pow(k, 1.5) * (1 - 0.97 * strand);
-        if (dx < 300) h = Math.min(h, -2 + (dx + 400) / 700 * 6);
+      if (fl2 > 6 && c2 < w2 * 0.6) {
+        const ln = fbm(e / 2600 + 11, n / 2600 - 6, 2, 351);
+        if (ln > 0.56) { const lv = fl2 + 4, k = sstep(0.56, 0.62, ln) * (1 - sstep(w2 * 0.38, w2 * 0.6, c2)); if (h > lv) h = lv + (h - lv) * (1 - k); lastIce = k; }
       }
-      // dry valleys (U-shaped)
-      let d = vIdx.query(e, n);
-      if (SQ.p >= 0) {
-        const V = VA[SQ.p], fr = SQ.s / SQ.len, hw = V[1] * (0.85 + 0.3 * vnoise(SQ.s / 2500, SQ.p, 231)), floor = V[2] + (V[3] - V[2]) * fr + 25 * (fbm(SQ.s / 1800, SQ.p * 3, 2, 233) - 0.5);
-        const wall = 260 + 0.22 * Math.max(h - floor, 0);
-        if (d < hw + wall && h > floor) {
-          const t = d < hw ? 0 : sstep(0, 1, (d - hw) / wall), fl = floor + 22 * Math.pow(Math.min(d / hw, 1), 2);
-          h = fl + (h - fl) * Math.pow(t, 0.9);
-        }
-      }
-      // fjords
-      d = fIdx.query(e, n);
-      if (SQ.p >= 0) {
-        const F = FJ[SQ.p], fr = SQ.s / SQ.len, hw = (F[1] + (F[2] - F[1]) * fr) * (0.85 + 0.35 * vnoise(SQ.s / 3000, SQ.p, 241)), floor = -F[3] * (1 - 0.7 * fr) - 20;
-        const wall = 220 + 0.2 * Math.max(h, 0);
-        if (d < hw + wall) {
-          const t = d < hw * 0.55 ? 0 : sstep(0, 1, (d - hw * 0.55) / (hw * 0.45 + wall));
-          const fl = floor * (1 - Math.min(d / hw, 1) * 0.6);
-          if (h > fl) h = fl + (h - fl) * Math.pow(t, 1.25);
-        }
-      }
-      // fjord-head deltas (flat village ground)
-      for (let i = 0; i < SPOTS.length; i++) {
-        const s = SPOTS[i], dd = Math.hypot(e - s[0], n - s[1]);
-        if (dd < s[2]) { const w = 1 - sstep(s[2] * 0.45, s[2], dd); h += (s[3] + 10 * (fbm(e / 400, n / 400, 2, 251) - 0.3) - h) * w; }
-      }
-      // frozen lakes
-      for (let i = 0; i < LAKES.length; i++) {
-        const L = LAKES[i], dd = Math.hypot(e - L[0], n - L[1]);
-        if (dd < L[2] * 1.3) {
-          const lev = LAKES[i][3];
-          const w = 1 - sstep(L[2] * 0.85, L[2] * 1.3, dd);
-          if (h > lev) h = lev + (h - lev) * (1 - w);
-          if (dd < L[2] * 0.95) lastIce = 1;
-        }
-      }
+      if (dx < -400) h = Math.min(h, -60 - Math.min(-dx, 9000) * 0.008 + 140 * sstep(0.6, 0.75, fbm(e / 1500 + 9, n / 1500 - 4, 3, 221)) * (1 - sstep(2000, 9000, -dx)));
       return h;
     }
-    // lake levels: valley floor at the lake centre (computed without the lake term)
-    { const rad = LAKES.map((L) => L[2]); for (const L of LAKES) { L[2] = -1; L[3] = 0; } for (let i = 0; i < LAKES.length; i++) { LAKES[i][3] = Math.max(raw(LAKES[i][0], LAKES[i][1]), 8) + 2; LAKES[i][2] = rad[i]; } }
-    const cLow = lin(0x3a4630), cLow2 = lin(0x4e5236), cMid = lin(0x6a6a62), cSea = lin(0x2a3a3a), cShore = lin(0x6a665a), cSnowUnder = lin(0xa9b2ba);
+    // ---- auto-place villages (flat low ground next to water, fjord ends), enemy base (flattest inland valley)
+    const villages = [];
+    for (let n = -44000; n <= 44000; n += 500) for (let e = -34000; e <= 44000; e += 500) {
+      const h = raw(e, n); if (h < 3 || h > 28) continue;
+      let wat = 0, hi = 0; for (let a = 0; a < 8; a++) { const hh = raw(e + Math.cos(a * 0.785) * 450, n + Math.sin(a * 0.785) * 450); if (hh < 0) wat++; if (hh > 60) hi++; }
+      if (wat < 1 || wat > 3 || hi > 3) continue;
+      if (Math.hypot(e - BASE.e, n - BASE.n) < 6000) continue;
+      if (villages.some((v) => Math.hypot(v[0] - e, v[1] - n) < 7000)) continue;
+      villages.push([e, n]);
+    }
+    let EB = null;
+    {
+      let best = 1e9;
+      for (let n = -42000; n <= 42000; n += 2000) for (let e = 6000; e <= 42000; e += 2000) for (const hd of [0, 45, 90, 135]) {
+        const hr = hd * DEG, ue = Math.sin(hr), un = Math.cos(hr), re = Math.cos(hr), rn = -Math.sin(hr);
+        let lo = 1e9, hi2 = -1e9;
+        for (let i = -3; i <= 3; i++) for (let j = -1; j <= 1; j++) { const x = i * 380, z = -150 + j * 260, hh = raw(e + x * ue + z * re, n + x * un + z * rn); lo = Math.min(lo, hh); hi2 = Math.max(hi2, hh); }
+        if (lo < 8) continue;
+        const sc = hi2 - lo + lo * 0.05;
+        if (sc < best) { best = sc; EB = { name: 'Sulitjelma', e: e, n: n, hdg: hd, len: 1900, w: 40, seed: 42, blend: 450, mini: true, enemy: true, minH: 10, q: 0.4 }; }
+      }
+    }
+    const VNAMES = ['Misvær', 'Fauske', 'Rognan', 'Beiarn', 'Kjerringøy', 'Saltstraumen', 'Skjerstad', 'Sørfold', 'Nordfold', 'Valnesfjord', 'Straumen', 'Røsvik', 'Inndyr', 'Tårnvik'];
+    const HEADS = villages.slice(0, 10).map((v, i) => [v[0], v[1], VNAMES[i]]);
+    const SPOTS = HEADS.map((h) => [h[0], h[1], 520, 0]);
+    const flats = HEADS.map((h) => ({ e: h[0], n: h[1], hdg: 0, x0: -260, x1: 260, z0: -260, z1: 260, blend: 260, minH: 4, q: 0.35 }));
+    const cLow = lin(0x4a4a3c), cLowSnow = lin(0xd3d9df), cMid = lin(0x6a6a62), cSea = lin(0x2a3a3a), cShore = lin(0x5a564c), cSnowUnder = lin(0xa9b2ba);
     const def = {
       name: 'Norway Winter Fjords', region: 'Nordland, Norway', N: 400,
       sky: { sunAz: 205, sunEl: 7, fog: 0xaab6c2, fogD: 0.0000125, hfogA: 0.00006, hfogB: 1 / 520, zenith: [0.10, 0.14, 0.22], glow: [0.9, 0.55, 0.35], glowW: 0.3, sunCol: [1.0, 0.8, 0.6], disk: 18,
         sunHex: 0xffd9b0, sunI: 1.6, hemiSky: 0xb9c8da, hemiGround: 0x5a6068, hemiI: 0.55, white: 0xdfe4ea, envGround: [0.18, 0.2, 0.23] },
-      ground: { rockOn: 1, rock1: 0x3f4246, rock2: 0x6c6f72, rockA: 0.42, rockB: 0.62, snowH: 135, snowF: 45, snow: 0xeef3f8, snowSlope: 0.6, faceN: 1, ice: 0xa7bfcf },
+      ground: { rockOn: 1, rock1: 0x34373b, rock2: 0x63666a, rockA: 0.3, rockB: 0.5, snowH: 140, snowF: 45, snow: 0xeef3f8, snowSlope: 0.66, faceN: 1, ice: 0xa7bfcf },
       water: { color: 0x0a1a22, shallow: 0x1f3a40, foam: 0.35, shallowK: 0.35, roughness: 0.18 },
-      bases: [BASE, EBASE],
+      bases: [BASE].concat(EB ? [EB] : []), flats: flats,
       raw: raw,
-      levels: [{ tile: 2000, cell: 100, select: (e0, n0, e1, n1) => { const e = (e0 + e1) / 2, n = (n0 + n1) / 2; if (Math.abs(e - BASE.e) < 4000 && Math.abs(n - BASE.n) < 4000) return true; const a = fIdx.query(e, n), b = vIdx.query(e, n); return Math.min(a, b) < 2300; } }],
+      levels: [{ tile: 2000, cell: 100, max: 260, score: (e0, n0, e1, n1, g) => { const e = (e0 + e1) / 2, n = (n0 + n1) / 2; if (Math.abs(e - BASE.e) < 3500 && Math.abs(n - BASE.n) < 3500) return 1e6; let lo = 1e9, hi = -1e9; for (let i = 0; i <= 4; i++) for (let j = 0; j <= 4; j++) { const h = g ? triH(g.H, g.NV, (e0 + i * 500 + 48000) / g.cell, (48000 - (n0 + j * 500)) / g.cell) : 0; lo = Math.min(lo, h); hi = Math.max(hi, h); } return lo < 120 ? hi - lo : 0; } }],
       color: function (e, n, h, il, curv, o, cell, k) {
         if (h < 0) { mix3(o, cSea, cShore, sstep(-25, -1, h)); return 0; }
-        mix3(o, cLow, cLow2, fbm(e / 700, n / 700, 2, 261));
-        mix3(o, o, cMid, sstep(250, 600, h));
+        mix3(o, cLow, cLowSnow, 0.35 + 0.5 * sstep(0.4, 0.6, fbm(e / 500, n / 500, 3, 261)));
+        mix3(o, o, cMid, sstep(250, 600, h) * 0.5);
         mix3(o, o, cSnowUnder, sstep(700, 1100, h));
-        mix3(o, o, cShore, (1 - sstep(1, 6, h)) * 0.7);
-        return lastIceAt(e, n);
+        mix3(o, o, cShore, (1 - sstep(1, 5, h)) * 0.8);
+        raw(e, n); return lastIce;
       },
-      zones: [
-        { id: 'saltstraumen', name: 'Saltstraumen', e: -24000, n: -6500, r: 4000, type: 'coast' },
-        { id: 'skjerstad', name: 'Skjerstadfjorden', e: 14000, n: -8500, r: 4500, type: 'valley' },
-        { id: 'sjunk', name: 'Sjunkfjorden', e: 5000, n: 9000, r: 3500, type: 'valley' },
-        { id: 'beiarn', name: 'Beiarfjorden', e: -9000, n: -29000, r: 4500, type: 'valley' },
-        { id: 'misvaer', name: 'Misvær', e: -12500, n: -15000, r: 2500, type: 'city' },
-        { id: 'borvass', name: 'Børvasstindan', e: -22000, n: -19000, r: 5000, type: 'mountain' },
-        { id: 'folda', name: 'Folda', e: -12000, n: 25500, r: 4500, type: 'coast' },
-        { id: 'blamannen', name: 'Blåmannsisen', e: 30000, n: 19000, r: 6000, type: 'mountain' },
-        { id: 'fauske', name: 'Fauske', e: 33500, n: -1500, r: 2500, type: 'port' },
-        { id: 'sulitjelma', name: 'Sulitjelma airfield (enemy)', e: EBASE.e, n: EBASE.n, r: 2500, type: 'airbase', enemy: true },
-        { id: 'kjerringoy', name: 'Kjerringøy', e: -26000, n: 38500, r: 3000, type: 'coast' }],
-      towns: HEADS.map((h, i) => ({ e: SPOTS[i][0], n: SPOTS[i][1], r: 600, count: 26 + (i === 0 ? 30 : 0), style: 'nordic', church: true, harbor: true, maxSlope: 0.4, seed: 300 + i }))
-        .concat([{ e: -31000, n: -12000, r: 1100, count: 60, style: 'nordic', church: true, harbor: true, seed: 320 }]),
+      zones: [],
+      towns: HEADS.map((h, i) => ({ e: h[0], n: h[1], r: 480, count: 26, style: 'nordic', church: i % 2 === 0, harbor: true, maxSlope: 0.45, seed: 300 + i }))
+        .concat([{ e: -31200, n: -12500, r: 1000, count: 70, style: 'nordic', church: true, harbor: true, seed: 320 }]),
       roads: function (ctx) {
-        const g = ctx.bases[0].gateOut, nodes = [g, [-31000, -12000], [SPOTS[3][0], SPOTS[3][1]], [SPOTS[0][0], SPOTS[0][1]], ctx.bases[1].gateOut, [SPOTS[2][0], SPOTS[2][1]], [SPOTS[1][0], SPOTS[1][1]], [SPOTS[4][0], SPOTS[4][1]]];
-        return { nodes: nodes, links: [[0, 1, 'hwy'], [0, 2, 'road'], [3, 4, 'road'], [5, 3, 'road'], [6, 7, 'road'], [3, 6, 'road']], bridgeK: 0 };
+        const nodes = [ctx.bases[0].gateOut, [-31200, -12500]], links = [[0, 1, 'hwy']];
+        const hs = HEADS.slice().sort((a, b) => Math.hypot(a[0] - BASE.e, a[1] - BASE.n) - Math.hypot(b[0] - BASE.e, b[1] - BASE.n));
+        let prev = 1;
+        for (let i = 0; i < Math.min(hs.length, 6); i++) { nodes.push([hs[i][0], hs[i][1]]); links.push([prev, nodes.length - 1, 'road']); prev = nodes.length - 1; }
+        if (ctx.bases[1]) { nodes.push(ctx.bases[1].gateOut); links.push([prev, nodes.length - 1, 'road']); }
+        return { nodes: nodes, links: links, bridgeK: 0 };
       },
       traffic: 120,
       veg: [
@@ -2828,18 +2802,42 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       },
       particles: { count: 2600, box: 240, col: [0.95, 0.97, 1.0], size: 1.8, fall: 2.2, drift: [2.5, 0.8], maxY: 2600 },
       extras: function (ctx) {
-        const P = FJ[0][0];
-        const lanes = [FJ[0][0].slice(0, 6), FJ[4][0].slice(0, 5), FJ[2][0].slice(0, 5)];
+        const sampleH = ctx.sampleH;
+        // zones from terrain: villages (coast/port/city), high massifs (mountain), deep valleys
+        const Z = [];
+        HEADS.slice(0, 5).forEach((h, i) => Z.push({ id: 'v' + i, name: h[2], e: h[0], n: h[1], r: 2500, type: i === 0 ? 'port' : 'coast' }));
+        const MN = ['Børvasstindan', 'Blåmannsisen', 'Steigtind', 'Sulitjelmatoppen', 'Lurfjelltind'], VN = ['Saltdalen', 'Junkerdalen', 'Beiardalen', 'Valnesdalen'];
+        const peaks = [], vals = [];
+        for (let n = -42000; n <= 42000; n += 3000) for (let e = -28000; e <= 44000; e += 3000) {
+          const h = sampleH(e, n); if (h > 1200) peaks.push([h, e, n]); if (h > 5 && h < 120) vals.push([h, e, n]);
+        }
+        peaks.sort((a, b) => b[0] - a[0]);
+        for (const p of peaks) { if (Z.filter((z) => z.type === 'mountain').length >= MN.length) break; if (Z.some((z) => Math.hypot(z.e - p[1], z.n - p[2]) < 12000)) continue; Z.push({ id: 'm' + Z.length, name: MN[Z.filter((z) => z.type === 'mountain').length], e: p[1], n: p[2], r: 5000, type: 'mountain' }); }
+        for (const v of vals) { if (Z.filter((z) => z.type === 'valley').length >= VN.length) break; if (Z.some((z) => Math.hypot(z.e - v[1], z.n - v[2]) < 11000)) continue; Z.push({ id: 'd' + Z.length, name: VN[Z.filter((z) => z.type === 'valley').length], e: v[1], n: v[2], r: 3500, type: 'valley' }); }
+        if (ctx.bases[1]) Z.push({ id: 'sulitjelma', name: 'Sulitjelma airfield (enemy)', e: ctx.bases[1].spec.e, n: ctx.bases[1].spec.n, r: 2500, type: 'airbase', enemy: true });
+        def.zones.push.apply(def.zones, Z);
+        const lanes = [];
         const cl = []; for (let n = -44000; n <= 44000; n += 4000) cl.push([coastE(n) - 2200, n]);
         lanes.push(cl);
-        const a = P[1], b = P[2];
-        return { seaLanes: lanes, debug: { fjordView: [a[0] + (b[0] - a[0]) * 0.3, a[1] + (b[1] - a[1]) * 0.3, Math.atan2(b[0] - a[0], b[1] - a[1]) / DEG] } };
+        const cl2 = []; for (let n = -44000; n <= 44000; n += 4000) cl2.push([coastE(n) - 900, n]);
+        lanes.push(cl2);
+        // find a low view in a narrow fjord / valley near the base
+        let fv = [-20000, -20000, 90];
+        for (let r = 4000; r < 30000 && fv[2] === 90; r += 1500) for (let a = 0; a < 24; a++) {
+          const e = BASE.e + 6000 + Math.cos(a / 24 * 6.283) * r, n = BASE.n + Math.sin(a / 24 * 6.283) * r;
+          if (sampleH(e, n) > 120) continue;
+          for (let hd = 0; hd < 360; hd += 30) {
+            const ue = Math.sin(hd * DEG), un = Math.cos(hd * DEG); let ok = true, walls = 0;
+            for (let s = 300; s <= 2400 && ok; s += 300) if (sampleH(e + ue * s, n + un * s) > 150) ok = false;
+            if (!ok) continue;
+            for (const sd of [-1, 1]) if (sampleH(e + un * sd * 900, n - ue * sd * 900) > 500) walls++;
+            if (walls === 2) { fv = [e, n, hd]; break; }
+          }
+          if (fv[2] !== 90) break;
+        }
+        return { seaLanes: lanes, debug: { fjordView: fv } };
       }
     };
-    function lastIceAt(e, n) {
-      for (let i = 0; i < LAKES.length; i++) { const L = LAKES[i], dd = Math.hypot(e - L[0], n - L[1]); if (dd < L[2] * 1.05) return 1 - sstep(L[2] * 0.85, L[2] * 1.05, dd); }
-      return 0;
-    }
     return def;
   };
 })();
@@ -8895,18 +8893,18 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     W({ id: 'aden', weight: 0.37, name: 'ADEN 30 mm', type: 'gun', range: 1100, speed: 790, damage: 22, rate: 20, ammo: 900, price: 2500, unlockLevel: 2, desc: 'Saab cannon. Solid hits, average rate.' }),
     W({ id: 'gsh30', weight: 0.39, name: 'GSh-30-1 30 mm', type: 'gun', range: 1300, speed: 870, damage: 34, rate: 25, ammo: 700, blast: 2, price: 6000, unlockLevel: 6, desc: 'Flanker cannon. Slow fire, heavy hits.' }),
     W({ id: 'm61', weight: 0.26, name: 'M61 Vulcan 20 mm', type: 'gun', range: 1000, speed: 1030, damage: 9, rate: 100, ammo: 2400, price: 8000, unlockLevel: 8, desc: 'Six barrels. A wall of lead.' }),
-    W({ id: 'r60', weight: 44, name: 'R-60 Aphid', type: 'missile', guidance: 'ir', targets: ['air'], aspect: 'rear', range: 5000, minRange: 300, speed: 750, g: 30, lockTimeMul: 1.1, damage: 100, blast: 10, ammo: 2, price: 0, unlockLevel: 1, desc: 'Old IR missile. Rear aspect only. Get on his six.' }),
-    W({ id: 'r73', weight: 105, name: 'R-73 Archer', type: 'missile', guidance: 'ir', targets: ['air'], aspect: 'all', range: 8000, minRange: 300, speed: 850, g: 45, lockTimeMul: 1, damage: 100, blast: 15, ammo: 2, price: 5000, unlockLevel: 3, desc: 'All-aspect dogfight missile. Very agile.' }),
-    W({ id: 'r77', weight: 175, name: 'R-77 Adder', type: 'missile', guidance: 'radar', targets: ['air'], range: 20000, minRange: 800, speed: 1100, g: 35, lockTimeMul: 1.3, damage: 100, blast: 18, ammo: 2, price: 14000, unlockLevel: 10, desc: 'Active radar. Fire and forget at 20 km.' }),
-    W({ id: 'r27er', weight: 350, name: 'R-27ER Alamo', type: 'missile', guidance: 'sarh', targets: ['air'], range: 30000, minRange: 1000, speed: 1200, g: 25, lockTimeMul: 1.5, damage: 110, blast: 20, ammo: 2, price: 18000, unlockLevel: 14, desc: 'Long range. Keep the lock until impact.' }),
-    W({ id: 'kh31p', weight: 600, name: 'Kh-31P Krypton', type: 'missile', guidance: 'arm', targets: ['ground', 'sea'], range: 25000, minRange: 1500, speed: 1000, g: 15, lockTimeMul: 0.8, damage: 160, blast: 22, ammo: 2, price: 12000, unlockLevel: 8, desc: 'Anti-radiation. Locks only SAM and radar emitters.' }),
-    W({ id: 'kh35', weight: 520, name: 'Kh-35 Uran', type: 'missile', guidance: 'antiship', targets: ['sea'], range: 22000, minRange: 1500, speed: 270, g: 10, lockTimeMul: 1, damage: 400, blast: 25, ammo: 2, needsBombsOK: true, price: 13000, unlockLevel: 9, desc: 'Sea skimmer. Kills frigates in one hit.' }),
-    W({ id: 'kh29', weight: 660, name: 'Kh-29 Kedge', type: 'missile', guidance: 'laser', targets: ['ground', 'sea'], range: 10000, minRange: 800, speed: 600, g: 12, lockTimeMul: 1.2, damage: 350, blast: 30, ammo: 2, needsBombsOK: true, price: 9000, unlockLevel: 5, desc: 'Heavy AGM. Cracks bunkers and compounds.' }),
-    W({ id: 's8', weight: 11, name: 'S-8 80 mm pod', type: 'rocket', targets: ['ground', 'sea'], range: 3000, minRange: 200, speed: 600, damage: 40, blast: 10, ammo: 40, salvo: 4, rate: 10, price: 1500, unlockLevel: 1, desc: 'Unguided salvo. Point the nose and ripple.' }),
-    W({ id: 's13', weight: 69, name: 'S-13 122 mm pod', type: 'rocket', targets: ['ground', 'sea'], range: 4000, minRange: 300, speed: 650, damage: 120, blast: 16, ammo: 10, salvo: 2, rate: 4, needsBombsOK: true, price: 4000, unlockLevel: 4, desc: 'Heavy rockets. Can hurt hardened targets.' }),
-    W({ id: 'fab500', weight: 500, name: 'FAB-500 bomb', type: 'bomb', targets: ['ground', 'sea'], range: 0, speed: 0, damage: 500, blast: 35, ammo: 2, rate: 2, needsBombsOK: true, price: 0, unlockLevel: 1, desc: 'Dumb iron bomb. Fly level over the target.' }),
-    W({ id: 'rbk500', weight: 430, name: 'RBK-500 cluster', type: 'bomb', targets: ['ground'], range: 0, speed: 0, damage: 160, blast: 90, ammo: 2, rate: 2, price: 4500, unlockLevel: 4, desc: 'Cluster bomb. Wide area. Great vs convoys.' }),
-    W({ id: 'kab500', weight: 530, name: 'KAB-500L guided', type: 'bomb', guidance: 'laser', targets: ['ground', 'sea'], range: 0, speed: 0, g: 6, damage: 520, blast: 32, ammo: 2, rate: 1, needsBombsOK: true, price: 10000, unlockLevel: 7, desc: 'Laser-guided. Steers to the designated target.' })
+    W({ id: 'r60', weight: 44, name: 'R-60 Aphid', type: 'missile', guidance: 'ir', targets: ['air'], aspect: 'rear', range: 5000, minRange: 300, speed: 750, g: 30, lockTimeMul: 1.1, damage: 100, blast: 10, ammo: 1, price: 0, unlockLevel: 1, desc: 'Old IR missile, 44 kg. Rear aspect only. Get on his six.' }),
+    W({ id: 'r73', weight: 105, name: 'R-73 Archer', type: 'missile', guidance: 'ir', targets: ['air'], aspect: 'all', range: 8000, minRange: 300, speed: 850, g: 45, lockTimeMul: 1, damage: 100, blast: 15, ammo: 1, price: 5000, unlockLevel: 3, desc: 'All-aspect dogfight missile. Very agile.' }),
+    W({ id: 'r77', weight: 175, name: 'R-77 Adder', type: 'missile', guidance: 'radar', targets: ['air'], range: 20000, minRange: 800, speed: 1100, g: 35, lockTimeMul: 1.3, damage: 100, blast: 18, ammo: 1, price: 14000, unlockLevel: 10, desc: 'Active radar. Fire and forget at 20 km.' }),
+    W({ id: 'r27er', weight: 350, name: 'R-27ER Alamo', type: 'missile', guidance: 'sarh', targets: ['air'], range: 30000, minRange: 1000, speed: 1200, g: 25, lockTimeMul: 1.5, damage: 110, blast: 20, ammo: 1, price: 18000, unlockLevel: 14, desc: 'Long range. Keep the lock until impact.' }),
+    W({ id: 'kh31p', weight: 600, name: 'Kh-31P Krypton', type: 'missile', guidance: 'arm', targets: ['ground', 'sea'], range: 25000, minRange: 1500, speed: 1000, g: 15, lockTimeMul: 0.8, damage: 160, blast: 22, ammo: 1, price: 12000, unlockLevel: 8, desc: 'Anti-radiation. Locks only SAM and radar emitters.' }),
+    W({ id: 'kh35', weight: 520, name: 'Kh-35 Uran', type: 'missile', guidance: 'antiship', targets: ['sea'], range: 22000, minRange: 1500, speed: 270, g: 10, lockTimeMul: 1, damage: 400, blast: 25, ammo: 1, needsBombsOK: true, price: 13000, unlockLevel: 9, desc: 'Sea skimmer. Kills frigates in one hit.' }),
+    W({ id: 'kh29', weight: 660, name: 'Kh-29 Kedge', type: 'missile', guidance: 'laser', targets: ['ground', 'sea'], range: 10000, minRange: 800, speed: 600, g: 12, lockTimeMul: 1.2, damage: 350, blast: 30, ammo: 1, needsBombsOK: true, price: 9000, unlockLevel: 5, desc: 'Heavy AGM. Cracks bunkers and compounds.' }),
+    W({ id: 's8', weight: 11, name: 'S-8 80 mm pod', type: 'rocket', targets: ['ground', 'sea'], range: 3000, minRange: 200, speed: 600, damage: 40, blast: 10, ammo: 20, salvo: 4, rate: 10, price: 1500, unlockLevel: 1, desc: 'Unguided salvo. Point the nose and ripple.' }),
+    W({ id: 's13', weight: 69, name: 'S-13 122 mm pod', type: 'rocket', targets: ['ground', 'sea'], range: 4000, minRange: 300, speed: 650, damage: 120, blast: 16, ammo: 5, salvo: 2, rate: 4, needsBombsOK: true, price: 4000, unlockLevel: 4, desc: 'Heavy rockets. Can hurt hardened targets.' }),
+    W({ id: 'fab500', weight: 500, name: 'FAB-500 bomb', type: 'bomb', targets: ['ground', 'sea'], range: 0, speed: 0, damage: 500, blast: 35, ammo: 1, rate: 2, needsBombsOK: true, price: 0, unlockLevel: 1, desc: 'Dumb iron bomb. Fly level over the target.' }),
+    W({ id: 'rbk500', weight: 430, name: 'RBK-500 cluster', type: 'bomb', targets: ['ground'], range: 0, speed: 0, damage: 160, blast: 90, ammo: 1, rate: 2, price: 4500, unlockLevel: 4, desc: 'Cluster bomb. Wide area. Great vs convoys.' }),
+    W({ id: 'kab500', weight: 530, name: 'KAB-500L guided', type: 'bomb', guidance: 'laser', targets: ['ground', 'sea'], range: 0, speed: 0, g: 6, damage: 520, blast: 32, ammo: 1, rate: 1, needsBombsOK: true, price: 10000, unlockLevel: 7, desc: 'Laser-guided. Steers to the designated target.' })
   ];
   FL.WEAPONS = {}; FL.WEAPON_ORDER = [];
   WEAPON_LIST.forEach(function (w) { FL.WEAPONS[w.id] = w; FL.WEAPON_ORDER.push(w.id); });
@@ -9072,7 +9070,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     function newProfile() {
       var s = starterAc();
       return { v: 2, credits: 2500, xp: 0, level: 1, sp: 0, upg: {}, skills: {}, ownedAc: [s], ac: s, map: null,
-        ownedW: { gsh23: 1, r60: 1, fab500: 1 }, eq: { v: 3, gun: 'gsh23', slots: ['r60', 'fab500'] }, mastery: {}, mirror: true,
+        ownedW: { gsh23: 1, r60: 1, fab500: 1 }, eq: { v: 3, gun: 'gsh23', slots: ['r60', 'r60'] }, mastery: {}, mirror: true,
         missions: 0, failed: 0, best: 0, earned: 0, kills: 0 };
     }
     function save() {
@@ -9092,8 +9090,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       if (!base.eq || !base.eq.slots) base.eq = newProfile().eq;
       if (base.eq.v !== 3) {   // v2 save: fixed missile rails + pylons -> missile goes on the first pylons
         var old = (base.eq.slots || []).filter(function (x) { return !!x; }), mi = base.eq.missile;
-        var ns = mi ? [mi] : [];
-        if (mi && old.length < 1) ns.push(mi);
+        var ns = mi ? [mi, mi] : [];   // old rails become the first (wingtip) pair
         base.eq = { v: 3, gun: base.eq.gun || 'gsh23', slots: ns.concat(old) };
         if (mi) base.ownedW[mi] = 1;
       }
@@ -9863,7 +9860,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     }
 
     // =================================================================================  HANGAR UI
-    var hangarOpen = false, hangarLatch = false, tab = 'upgrades', skillBranch = 'pilot', selSlot = 'missile', focusKey = null, el = null, rafId = 0;
+    var hangarOpen = false, hangarLatch = false, tab = 'upgrades', skillBranch = 'pilot', selSlot = 's1', focusKey = null, el = null, rafId = 0;
     var TABS = [['upgrades', 'Upgrades'], ['loadout', 'Loadout'], ['aircraft', 'Aircraft'], ['skills', 'Skills'], ['maps', 'Maps']];
 
     function checkHangar(st, w) {
@@ -9918,18 +9915,33 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       '.flc .flc-slot{display:flex;flex-direction:column;align-items:flex-start;gap:6px;text-align:left;padding:10px 12px;border-color:var(--line);color:var(--ink);text-transform:none;letter-spacing:0;min-height:62px}',
       '.flc .flc-slot .k{font:10.5px/1 var(--mono);letter-spacing:.14em;color:var(--dim);text-transform:uppercase}',
       '.flc .flc-slot .v{font:700 14px/1.1 var(--disp)}.flc .flc-slot.sel{border-color:var(--a);background:rgba(255,190,85,.08)}.flc .flc-slot.lock{opacity:.45}',
-      '.flc-jet{display:grid;grid-template-columns:repeat(2,minmax(0,220px));gap:8px;margin-bottom:10px}',
-      '.flc-pylons{display:grid;grid-template-columns:repeat(var(--n),minmax(0,1fr));gap:6px;padding:14px 10px 10px;border-top:3px solid rgba(147,255,196,.35);position:relative;max-width:900px}',
-      '.flc-pylons::before{content:"WING";position:absolute;top:-9px;left:50%;transform:translateX(-50%);font:10px/1 var(--mono);letter-spacing:.3em;color:var(--dim);background:rgba(9,20,22,.95);padding:2px 8px}',
-      '.flc .flc-pylon{display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px 2px 8px;border-color:var(--line);color:var(--ink);text-transform:none;letter-spacing:0;min-width:0;position:relative}',
-      '.flc .flc-pylon::before{content:"";position:absolute;top:-15px;left:50%;width:2px;height:14px;background:rgba(147,255,196,.45)}',
-      '.flc .flc-pylon.sel{border-color:var(--a);background:rgba(255,190,85,.08)}',
-      '.flc .flc-pylon .k{font:10px/1 var(--mono);color:var(--dim);letter-spacing:.1em}.flc .flc-pylon .v{font:700 11.5px/1.1 var(--disp);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
-      '.flc-pylon .ico{width:12px;height:38px;border:1px dashed rgba(147,255,196,.35);border-radius:6px}',
-      '.flc-pylon .ico.msl{border:0;background:linear-gradient(var(--g),var(--g)) center/4px 100% no-repeat,linear-gradient(var(--g),var(--g)) center 85%/12px 3px no-repeat;border-radius:2px 2px 0 0;clip-path:polygon(50% 0,70% 10%,70% 100%,30% 100%,30% 10%)}',
-      '.flc-pylon .ico.msl{background:var(--g);width:7px}',
-      '.flc-pylon .ico.pod{border:0;background:var(--g);width:12px;height:30px;border-radius:5px 5px 2px 2px;opacity:.9}',
-      '.flc-pylon .ico.bomb{border:0;background:var(--a);width:12px;height:30px;border-radius:50% 50% 40% 40%/30% 30% 70% 70%}',
+      '.flc-lsum{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:14px 26px;align-items:end;padding:14px 16px;border:1px solid var(--line);background:rgba(4,12,12,.55);margin-bottom:6px}',
+      '.flc-lsum b{display:block;font:800 26px/1.05 var(--disp);color:var(--a);font-variant-numeric:tabular-nums;margin-top:6px}',
+      '.flc-lsum small{display:block;font:11.5px/1.3 var(--mono);color:var(--dim);margin-top:6px}',
+      '.flc-gunc b{font-size:17px;color:var(--ink)}',
+      '.flc-hand i{display:block;height:8px;margin-top:8px;background:rgba(147,255,196,.12);position:relative}.flc-hand i b{position:absolute;inset:0 auto 0 0;margin:0;background:var(--g)}',
+      '.flc-hand i b.mid{background:var(--a)}.flc-hand i b.low{background:var(--red)}',
+      '.flc-wing{position:relative;display:grid;grid-template-columns:repeat(var(--pairs),minmax(0,1fr)) minmax(110px,.8fr) repeat(var(--pairs),minmax(0,1fr));gap:8px;padding:28px 8px 12px;margin-bottom:6px}',
+      '.flc-wing::before{content:"";position:absolute;left:4%;right:4%;top:14px;height:5px;background:linear-gradient(90deg,transparent,rgba(147,255,196,.45) 8%,rgba(147,255,196,.45) 92%,transparent);clip-path:polygon(0 100%,8% 0,92% 0,100% 100%)}',
+      '.flc-fuse{align-self:stretch;display:grid;place-items:center;border:1px solid rgba(147,255,196,.35);border-radius:40px 40px 10px 10px;min-height:96px;background:linear-gradient(rgba(147,255,196,.07),transparent)}',
+      '.flc-fuse span{font:11px/1.2 var(--mono);letter-spacing:.14em;color:var(--dim);text-transform:uppercase;text-align:center;padding:4px}',
+      '.flc .flc-pylon{display:flex;flex-direction:column;align-items:center;gap:5px;padding:9px 4px;border-color:var(--line);color:var(--ink);text-transform:none;letter-spacing:0;min-width:0;position:relative;background:rgba(4,12,12,.6)}',
+      '.flc .flc-pylon::before{content:"";position:absolute;top:-15px;left:50%;width:2px;height:14px;background:rgba(147,255,196,.5)}',
+      '.flc .flc-pylon.sel{border-color:var(--a);background:rgba(255,190,85,.1);box-shadow:inset 0 0 0 1px var(--a)}.flc .flc-pylon.empty .v{color:var(--dim)}',
+      '.flc .flc-pylon .pn{font:700 12px/1 var(--mono);color:var(--g);letter-spacing:.1em}.flc .flc-pylon .k{font:11px/1 var(--mono);color:var(--dim);white-space:nowrap}',
+      '.flc .flc-pylon .v{font:700 13px/1.1 var(--disp);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.flc-pylon .ico{width:12px;height:40px;border:1px dashed rgba(147,255,196,.35);border-radius:6px}',
+      '.flc-pylon .ico.msl{border:0;width:7px;background:var(--g);clip-path:polygon(50% 0,100% 14%,100% 82%,180% 100%,-80% 100%,0 82%,0 14%);border-radius:0}',
+      '.flc-pylon .ico.agm{border:0;width:11px;background:#c9e7ff;clip-path:polygon(50% 0,100% 18%,100% 100%,0 100%,0 18%);border-radius:0}',
+      '.flc-pylon .ico.pod{border:0;background:var(--g);width:14px;height:32px;border-radius:6px 6px 2px 2px;opacity:.85}',
+      '.flc-pylon .ico.bomb{border:0;background:var(--a);width:14px;height:34px;border-radius:50% 50% 40% 40%/30% 30% 70% 70%}',
+      '.flc-pick{border:1px solid var(--a);background:rgba(255,190,85,.05);padding:12px 14px;display:flex;flex-direction:column;gap:10px}',
+      '.flc-pickh{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;font:12px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--dim)}.flc-pickh b{color:var(--a);font-size:14px}',
+      '.flc .flc-mir{padding:8px 10px;font-size:11.5px;min-height:34px;border-color:var(--line);color:var(--dim)}.flc .flc-mir.on{border-color:var(--g);color:var(--g)}',
+      '.flc-chips{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}',
+      '.flc .flc-chip{display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:9px 10px;text-transform:none;letter-spacing:0;border-color:var(--line);color:var(--ink);text-align:left;min-height:52px}',
+      '.flc .flc-chip b{font:700 13px/1.1 var(--disp)}.flc .flc-chip span{font:10.5px/1 var(--mono);color:var(--dim)}.flc .flc-chip.on{border-color:var(--a);background:rgba(255,190,85,.12)}',
+      '.flc-cyc{margin:0;font:12px/1.5 var(--mono);color:var(--ink)}.flc-cyc span{color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-right:6px}',
       '.flc-mast{display:flex;gap:12px;align-items:center}',
       '.flc-ring{--p:0;flex:none;width:52px;height:52px;border-radius:50%;display:grid;place-items:center;background:conic-gradient(var(--g) calc(var(--p)*1%),rgba(147,255,196,.14) 0)}',
       '.flc-ring b{width:42px;height:42px;border-radius:50%;background:#071312;display:grid;place-items:center;font:800 18px/1 var(--disp);color:var(--g)}',
@@ -9956,7 +9968,13 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       '.flc-toast b{display:block;font:800 30px/1 "Oxanium",system-ui,sans-serif;letter-spacing:.12em}.flc-toast span{font:12px/1 "Share Tech Mono",monospace;letter-spacing:.18em;color:#ffbe55}',
       '.flc-toast.off{opacity:0;transform:translate(-50%,-10px)}',
       '@media (max-width:760px){.flc-head{padding:14px 14px 10px}.flc-body{padding:14px}.flc-foot{padding:10px 14px}.flc-sk{grid-template-columns:1fr}.flc-det{position:static;order:-1}',
-      '.flc-pylons{gap:4px;padding:14px 4px 8px}.flc-pylons.many{grid-template-columns:repeat(4,minmax(0,1fr));row-gap:22px}.flc .flc-pylon .v{font-size:10px}.flc-jet{grid-template-columns:1fr 1fr}.flc-tree{gap:18px 8px;padding:2px}.flc .flc-node{padding:8px 7px;min-height:58px}.flc .flc-node .nm{font-size:11.5px}.flc-grid{grid-template-columns:1fr}.flc-hint{display:none}',
+      '.flc-lsum{grid-template-columns:1fr 1fr;gap:12px 16px}.flc-hand{grid-column:1 / -1;order:3}.flc-lsum b{font-size:22px}'+
+      '.flc-wing{grid-template-columns:minmax(0,1fr) 34px minmax(0,1fr);row-gap:22px;padding:22px 0 8px}.flc-wing::before{display:none}'+
+      '.flc-fuse{grid-column:2!important;grid-row:1 / span var(--fr)!important;border-radius:16px 16px 6px 6px;min-height:0}.flc-fuse span{writing-mode:vertical-rl;font-size:10px}'+
+      '.flc .flc-pylon{grid-column:var(--mc)!important;grid-row:var(--mr)!important;flex-direction:row;flex-wrap:wrap;justify-content:flex-start;padding:8px;gap:4px 8px}'+
+      '.flc .flc-pylon::before{top:50%;left:auto;right:-12px;width:10px;height:2px}.flc .flc-pylon:nth-of-type(odd)::before{left:-12px;right:auto}'+
+      '.flc .flc-pylon .ico{height:24px}.flc .flc-pylon .v{flex:1;font-size:12px;text-align:left}.flc .flc-pylon .k{width:100%;text-align:left}.flc-chips{grid-template-columns:1fr 1fr}'+
+      '.flc-tree{gap:18px 8px;padding:2px}.flc .flc-node{padding:8px 7px;min-height:58px}.flc .flc-node .nm{font-size:11.5px}.flc-grid{grid-template-columns:1fr}.flc-hint{display:none}',
       '.flc-foot{justify-content:stretch}.flc button.flc-pri{flex:1}.flc-cr{text-align:left}.flc-meta{gap:16px;width:100%;justify-content:space-between}}',
       '@media (prefers-reduced-motion:reduce){.flc-toast{transition:none}}'
     ].join('\n');
@@ -10045,46 +10063,72 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       }).join('') + '</div>';
     }
 
+    function shortName(w) { return w.name.replace(/ (Aphid|Archer|Adder|Alamo|Krypton|Uran|Kedge|bomb|cluster|guided|pod|80 mm|122 mm)$/i, '').replace(/ (80|122) mm pod$/, ''); }
+    function kg(v) { return fmtN(v) + ' kg'; }
     function htmlLoadout() {
-      var s = stats(), lo = loadoutCalc(s), eq = P.eq, h = '';
-      function slotBtn(key, label, id, locked) {
-        var w = FL.WEAPONS[id];
-        var ammo = lo.filter(function (x) { return x.slot === (key === 'gun' ? 'gun' : key === 'missile' ? 'missile' : key); })[0];
-        return '<button class="flc-slot' + (selSlot === key ? ' sel' : '') + (locked ? ' lock' : '') + '" data-act="slot" data-id="' + key + '" data-key="slot-' + key + '"' + (locked ? ' disabled' : '') + '>' +
-          '<span class="k">' + label + '</span><span class="v">' + (locked ? 'Locked' : w ? esc(w.name) : 'Empty') + '</span>' +
-          (ammo && !locked && w ? '<span class="k">×' + ammo.ammo + '</span>' : '') + '</button>';
-      }
+      var s = stats(), lo = loadoutCalc(s), eq = P.eq, n = s.hardpoints, h = '';
       var spec = acSpec(P.ac), base = spec ? acInfo(spec, acIdx(P.ac)).hardpoints : 2;
-      h += '<div class="flc-sec">Equipped · ' + esc(spec ? spec.name : P.ac) + ' · ' + s.hardpoints + ' pylons' + (s.hardpoints > base ? ' (' + base + ' + ' + (s.hardpoints - base) + ')' : '') + '</div>';
-      h += '<div class="flc-jet">' + slotBtn('gun', 'Gun', eq.gun) + slotBtn('missile', 'Rails', eq.missile) + '</div>';
-      h += '<div class="flc-pylons' + (s.hardpoints > 5 ? ' many' : '') + '" style="--n:' + s.hardpoints + '">';
-      for (var i = 0; i < s.hardpoints; i++) h += pylonBtn(i);
-      h += '</div>';
-      if (/^s\d+$/.test(selSlot) && eq.slots[slotIdx(selSlot)]) h += '<div style="margin-top:10px"><button data-act="clear" data-key="clear">Clear pylon ' + (slotIdx(selSlot) + 1) + '</button></div>';
-      function pylonBtn(i) {
-        var key = 's' + (i + 1), w = FL.WEAPONS[eq.slots[i]], ammo = lo.filter(function (x) { return x.slot === key; })[0];
-        var ico = w ? (w.type === 'bomb' ? 'bomb' : w.type === 'rocket' ? 'pod' : 'msl') : 'none';
-        return '<button class="flc-pylon' + (selSlot === key ? ' sel' : '') + '" data-act="slot" data-id="' + key + '" data-key="slot-' + key + '" aria-label="Pylon ' + (i + 1) + ': ' + (w ? esc(w.name) : 'empty') + '">' +
-          '<span class="k">P' + (i + 1) + '</span><span class="ico ' + ico + '"></span><span class="v">' + (w ? esc(w.name.split(' ')[0]) : 'Empty') + '</span>' +
-          '<span class="k">' + (w && ammo ? '×' + ammo.ammo : '—') + '</span></button>';
+      var pairs = Math.floor(n / 2), hasC = n % 2 === 1;
+      if (!/^s\d+$/.test(selSlot) || slotIdx(selSlot) >= n) selSlot = 's1';
+      var si = slotIdx(selSlot), sp = pylonName(si, n), pi = pairOf(si, n);
+      var hp = Math.round(s.handling01 * 100), gunE = lo[0];
+      // summary
+      h += '<div class="flc-lsum"><div><span class="flc-lab">Stores weight</span><b>' + kg(s.storesMass) + '</b></div>' +
+        '<div class="flc-hand"><span class="flc-lab">Handling · ' + hp + '%</span><i><b style="width:' + Math.max(3, hp) + '%" class="' + (hp < 40 ? 'low' : hp < 70 ? 'mid' : '') + '"></b></i>' +
+        '<small>Heavier = slower, less agile. Gets lighter as you fire.</small></div>' +
+        '<div class="flc-gunc"><span class="flc-lab">Gun · fixed</span><b>' + esc(gunE.spec.name) + '</b><small>×' + gunE.ammo + ' · ' + kg(gunE.mass) + '</small></div></div>';
+      // wing diagram
+      h += '<div class="flc-sec">' + esc(spec ? spec.name : P.ac) + ' · ' + n + ' pylons' + (n > base ? ' (' + base + ' + ' + (n - base) + ')' : '') + ' · any weapon on any pylon</div>';
+      h += '<div class="flc-wing" style="--pairs:' + pairs + '">';
+      var fuseName = spec ? spec.name.replace(/^Saab /i, '').split(' ').slice(0, 2).join(' ') : P.ac;
+      h += '<div class="flc-fuse" style="grid-column:' + (pairs + 1) + ';grid-row:1;--fr:' + (pairs + (hasC ? 1 : 0)) + '"><span>' + esc(fuseName) + '</span></div>';
+      for (var i = 0; i < n; i++) {
+        var isC = hasC && i === n - 1, pair = Math.floor(i / 2), left = i % 2 === 0;
+        var dc = isC ? pairs + 1 : left ? pair + 1 : 2 * pairs + 1 - pair;   // desktop column (L1 outer-left … R1 outer-right)
+        var mr = isC ? pairs + 1 : pair + 1, mc = isC ? '1 / span 3' : left ? '1' : '3'; // mobile: one row per pair
+        h += pylonCard(i, 'grid-column:' + dc + ';grid-row:' + (isC ? 2 : 1) + ';--mc:' + mc + ';--mr:' + mr);
       }
+      h += '</div>';
+      function pylonCard(i, style) {
+        var key = 's' + (i + 1), w = FL.WEAPONS[eq.slots[i]], e = lo.filter(function (x) { return x.slot === key; })[0];
+        var ico = w ? (w.type === 'bomb' ? 'bomb' : w.type === 'rocket' ? 'pod' : isAAM(w) ? 'msl' : 'agm') : 'none';
+        var nm = pylonName(i, n);
+        return '<button class="flc-pylon' + (selSlot === key ? ' sel' : '') + (w ? '' : ' empty') + '" style="' + style + '" data-act="slot" data-id="' + key + '" data-key="slot-' + key + '" aria-label="Pylon ' + nm + ': ' + (w ? esc(w.name) : 'empty') + '">' +
+          '<span class="pn">' + nm + (i < 2 && !(hasC && i === n - 1) ? ' · tip' : '') + '</span><span class="ico ' + ico + '"></span>' +
+          '<span class="v">' + (w ? esc(shortName(w)) : 'Empty') + '</span><span class="k">' + (e ? '×' + e.ammo + ' · ' + kg(e.mass) : '—') + '</span></button>';
+      }
+      // picker for the selected pylon
+      var owned = WEAPON_LIST.filter(function (w) { return w.type !== 'gun' && P.ownedW[w.id]; });
+      var mirrorTxt = pi >= 0 ? 'Mirror to ' + pylonName(pi, n) + ': ' + (P.mirror ? 'on' : 'off') : 'Centerline';
+      h += '<div class="flc-pick"><div class="flc-pickh"><span>Pylon <b>' + sp + '</b> · pick a weapon</span>' +
+        (pi >= 0 ? '<button class="flc-mir' + (P.mirror ? ' on' : '') + '" data-act="mirror" data-key="mirror" aria-pressed="' + !!P.mirror + '">' + mirrorTxt + '</button>' : '') + '</div><div class="flc-chips">';
+      owned.forEach(function (w) {
+        var on = eq.slots[si] === w.id;
+        var cnt = isAAM(w) ? w.ammo : Math.max(1, Math.round(w.ammo * s.specialAmmoMul));
+        h += '<button class="flc-chip' + (on ? ' on' : '') + '" data-act="pick" data-id="' + w.id + '" data-key="pick-' + w.id + '"' + (on ? ' aria-pressed="true"' : '') + '>' +
+          '<b>' + esc(shortName(w)) + '</b><span>' + (isAAM(w) ? 'AAM' : w.type === 'missile' ? 'AGM' : w.type.toUpperCase()) + ' · ×' + cnt + ' · ' + kg(cnt * w.weight) + '</span></button>';
+      });
+      h += '<button class="flc-chip' + (eq.slots[si] ? '' : ' on') + '" data-act="pick" data-id="" data-key="pick-none"><b>Empty</b><span>0 kg</span></button></div>';
+      var cyc = cycleOf(lo).map(function (c) { return esc(shortName(c.spec)) + ' ×' + c.ammo; }).join(' → ');
+      h += '<p class="flc-cyc"><span>In flight, Y cycles</span> ' + cyc + '</p></div>';
+      // catalog
       var groups = [['gun', 'Guns'], ['missile', 'Missiles'], ['rocket', 'Rockets'], ['bomb', 'Bombs']];
       groups.forEach(function (g) {
         h += '<div class="flc-sec">' + g[1] + '</div><div class="flc-grid">';
         WEAPON_LIST.filter(function (w) { return w.type === g[0]; }).forEach(function (w) {
-          var own = !!P.ownedW[w.id], gated = P.level < w.unlockLevel, eqd = eq.gun === w.id || eq.missile === w.id || eq.slots.slice(0, s.hardpoints).indexOf(w.id) >= 0;
-          var tags = [w.guidance !== 'none' ? w.guidance.toUpperCase() : 'UNGUIDED'].concat(w.targets.map(function (t) { return t; }));
+          var own = !!P.ownedW[w.id], gated = P.level < w.unlockLevel, eqd = eq.gun === w.id || eq.slots.slice(0, n).indexOf(w.id) >= 0;
+          var tags = [w.guidance !== 'none' ? w.guidance.toUpperCase() : 'UNGUIDED'].concat(w.targets);
           if (w.aspect === 'rear') tags.push('rear aspect');
           if (w.needsBombsOK) tags.push('hardened');
-          var info = w.type === 'gun' ? w.rate + '/s · dmg ' + w.damage : w.type === 'bomb' ? 'dmg ' + w.damage + ' · blast ' + w.blast + ' m · ×' + w.ammo
-            : (w.range / 1000).toFixed(w.range < 10000 ? 1 : 0) + ' km · ' + w.speed + ' m/s' + (w.g ? ' · ' + w.g + ' g' : '') + ' · ×' + w.ammo;
+          var per = w.type === 'gun' ? w.weight + ' kg/rd' : kg(w.weight) + (w.type === 'rocket' ? ' each' : '');
+          var info = w.type === 'gun' ? w.rate + '/s · dmg ' + w.damage + ' · ' + per : w.type === 'bomb' ? 'dmg ' + w.damage + ' · blast ' + w.blast + ' m · ' + per
+            : (w.range / 1000).toFixed(w.range < 10000 ? 1 : 0) + ' km · ' + w.speed + ' m/s' + (w.g ? ' · ' + w.g + ' g' : '') + ' · ' + per;
           var btn;
           if (!own) btn = '<button data-act="buyw" data-id="' + w.id + '" data-key="w-' + w.id + '"' + (gated || P.credits < w.price ? ' disabled' : '') + '>' + (gated ? 'Level ' + w.unlockLevel : 'Buy') + '</button>';
+          else if (w.type === 'gun') btn = '<button data-act="eqw" data-id="' + w.id + '" data-key="w-' + w.id + '"' + (eq.gun === w.id ? ' disabled' : '') + '>' + (eq.gun === w.id ? 'Equipped' : 'Equip') + '</button>';
           else {
-            var tgt = w.type === 'gun' ? 'gun' : (selSlot === 'missile' && slotAccepts('missile', w)) ? 'missile' : /^s\d+$/.test(selSlot) ? selSlot : 'auto';
-            var here = tgt === 'gun' ? eq.gun === w.id : tgt === 'missile' ? eq.missile === w.id : tgt !== 'auto' && eq.slots[slotIdx(tgt)] === w.id;
-            var lbl = here ? 'Equipped' : tgt === 'gun' ? 'Equip' : tgt === 'missile' ? 'Equip → rails' : tgt === 'auto' ? 'Equip' : 'Equip → P' + (slotIdx(tgt) + 1);
-            btn = '<button data-act="eqw" data-id="' + w.id + '" data-key="w-' + w.id + '"' + (here ? ' disabled' : '') + '>' + lbl + '</button>';
+            var here = eq.slots[si] === w.id;
+            btn = '<button data-act="pick" data-id="' + w.id + '" data-key="w-' + w.id + '"' + (here ? ' disabled' : '') + '>' + (here ? 'On ' + sp : 'Load on ' + sp + (P.mirror && pi >= 0 ? '+' + pylonName(pi, n) : '')) + '</button>';
           }
           h += '<div class="flc-card' + (eqd ? ' on' : '') + '"><h3>' + esc(w.name) + '<small>' + w.type.toUpperCase() + '</small></h3><div class="flc-tags">' +
             tags.map(function (t) { return '<span>' + esc(t) + '</span>'; }).join('') + '</div><p>' + esc(w.desc) + '</p><div class="flc-fx">' + info + '</div><div class="flc-row">' +
@@ -10203,7 +10247,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       else if (a === 'buyw') { if (buyWeapon(id)) { changed = true; } }
       else if (a === 'eqw') { if (equipWeapon(id, selSlot)) changed = true; }
       else if (a === 'slot') { selSlot = id; render(); return; }
-      else if (a === 'clear') { P.eq.slots[slotIdx(selSlot)] = null; changed = true; focusKey = 'slot-' + selSlot; }
+      else if (a === 'clear' || a === 'pick') { if (setPylon(selSlot, a === 'pick' ? (id || null) : null)) changed = true; }
+      else if (a === 'mirror') { P.mirror = !P.mirror; save(); }
       else if (a === 'buyac') { if (buyAircraft(id)) changed = true; }
       else if (a === 'selac') { if (selectAircraft(id)) changed = true; }
       else if (a === 'map') { selectMap(id); render(); return; }
@@ -10223,36 +10268,39 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       var w = FL.WEAPONS[id]; if (!w || P.ownedW[id] || P.level < w.unlockLevel || P.credits < w.price) return false;
       P.credits -= w.price; P.ownedW[id] = 1;
       if (w.type === 'gun') P.eq.gun = id;
-      else if (selSlot === 'missile' && slotAccepts('missile', w)) P.eq.missile = id;
-      else if (/^s\d+$/.test(selSlot) && !P.eq.slots[slotIdx(selSlot)] && slotIdx(selSlot) < stats().hardpoints) P.eq.slots[slotIdx(selSlot)] = id;
+      else if (/^s\d+$/.test(selSlot) && !P.eq.slots[slotIdx(selSlot)] && slotIdx(selSlot) < stats().hardpoints) setPylon(selSlot, id, true);
       else equipWeapon(id, 'auto', true);
       applyAll(); return true;
+    }
+    // put a weapon (or null) on a pylon; mirrored to the paired pylon when P.mirror is on
+    function setPylon(slot, id, quiet) {
+      var n = stats().hardpoints, i = slotIdx(slot);
+      if (!(i >= 0 && i < n)) return false;
+      if (id) { var w = FL.WEAPONS[id]; if (!w || w.type === 'gun' || !P.ownedW[id]) return false; }
+      P.eq.slots[i] = id || null;
+      var j = pairOf(i, n); if (P.mirror && j >= 0) P.eq.slots[j] = id || null;
+      if (!quiet) applyAll();
+      return true;
     }
     function equipWeapon(id, slot, quiet) {
       var w = FL.WEAPONS[id]; if (!w || !P.ownedW[id]) return false;
       var hp = stats().hardpoints;
-      if (w.type === 'gun') { P.eq.gun = id; selSlot = 'gun'; }
-      else if (slot === 'missile' && slotAccepts('missile', w)) P.eq.missile = id;
-      else if (/^s\d+$/.test(slot) && slotIdx(slot) < hp) P.eq.slots[slotIdx(slot)] = id;
-      else if (slotAccepts('missile', w) && !quiet && slot === 'gun') { P.eq.missile = id; selSlot = 'missile'; }
-      else {
-        var k = -1;
-        for (var i = 0; i < hp; i++) if (!P.eq.slots[i]) { k = i; break; }
-        if (k < 0) { if (quiet) return false; k = hp - 1; }
-        P.eq.slots[k] = id; selSlot = 's' + (k + 1);
-      }
-      if (!quiet) applyAll();
-      return true;
+      if (w.type === 'gun') { P.eq.gun = id; if (!quiet) applyAll(); return true; }
+      if (/^s\d+$/.test(slot || '') && slotIdx(slot) < hp) return setPylon(slot, id, quiet);
+      // 'auto' / legacy 'missile': first empty pylon, else replace the selected / last one
+      var k = -1;
+      for (var i = 0; i < hp; i++) if (!P.eq.slots[i]) { k = i; break; }
+      if (k < 0) { if (quiet) return false; k = /^s\d+$/.test(selSlot) && slotIdx(selSlot) < hp ? slotIdx(selSlot) : hp - 1; }
+      selSlot = 's' + (k + 1);
+      return setPylon(selSlot, id, quiet);
     }
     function slotIdx(k) { return parseInt(String(k).slice(1), 10) - 1; }
-    // keep what fits on the new jet, unequip the rest
+    // keep what fits on the new jet (pylon order L1,R1,L2,R2… is the same on every jet), unequip the rest
     function fitLoadout() {
-      var hp = stats().hardpoints, sl = P.eq.slots;
-      var kept = sl.filter(function (x) { return !!x; });
-      var out = []; for (var i = 0; i < hp; i++) out.push(kept[i] || null);
-      var dropped = Math.max(0, kept.length - hp);
+      var hp = stats().hardpoints, sl = P.eq.slots || [], out = [], dropped = 0;
+      for (var i = 0; i < Math.max(hp, sl.length); i++) { if (i < hp) out.push(sl[i] || null); else if (sl[i]) dropped++; }
       P.eq.slots = out;
-      if (/^s\d+$/.test(selSlot) && slotIdx(selSlot) >= hp) selSlot = 's1';
+      if (!/^s\d+$/.test(selSlot) || slotIdx(selSlot) >= hp) selSlot = 's1';
       return dropped;
     }
     function buyAircraft(id) {
@@ -10383,7 +10431,10 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       // shop actions (also used by tests / net layer)
       buyUpgrade: function (id) { var r = buyUpgrade(id); if (hangarOpen) render(); return r; },
       buyWeapon: function (id) { var r = buyWeapon(id); if (hangarOpen) render(); return r; },
-      equipWeapon: function (id, slot) { var r = equipWeapon(id, slot || 's1'); if (hangarOpen) render(); return r; },
+      equipWeapon: function (id, slot) { var r = equipWeapon(id, slot || 'auto'); if (hangarOpen) render(); return r; },
+      setPylon: function (slot, id) { var r = setPylon(slot, id); if (hangarOpen) render(); return r; },
+      setMirror: function (v) { P.mirror = !!v; save(); if (hangarOpen) render(); },
+      selectPylon: function (slot) { selSlot = slot; if (hangarOpen) render(); },
       buyAircraft: function (id) { var r = buyAircraft(id); if (hangarOpen) render(); return r; },
       selectAircraft: function (id) { var r = selectAircraft(id); if (hangarOpen) render(); return r; },
       learnSkill: function (id) { var r = learnSkill(id); if (hangarOpen) render(); return r; },
@@ -12763,9 +12814,10 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       for (i = 0; i < wl.length; i++) old[wl[i].spec.id] = wl[i];
       var cur = wl[wsel] ? wl[wsel].spec.id : null;
       wl = [];
-      if (LO.weapons && LO.weapons.length) {
-        for (i = 0; i < LO.weapons.length; i++) {
-          var it = LO.weapons[i], s = typeof it === 'string' ? specOf(it) : (it.spec || specOf(it.id));
+      var src = (LO.cycle && LO.cycle.length) ? LO.cycle : LO.weapons;   // campaign 'cycle' = one entry per weapon type (pylons merged)
+      if (src && src.length) {
+        for (i = 0; i < src.length; i++) {
+          var it = src[i], s = typeof it === 'string' ? specOf(it) : (it.spec || specOf(it.id));
           if (!s) continue;
           var cap = s.type === 'gun' ? -1 : (it.ammo != null ? it.ammo : (s.ammo != null ? s.ammo : 4));
           wl.push({ spec: s, cap: cap, ammo: cap });
@@ -12830,6 +12882,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       return out.set(3.2 * sideLR, -1.3, -0.5).applyQuaternion(player.q).add(player.pos);
     }
     // local fire of one round of entry w at target t (null = dumb)
+    // projectile launch speed along the nose: keep the forward part of the jet's speed, never less than 60% of it
+    function noseSpeed() { var sp = player.vel.length(); return Math.max(player.vel.dot(pF), sp * 0.6, 60); }
     function fireOne(w, t, tag) {
       if (!pAlive || w.ammo <= 0) return false;
       var s = w.spec, T = playerMT(s), m;
@@ -12855,12 +12909,12 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         launchPos(tA, 'rocket');
         var sp = s.spread != null ? s.spread : 0.012;
         tC.copy(pF).addScaledVector(pR, rand(-sp, sp)).addScaledVector(pU, rand(-sp, sp)).normalize();
-        tB.copy(player.vel).addScaledVector(tC, 40);
+        tB.copy(pF).multiplyScalar(noseSpeed()).addScaledVector(tC, 40);   // leaves along the nose (works while drifting)
         m = launchMissile(T.side, tA, tB, null, T, LP);
         stats.rockets++; play('rocket');
       } else {
         launchPos(tA, 'missile');
-        tB.set(0, -7, 0).applyQuaternion(player.q).add(player.vel);
+        tB.set(0, -7, 0).applyQuaternion(player.q).addScaledVector(pF, noseSpeed());   // leaves along the nose (works while drifting)
         m = launchMissile('player', tA, tB, t, T, LP);
         stats.playerMissiles++; play('missile');
       }
@@ -12939,6 +12993,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
                   'lockRange', 'multiLock', 'repairPerSec', 'detectMul', 'flareEff', 'damageMul'];
       for (var i = 0; i < keys.length; i++) if (lo[keys[i]] != null && isFinite(+lo[keys[i]])) LO[keys[i]] = +lo[keys[i]];
       if (lo.weapons !== undefined) LO.weapons = lo.weapons;
+      if (lo.cycle !== undefined) LO.cycle = lo.cycle;
       mtCache = {};
       nFlares = Math.min(nFlares, LO.flares);
       // capacity changes: keep current ammo where possible, top up newly added capacity
@@ -12983,7 +13038,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     // gun lead point (War Thunder style): where to aim so rounds meet the target. Bullets inherit player velocity.
     var leadV = new THREE.Vector3(), leadOK = false, lT1 = new THREE.Vector3(), lT2 = new THREE.Vector3();
     function leadFor(t, bspeed, out) {
-      lT2.subVectors(t.vel || lT1.set(0, 0, 0), player.vel);
+      if (t.vel) lT2.copy(t.vel); else lT2.set(0, 0, 0);
+      lT2.addScaledVector(pF, -noseSpeed());          // rounds inherit only the jet's speed along the nose
       var tt = 0;
       for (var k = 0; k < 4; k++) { lT1.subVectors(t.aim, player.pos).addScaledVector(lT2, tt); tt = lT1.length() / Math.max(bspeed, 100); }
       return out.copy(player.pos).add(lT1);
@@ -13037,7 +13093,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
           }
         }
         tB.copy(asD).addScaledVector(pR, rand(-sp, sp)).addScaledVector(pU, rand(-sp, sp)).normalize();
-        tC.copy(player.vel).addScaledVector(tB, gs.speed || C.gunSpeed);
+        tC.copy(pF).multiplyScalar(noseSpeed()).addScaledVector(tB, gs.speed || C.gunSpeed);
         if (client) { fxTracer(tA, tC, 0xffe6a0); }
         else {
           var bl = pBul.add();
@@ -14813,28 +14869,38 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     }
     if (synth) { pickVoice(); try { synth.addEventListener('voiceschanged', pickVoice); } catch (e) {} }
 
-    // priority: 3 = urgent (interrupts), 2 = combat, 1 = info/tips
-    var lastSaid = -99, mode = 'important';
+    // priority: 3 = urgent (may cut a non-urgent line), 2 = combat, 1 = info/tips.
+    // Channel rules (RESEARCH.md §4): at most 1 line per GAP s, the same text never twice within REPEAT s,
+    // a waiting non-urgent line goes stale after STALE s. Urgent lines skip the gap only to cut a non-urgent line.
+    var GAP = 4, REPEAT = 30, STALE = 3;
+    var lastSaid = -99, lastPrio = 0, mode = 'important', saidAt = {};
     try { mode = localStorage.getItem('flk_radio') || 'important'; } catch (e) {}
+    function norm(t) { return String(t).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); }
     function say(key, text, prio, cd) {
       prio = prio || 1;
       if (mode === 'off') return;
       if (mode === 'important' && prio < 2) return;
-      if (prio < 3 && time - lastSaid < 8) return;            // keep the channel quiet between calls
-      if (prio < 3 && queue.length >= 1) return;
+      var nt = norm(text);
+      if (saidAt[nt] != null && time - saidAt[nt] < REPEAT) return;   // never the same line twice in 30 s
       if (cool[key] && time < cool[key]) return;
+      if (prio < 3 && queue.length >= 1) return;                      // one waiting line at most
+      if (prio >= 3 && lastPrio >= 3 && time - lastSaid < GAP) return; // two urgent calls never stack
       cool[key] = time + (cd == null ? 6 : cd);
       var msg = { key: key, text: text, prio: prio, t: time };
       if (prio >= 3) { queue = queue.filter(function (m) { return m.prio >= 3; }); if (current && current.prio < 3) { cutSpeech(); current = null; } }
       queue.push(msg);
       queue.sort(function (a, b) { return b.prio - a.prio || a.t - b.t; });
-      if (queue.length > 4) queue.length = 4;
+      if (queue.length > 2) queue.length = 2;
+    }
+    function canSpeak(m) {
+      if (time - lastSaid >= GAP) return true;
+      return m.prio >= 3 && lastPrio < 3;      // urgent may cut in after a non-urgent line
     }
     function cutSpeech() { try { if (synth) synth.cancel(); } catch (e) {} }
     function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
     function speak(msg) {
-      lastSaid = time;
+      lastSaid = time; lastPrio = msg.prio; saidAt[norm(msg.text)] = time;
       current = msg; showT = Math.max(2.6, msg.text.length * 0.065);
       if (el) { elWho.textContent = 'OVERLORD'; elTxt.textContent = msg.text; el.hidden = false; el.classList.remove('urgent'); if (msg.prio >= 3) el.classList.add('urgent'); }
       if (opts.sound && opts.sound.play) opts.sound.play('radio');
@@ -14863,50 +14929,51 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       time += dt;
       // speech pump
       if (current) { showT -= dt; if (showT <= 0) { current = null; if (el && !queue.length) el.hidden = true; } }
-      if (!current && queue.length) speak(queue.shift());
+      queue = queue.filter(function (m) { return m.prio >= 3 || time - m.t < STALE; });
+      if (!current && queue.length && canSpeak(queue[0])) speak(queue.shift());
       if (!s || !s.started) return;
       var st = s.st, h = s.hud;
       // --- flight events
       if (st.crashed && !prev.crashed) {
-        if (st.crashed.indexOf('SHOT DOWN') === 0) say('dead', pick(['Flanker One is down! I repeat, Flanker One is down!', 'We lost Flanker One. Get back up there.']), 3, 3);
-        else if (st.crashed.indexOf('SPLASH') === 0) say('dead', 'Flanker One went in the water. That is going to need a new jet.', 3, 3);
-        else say('dead', pick(['Flanker One, crash. Crash. Nobody saw that.', 'That was the ground, Flanker One. Try again.']), 3, 3);
+        if (st.crashed.indexOf('SHOT DOWN') === 0) say('dead', pick(['Flanker One is down!', 'We lost Flanker One.']), 3, 3);
+        else if (st.crashed.indexOf('SPLASH') === 0) say('dead', 'Flanker One, in the water.', 3, 3);
+        else say('dead', pick(['Flanker One, crash.', 'That was the ground.']), 3, 3);
       }
-      if (!st.crashed && prev.crashed) say('respawn', st.onGround ? 'Flanker One, Overlord. Runway two-five right, cleared for takeoff. Full throttle, rotate at three hundred.' : 'Flanker One, Overlord. You are airborne over the coast. Weapons free.', 2, 2);
+      if (!st.crashed && prev.crashed) say('respawn', st.onGround ? 'Cleared for takeoff. Full gas.' : 'Airborne. Weapons free.', 2, 2);
       if (!st.crashed) {
-        if (prev.ground && !st.onGround && st.agl > 15 && st.speed > 60) say('takeoff', pick(['Good rotate, Flanker One. Gear up and climb. Press back or N when you want the fight.', 'Wheels up. Welcome to L.A., Flanker One. Call it when you are ready to fight.']), 2, 30);
+        if (prev.ground && !st.onGround && st.agl > 15 && st.speed > 60) say('takeoff', pick(['Wheels up. Good rotate.', 'Airborne. Follow the waypoint.']), 2, 30);
         // (removed: too chatty)
-        if (prev.health > 50 && st.health <= 50 && st.health > 0) say('dmg', 'You are hit, Flanker One! Damage is heavy. Stay low and keep moving.', 3, 8);
+        if (prev.health > 50 && st.health <= 50 && st.health > 0) say('dmg', 'You are hit! Heavy damage.', 3, 8);
         // (removed: too chatty)
         if (!st.onGround && st.agl < 60 && st.vel.y < -25) say('pullup', 'Pull up! Pull up!', 3, 4);
         // (removed: too chatty)
       }
       // --- combat events
       if (h) {
-        if (h.active && !prev.active) say('start', pick(['Flanker One, Overlord. Multiple bandits inbound from the north-east, over the mountains. SAM sites active in the hills. Weapons free.', 'Overlord to Flanker One. Bogeys, many of them, coming over the San Gabriels. Weapons free. Good hunting.']), 3, 2);
-        if (h.active && h.wave > prev.wave && prev.wave > 0) say('wave', 'Wave ' + h.wave + ' inbound. More of them this time. Missiles reloaded.', 2, 2);
-        if (h.active && h.enemiesLeft === 0 && prev.left > 0) say('clear', pick(['Picture clear. Nice work, Flanker One. Stand by for the next wave.', 'Scope is clean. Good shooting.']), 2, 2);
+        if (h.active && !prev.active) say('start', pick(['Bandits north-east. Weapons free.', 'Bogeys inbound. Weapons free.']), 3, 2);
+        if (h.active && h.wave > prev.wave && prev.wave > 0) say('wave', 'Wave ' + h.wave + ' inbound. Reloaded.', 2, 2);
+        if (h.active && h.enemiesLeft === 0 && prev.left > 0) say('clear', pick(['Picture clear.', 'Scope clean. Good shooting.']), 2, 2);
         var inc = h.incoming ? h.incoming.length : 0;
-        if (inc > prev.incoming && inc >= 1) say('mslwarn', pick(['Missile! Flares and break!', 'Launch! Defend!', 'Missile in the air!']), 3, 10);
+        if (inc > prev.incoming && inc >= 1) say('mslwarn', pick(['Missile! Flares, break!', 'Launch! Defend!', 'Missile in the air!']), 3, 10);
         if (false && h.spiked && !prev.spiked && h.active) say('spiked', pick(['You are spiked, Flanker One. They have you on radar.', 'Enemy radar has you. Get low or get ready.']), 2, 14);
         if (false && h.hidden && !prev.hidden && h.active && !st.crashed) say('hidden', pick(['You are off their scopes. Stay in the weeds.', 'Lost on radar. Good. They are blind.']), 2, 16);
         // (removed: too chatty)
         if (h.score > prev.score) {
           var pops = h.popups || [], lastTxt = pops.length ? pops[pops.length - 1].text : '';
           var allTxt = pops.map(function (p) { return p.text; }).join(' ');
-          if (/CONVOY DESTROYED/.test(allTxt)) say('convoy', 'Convoy destroyed. Ground units are burning.', 2, 6);
-          else if (/SAM DOWN/.test(lastTxt)) say('samkill', pick(['SAM site destroyed. That valley is open.', 'Good hit on the SAM site.']), 2, 5);
-          else if (/HELO/.test(lastTxt)) say('helokill', pick(['Helicopter down.', 'Splash the helo. Nice.']), 2, 5);
+          if (/CONVOY DESTROYED/.test(allTxt)) say('convoy', 'Convoy destroyed.', 2, 6);
+          else if (/SAM DOWN/.test(lastTxt)) say('samkill', pick(['SAM down. Valley open.', 'Good hit, SAM down.']), 2, 5);
+          else if (/HELO/.test(lastTxt)) say('helokill', pick(['Helo down.', 'Splash the helo.']), 2, 5);
           else if (/TRUCK|VEHICLE|\+300/.test(lastTxt)) say('truck', 'Vehicle destroyed.', 1, 6);
           else if (/SPLASH|GUNS/.test(allTxt)) {
-            if (h.combo >= 3) say('combo', pick(['Combo times ' + h.combo + '! Keep them coming!', 'That is ' + h.combo + ' in a row, Flanker One!']), 2, 4);
-            else if (/GUNS/.test(allTxt)) say('gunkill', 'Guns kill! Old school.', 2, 6);
-            else if (/INVERTED/.test(allTxt)) say('invkill', 'Upside down kill. Now you are showing off.', 2, 8);
+            if (h.combo >= 3) say('combo', pick(['Combo times ' + h.combo + '!', h.combo + ' in a row!']), 2, 4);
+            else if (/GUNS/.test(allTxt)) say('gunkill', 'Guns kill!', 2, 6);
+            else if (/INVERTED/.test(allTxt)) say('invkill', 'Inverted kill. Show-off.', 2, 8);
             else say('kill', pick(['Splash one.', 'Good kill.', 'Kill confirmed.']), 2, 15);
           }
         }
-        if (h.active && h.missiles === 0 && prev.missiles > 0) say('winchester', 'You are Winchester on missiles. Use the gun. Get close.', 2, 30);
-        if (h.active && h.flares === 0 && prev.flares > 0) say('noflares', 'No flares left. Use the terrain to break the lock.', 2, 30);
+        if (h.active && h.missiles === 0 && prev.missiles > 0) say('winchester', 'Winchester. Use the gun.', 2, 30);
+        if (h.active && h.flares === 0 && prev.flares > 0) say('noflares', 'No flares. Use the terrain.', 2, 30);
         // idle tips
         idleT += dt;
         if (h.score !== prev.score || inc) idleT = 0;
@@ -14924,7 +14991,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       setMode: function (m) { mode = m; try { localStorage.setItem('flk_radio', m); } catch (e) {} if (m === 'off') { cutSpeech(); queue = []; } },
       mode: function () { return mode; },
       setVoice: function (v) { voiceOn = v; if (!v) cutSpeech(); },
-      reset: function () { queue = []; current = null; cutSpeech(); if (el) el.hidden = true; prev.active = false; prev.wave = 0; prev.score = 0; prev.left = -1; }
+      reset: function () { queue = []; current = null; saidAt = {}; cutSpeech(); if (el) el.hidden = true; prev.active = false; prev.wave = 0; prev.score = 0; prev.left = -1; }
     };
   };
 })();
