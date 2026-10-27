@@ -1043,6 +1043,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     const levels = [];
     let lookup = (e, n) => triH(base.H, NV, (e + HALF) / BC, (HALF - n) / BC);
     for (const lv of def.levels || []) {
+      const pc = levels.length ? levels[levels.length - 1].cell : BC;
+      if (Math.abs(96000 / lv.tile - Math.round(96000 / lv.tile)) > 1e-6 || Math.abs(lv.tile / pc - Math.round(lv.tile / pc)) > 1e-6 || Math.abs(lv.tile / lv.cell - Math.round(lv.tile / lv.cell)) > 1e-6) throw new Error('world: terrain level tile ' + lv.tile + ' not aligned');
       const L = Math.round(96000 / lv.tile), idx = new Int32Array(L * L).fill(-1), sel = [];
       const parent = levels.length ? levels[levels.length - 1] : null;
       for (let j = 0; j < L; j++) for (let i = 0; i < L; i++) {
@@ -2771,7 +2773,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       water: { color: 0x0a1a22, shallow: 0x1f3a40, foam: 0.35, shallowK: 0.35, roughness: 0.18 },
       bases: [BASE].concat(EB ? [EB] : []), flats: flats,
       raw: raw,
-      levels: [{ tile: 2000, cell: 100, max: 260, score: (e0, n0, e1, n1, g) => { const e = (e0 + e1) / 2, n = (n0 + n1) / 2; if (Math.abs(e - BASE.e) < 3500 && Math.abs(n - BASE.n) < 3500) return 1e6; let lo = 1e9, hi = -1e9; for (let i = 0; i <= 4; i++) for (let j = 0; j <= 4; j++) { const h = g ? triH(g.H, g.NV, (e0 + i * 500 + 48000) / g.cell, (48000 - (n0 + j * 500)) / g.cell) : 0; lo = Math.min(lo, h); hi = Math.max(hi, h); } return lo < 120 ? hi - lo : 0; } }],
+      levels: [{ tile: 1920, cell: 96, max: 260, score: (e0, n0, e1, n1, g) => { const e = (e0 + e1) / 2, n = (n0 + n1) / 2; if (Math.abs(e - BASE.e) < 3500 && Math.abs(n - BASE.n) < 3500) return 1e6; let lo = 1e9, hi = -1e9; for (let i = 0; i <= 4; i++) for (let j = 0; j <= 4; j++) { const h = g ? triH(g.H, g.NV, (e0 + i * 500 + 48000) / g.cell, (48000 - (n0 + j * 500)) / g.cell) : 0; lo = Math.min(lo, h); hi = Math.max(hi, h); } return lo < 120 ? hi - lo : 0; } }],
       color: function (e, n, h, il, curv, o, cell, k) {
         if (h < 0) { mix3(o, cSea, cShore, sstep(-25, -1, h)); return 0; }
         mix3(o, cLow, cLowSnow, 0.35 + 0.5 * sstep(0.4, 0.6, fbm(e / 500, n / 500, 3, 261)));
@@ -15736,7 +15738,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     'uniform float uThreshold; uniform float uKnee; uniform float uSatBoost;',
     'varying vec2 vUv;',
     'vec2 lo, hi;',
-    'vec3 S(vec2 o){ return texture2D(tSrc, clamp(vUv * uSrcScale + o * uTexel * uStep, lo, hi)).rgb; }',
+    'vec3 SAN(vec3 c){ c = vec3(c.x == c.x ? c.x : 0.0, c.y == c.y ? c.y : 0.0, c.z == c.z ? c.z : 0.0); return clamp(c, vec3(0.0), vec3(48.0)); }',
+    'vec3 S(vec2 o){ return SAN(texture2D(tSrc, clamp(vUv * uSrcScale + o * uTexel * uStep, lo, hi)).rgb); }',
     '#ifdef PREFILTER',
     'vec3 thr(vec3 c){',
     '  c = min(c, vec3(64.0));',
@@ -15798,7 +15801,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     '    for (int i = 0; i < 5; i++) {',
     '      vec2 o = i == 0 ? vec2(0.0) : i == 1 ? vec2(0.55, 0.0) : i == 2 ? vec2(-0.55, 0.0) : i == 3 ? vec2(0.0, 0.55) : vec2(0.0, -0.55);',
     '      vec2 q = clamp(uSun.xy + o * uSunR, 0.0, 1.0) * uSceneScale;',
-    '      vec3 c = texture2D(tScene, q).rgb;',
+    '      vec3 c = texture2D(tScene, q).rgb; c = vec3(c.x == c.x ? c.x : 0.0, c.y == c.y ? c.y : 0.0, c.z == c.z ? c.z : 0.0); c = min(c, vec3(48.0));',
     '      s += smoothstep(1.5, 10.0, dot(c, vec3(0.2126, 0.7152, 0.0722)));',
     '    }',
     '    vSunVis = s * 0.2;',
@@ -15821,7 +15824,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     '}',
     'vec3 toSRGB(vec3 c){ return mix(pow(c, vec3(0.41666)) * 1.055 - 0.055, c * 12.92, vec3(lessThanEqual(c, vec3(0.0031308)))); }',
     'vec2 sLo, sHi;',
-    'vec3 SC(vec2 uv){ return texture2D(tScene, clamp(uv * uSceneScale, sLo, sHi)).rgb; }',
+    'vec3 SAN(vec3 c){ c = vec3(c.x == c.x ? c.x : 0.0, c.y == c.y ? c.y : 0.0, c.z == c.z ? c.z : 0.0); return clamp(c, vec3(0.0), vec3(48.0)); }',
+    'vec3 SC(vec2 uv){ return SAN(texture2D(tScene, clamp(uv * uSceneScale, sLo, sHi)).rgb); }',
     '#if GHOSTS > 0',
     // x: position along sun->center axis (1 = sun, 0 = center, <0 = past center), y: radius, z: intensity, w: ring-ness
     'const vec4 GH[6] = vec4[6](vec4(-0.55, 0.055, 0.11, 0.6), vec4(-1.15, 0.13, 0.055, 0.9), vec4(0.42, 0.035, 0.09, 0.3),',
@@ -16339,7 +16343,12 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     if (combat && combat.setLocalInfo) combat.setLocalInfo({ name: playerName(), aircraftId: id });
     if (!quiet) flash((spec ? spec.name : 'Su-27') + ' READY');
   }
-  function playerName() { try { return localStorage.getItem('flk_name') || 'Flanker One'; } catch (e) { return 'Flanker One'; } }
+  var CALLSIGNS = ['Viper', 'Ghost', 'Falcon', 'Raven', 'Hammer', 'Blaze', 'Cobra', 'Mako', 'Talon', 'Nomad', 'Frost', 'Wolf', 'Saber', 'Jester', 'Reaper', 'Spark', 'Bandit', 'Echo', 'Kestrel', 'Odin'];
+  var tempName = CALLSIGNS[(Math.random() * CALLSIGNS.length) | 0] + ' ' + (1 + ((Math.random() * 9) | 0));
+  function playerName() {
+    try { var n = localStorage.getItem('flk_name'); if (n && n !== 'Flanker One') return n; localStorage.setItem('flk_name', tempName); } catch (e) {}
+    return tempName;
+  }
   function changeMap(id) {
     if (id === mapId && world) return;
     mapId = id; try { localStorage.setItem('flk_map', id); } catch (e) {}
@@ -16433,7 +16442,12 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   try { mouseAim = localStorage.getItem('flk_maim') !== '0'; mouseSens = parseFloat(localStorage.getItem('flk_msens') || '1') || 1; } catch (e) {}
   var qa = new T.Quaternion(), va = new V3(), vb = new V3(), vc = new V3();
   var lastDevice = 'mouse';
-  function setDevice(d) { if (d === lastDevice) return; if (d === 'mouse') resetAim(); lastDevice = d; if (typeof glog === 'function') glog('input: ' + d); }
+  var padActiveT = -99, mouseAcc = 0, mouseAccT = 0;
+  function setDevice(d) {
+    if (d === lastDevice) return;
+    if (d === 'mouse' && performance.now() / 1000 - padActiveT < 1.5) return;   // a nudge of the mouse while flying with the pad is not a switch
+    if (d === 'mouse') resetAim(); lastDevice = d; if (typeof glog === 'function') glog('input: ' + d);
+  }
   function mouseAimOn() { return mouseAim && lastDevice === 'mouse' && started && !paused && !coarse && !(st && st.crashed) && !(campaign && campaign.hangarOpen); }
   function resetAim() { if (st) { aimQ.copy(st.q); levelAimRoll(1); } }
   function levelAimRoll(k) {
@@ -16456,7 +16470,11 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   canvas.addEventListener('contextmenu', function (e) { e.preventDefault(); });
   addEventListener('pointerup', function (e) { drag = null; if (e.button === 0) mouseBtn.l = false; if (e.button === 2) mouseBtn.r = false; });
   addEventListener('pointermove', function (e) {
-    if (e.pointerType === 'mouse' && started && (Math.abs(e.movementX || 0) + Math.abs(e.movementY || 0) > 3 || document.pointerLockElement === canvas)) setDevice('mouse');
+    if (e.pointerType === 'mouse' && started && lastDevice !== 'mouse') {
+      var nowS = performance.now() / 1000; if (nowS - mouseAccT > 0.3) mouseAcc = 0; mouseAccT = nowS;
+      mouseAcc += Math.abs(e.movementX || 0) + Math.abs(e.movementY || 0);
+      if (mouseAcc > 60) { mouseAcc = 0; setDevice('mouse'); }
+    }
     if (mouseAimOn()) {
       var dx = e.movementX || 0, dy = e.movementY || 0;
       if (Math.abs(dx) > 300 || Math.abs(dy) > 300) return; // pointer-lock jump glitch
@@ -16523,7 +16541,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     if (gp) {
       var anyPad = Math.abs(gp.axes[0] || 0) > 0.3 || Math.abs(gp.axes[1] || 0) > 0.3 || Math.abs(RX) > 0.3 || Math.abs(RY) > 0.3 || VAL(7) > 0.2 || VAL(6) > 0.2;
       for (var bi = 0; bi < gp.buttons.length && !anyPad; bi++) if (gp.buttons[bi].pressed) anyPad = true;
-      if (anyPad && started) setDevice('pad');
+      if (anyPad && started) { padActiveT = performance.now() / 1000; setDevice('pad'); }
     }
     var E = function (i) { return B(i) && !gpPrev[i]; };
     var K = function (c) { return keys.has(c); }, KP = function (c) { return pressed.has(c); };
@@ -17870,17 +17888,19 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   }
 
   // ---------------------------------------------------------------- performance: dynamic resolution
-  var frameMs = 0, refreshMs = 16.7, rafTimes = [], resScale = 1, perfT = 0, quality = 'high';
+  var playT = 0, frameMs = 0, refreshMs = 16.7, rafTimes = [], resScale = 1, perfT = 0, quality = 'high';
   function perfTick(now, dt) {
+    if (!started || paused || (campaign && campaign.hangarOpen)) { rafTimes.length = 0; playT = 0; return; }
+    playT += dt; if (playT < 3) return;                                   // ignore loading / first seconds
     rafTimes.push(dt * 1000); if (rafTimes.length > 120) rafTimes.shift();
-    perfT += dt; if (perfT < 0.5 || rafTimes.length < 60) return; perfT = 0;
+    perfT += dt; if (perfT < 1.5 || rafTimes.length < 90) return; perfT = 0;
     var sorted = rafTimes.slice().sort(function (a, b) { return a - b; });
     refreshMs = Math.min(refreshMs, sorted[Math.floor(sorted.length * 0.1)]); // fastest typical frame ≈ display refresh
     var med = sorted[Math.floor(sorted.length * 0.5)];
-    var target = Math.max(refreshMs, 1000 / 240) * 1.08;
+    var target = Math.max(refreshMs, 1000 / 100) * 1.1;              // keep resolution high; ~100 fps is plenty
     var old = resScale;
-    if (med > target * 1.15) resScale = Math.max(0.55, resScale - 0.07);
-    else if (med < target * 1.02 && resScale < 1) resScale = Math.min(1, resScale + 0.04);
+    if (med > target * 1.2) resScale = Math.max(0.6, resScale - 0.05);
+    else if (med < target * 0.9 && resScale < 1) resScale = Math.min(1, resScale + 0.05);
     if (resScale !== old) { applyResScale(); glog('render scale ' + Math.round(resScale * 100) + '% (frame ' + med.toFixed(1) + ' ms)'); }
   }
   function applyResScale() {
@@ -17930,7 +17950,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   }
   var roomCode = '';
   function setupNet() {
-    try { $('coName').value = localStorage.getItem('flk_name') || 'Flanker One'; } catch (e) { $('coName').value = 'Flanker One'; }
+    $('coName').value = playerName();
     $('coName').addEventListener('change', function () { try { localStorage.setItem('flk_name', $('coName').value.trim() || 'Flanker One'); } catch (e) {} if (combat.setLocalInfo) combat.setLocalInfo({ name: playerName(), aircraftId: aircraftId }); });
     var m = /room-([A-Za-z0-9]{5})/.exec(location.hash || ''); if (m) { $('coCode').value = m[1].toUpperCase(); coStatus('Invite found. Press Join.'); }
     if (!FL.createNet || typeof Peer === 'undefined') { $('bHost').disabled = $('bJoin').disabled = true; coStatus('Co-op needs the internet (PeerJS). It works on the hosted game page, not in offline previews.', true); return; }
@@ -17997,7 +18017,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       var m = mates[r.id];
       if (!m || m.aircraftId !== r.aircraftId) {
         if (m) scene.remove(m.model.group);
-        var model = FL.buildAircraft ? FL.buildAircraft(r.aircraftId || 'su27') : FL.buildFlanker('player');
+        var acId = r.aircraftId || ((FL.AIRCRAFT && FL.AIRCRAFT[0]) ? FL.AIRCRAFT[0].id : 'su27');
+        var model = FL.buildAircraft ? FL.buildAircraft(acId) : FL.buildFlanker('player');
         scene.add(model.group); m = mates[r.id] = { model: model, aircraftId: r.aircraftId };
       }
       m.model.group.visible = !!r.alive;
@@ -18040,6 +18061,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       };
       Object.defineProperty(player, 'health', { get: function () { return st.health; } });
       combat = FL.createCombat({ scene: scene, world: world, fx: fx, buildFlanker: FL.buildFlanker, player: player, camera: camera, sound: sound });
+      if (combat.setLocalInfo) combat.setLocalInfo({ name: playerName(), aircraftId: aircraftId });
       if (FL.createCampaign) {
         campaign = FL.createCampaign({
           combat: combat, comms: comms, getWorld: function () { return world; }, phys: phys, sound: sound,
