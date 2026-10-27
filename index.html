@@ -3787,7 +3787,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     '  vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);',
     '  gl_Position = projectionMatrix * mvPosition;',
     '  float px = aSize * uScale / max(-mvPosition.z, 0.05);',
-    '  gl_PointSize = aAlpha <= 0.0 ? 0.0 : clamp(px, uMinPx, uMaxPx);',
+    '  gl_PointSize = (aAlpha > 0.0 && px == px) ? clamp(px, uMinPx, uMaxPx) : 0.0;',
     '  #include <logdepthbuf_vertex>',
     '  #include <fog_vertex>',
     '}'].join('\n');
@@ -3804,8 +3804,10 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     '  vec2 uv = vec2(cs * pc.x - sn * pc.y, sn * pc.x + cs * pc.y) + 0.5;',
     '  vec4 tx = texture2D(uMap, uv);',
     '  float a = tx.a * vAlpha;',
-    '  if (a < 0.004) discard;',
-    '  vec3 col = vColor * tx.rgb;',
+    '  if (!(a >= 0.004)) discard;',                       // also drops NaN
+    '  a = min(a, 1.0);',
+    '  vec3 col = clamp(vColor, 0.0, 16.0) * tx.rgb;',     // never negative (additive would subtract -> black squares)
+    '  if (!(col.r >= 0.0 && col.g >= 0.0 && col.b >= 0.0)) discard;',
     '  if (uAdd < 0.5) col *= 1.15 - 0.45 * gl_PointCoord.y;',
     '  gl_FragColor = vec4(col, a);',
     '  #include <tonemapping_fragment>',
@@ -15009,12 +15011,16 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
    audio.play(name, {pos: Vector3, dist: m, volume: 0..2, pan: -1..1})
    audio.setLoop('locking'|'locked'|'missileWarning'|'gunLoop', on) / audio.setLockProgress(0..1)
    audio.update(dt, s)               every frame, s described in update()
+   audio.setThreats([{pos, vel?, kind:'missile'|'jet'}])  incoming missiles / hostile jets (vel is estimated if missing)
+   audio.setRadio(on)                squelch open/close + faint static bed while the radio subtitle is visible
+   audio.setOption('gBreath', bool)  pilot G-breathing in cockpit view (default on)
+   Output ceiling: peak <= 0.6 at volume 1 (soft clip after the limiter).
    Works as a silent no-op object when WebAudio is missing. */
 (function () {
   'use strict';
   var FL = (window.FL = window.FL || {});
 
-  var MAX_VOICES = 24, C_SOUND = 343, MAX_DELAY = 1.5, FLYBYS = 6;
+  var MAX_VOICES = 24, C_SOUND = 343, MAX_DELAY = 1.5, FLYBYS = 6, MSL_SLOTS = 4;
   var LOOP_NAMES = ['locking', 'locked', 'missileWarning', 'gunLoop'];
 
   function clamp(x, a, b) { return x < a ? a : x > b ? b : x; }
@@ -15025,7 +15031,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   function makeNoop() {
     return {
       enabled: false, init: function () { return false; }, setMuted: noop, setVolume: noop, setBus: noop,
-      play: noop, setLoop: noop, setLockProgress: noop, update: noop,
+      play: noop, setLoop: noop, setLockProgress: noop, update: noop, setThreats: noop, setRadio: noop, setOption: noop,
       isReady: function () { return false; }, stats: function () { return { enabled: false, voices: 0 }; }
     };
   }
@@ -15103,12 +15109,12 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     }
     return b;
   }
-  // soft clip: linear to 0.6, smooth knee, asymptote 0.97 (input range +-2 via 0.5 pre-gain)
+  // soft clip: linear to 0.42, smooth knee, asymptote 0.57 (curve spans input +-2, fed through a 0.5 pre-gain)
   function makeClipCurve() {
     var n = 4096, c = new Float32Array(n);
     for (var i = 0; i < n; i++) {
       var x = (i / (n - 1)) * 4 - 2, a = Math.abs(x);
-      var y = a <= 0.6 ? a : 0.6 + 0.37 * Math.tanh((a - 0.6) / 0.37);
+      var y = a <= 0.42 ? a : 0.42 + 0.15 * Math.tanh((a - 0.42) / 0.15);
       c[i] = x < 0 ? -y : y;
     }
     return c;
@@ -15132,10 +15138,21 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     var busVol = { engine: 0.8, sfx: 1.0, ui: 0.7, radio: 0.85 };
     var loopOn = { locking: false, locked: false, missileWarning: false, gunLoop: false };
     var lockProg = 0, gPaused = false, gCrashed = false;
-    var N = {}, B = {}, voices = [], slots = [], dropped = 0;
+    var N = {}, B = {}, voices = [], slots = [], mslots = [], dropped = 0;
+    function slotState(s) { s.px = 0; s.py = 0; s.pz = 0; s.vx = 0; s.vy = 0; s.vz = 0; s.has = false; s.dPrev = 1e9; s.dMin = 1e9; s.passed = false; }
     var L = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, rx: 1, ry: 0, rz: 0, fx: 0, fy: 0, fz: -1, has: false };
-    var E = { rpm: 0, ab: 0, abOn: false, boostOn: false };
-    var ET = { single: { wf: 1.0, twin: 0, rough: 0.0, rum: 1.0 }, twin: { wf: 0.96, twin: 1, rough: 0.0, rum: 1.1 }, old: { wf: 0.7, twin: 0, rough: 1.0, rum: 1.35 } };
+    var E = { rpm: 0, ab: 0, abOn: false, boostOn: false, creakT: 1, brT: 0, brPhase: 0 };
+    var option = { gBreath: true };
+    var threats = null, radioOn = false, radioT = -9, radioPlayT = -9;
+    // engine character. old = MiG-21 / Tunnan raw turbojet, single = modern single turbofan, twin = deep Flanker AL-31F pair
+    var ETK = ['wf', 'twin', 'rough', 'roughHz', 'rum', 'roarF', 'roarQ', 'whine', 'buzz', 'sub', 'subF', 'crk', 'abC', 'abDeep', 'drive'];
+    var ET = {
+      single: { wf: 1.0, twin: 0, rough: 0.12, roughHz: 23, rum: 0.85, roarF: 1.05, roarQ: 0.85, whine: 1.15, buzz: 1.2, sub: 0.7, subF: 1.05, crk: 0.0, abC: 1.0, abDeep: 0.85, drive: 1.0 },
+      twin: { wf: 0.88, twin: 1, rough: 0.08, roughHz: 19, rum: 1.3, roarF: 0.78, roarQ: 0.7, whine: 0.9, buzz: 0.85, sub: 1.35, subF: 0.86, crk: 0.0, abC: 1.0, abDeep: 1.3, drive: 1.25 },
+      old: { wf: 0.6, twin: 0, rough: 1.0, roughHz: 12.5, rum: 1.45, roarF: 0.68, roarQ: 0.5, whine: 0.5, buzz: 1.7, sub: 1.1, subF: 0.78, crk: 1.0, abC: 1.6, abDeep: 1.1, drive: 1.9 }
+    };
+    var EC = {}; for (var ek = 0; ek < ETK.length; ek++) EC[ETK[ek]] = ET.twin[ETK[ek]];   // current, eased toward the target type
+    var DET = { whine: rnd(0.97, 1.03), roar: rnd(0.95, 1.05), rough: rnd(0.9, 1.1), sub: rnd(0.96, 1.04), beat: rnd(0.004, 0.009) }; // per-session
 
     // smoothed param with change threshold (avoids flooding the automation timeline)
     function SP(param, eps) { return { p: param, v: NaN, eps: eps || 1e-4 }; }
@@ -15168,7 +15185,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       N.comp.threshold.value = -18; N.comp.knee.value = 12; N.comp.ratio.value = 3.5; N.comp.attack.value = 0.006; N.comp.release.value = 0.25;
       N.lim = ctx.createDynamicsCompressor();
       N.lim.threshold.value = -4; N.lim.knee.value = 2; N.lim.ratio.value = 20; N.lim.attack.value = 0.001; N.lim.release.value = 0.12;
-      N.pre = G(0.5);
+      N.pre = G(0.5 * 0.55);
       N.clip = ctx.createWaveShaper(); N.clip.curve = makeClipCurve(); N.clip.oversample = '2x';
       N.master = G(muted ? 0 : volume);
       N.mix.connect(N.comp); N.comp.connect(N.lim); N.lim.connect(N.pre); N.pre.connect(N.clip); N.clip.connect(N.master);
@@ -15199,8 +15216,9 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       N.echoD2 = ctx.createDelay(2.0); N.echoD2.delayTime.value = 0.71; N.echoIn.connect(N.echoD2); N.echoD2.connect(N.echoLP);
 
       // ---- own engine: all layers -> engMaster -> engPre
-      N.eng = G(0); N.engDrv = ctx.createWaveShaper(); N.engDrv.curve = makeDrive(1.2); N.engDrv.oversample = '2x';
-      N.eng.connect(N.engDrv); N.engDrv.connect(N.engPre); N.engP = SP(N.eng.gain);
+      N.eng = G(0); N.engIn = G(1); N.engDrv = ctx.createWaveShaper(); N.engDrv.curve = makeDrive(1.2); N.engDrv.oversample = '2x'; N.engOut = G(1);
+      N.eng.connect(N.engIn); N.engIn.connect(N.engDrv); N.engDrv.connect(N.engOut); N.engOut.connect(N.engPre);
+      N.engP = SP(N.eng.gain); N.engInP = SP(N.engIn.gain); N.engOutP = SP(N.engOut.gain);
       var brs = loopSrc(B.brs), ws = loopSrc(B.ws), ws2 = loopSrc(B.ws, 0.93), wm = loopSrc(B.wm), br = loopSrc(B.br, 0.8);
       N.srcs = [brs, ws, ws2, wm, br];
       // low rumble
@@ -15208,9 +15226,12 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       N.rumP = SP(N.rumG.gain); N.rumFP = SP(N.rumF.frequency, 1);
       // mid turbine roar (+ roughness AM for 'old')
       N.roarF = BQ('bandpass', 600, 0.8); N.roarG = G(0); ws.connect(N.roarF); N.roarF.connect(N.roarG); N.roarG.connect(N.eng);
-      N.roarP = SP(N.roarG.gain); N.roarFP = SP(N.roarF.frequency, 2);
+      N.roarP = SP(N.roarG.gain); N.roarFP = SP(N.roarF.frequency, 2); N.roarQP = SP(N.roarF.Q, 0.01);
       N.roughL = OSC('sine', 17); N.roughD = G(0); N.roughL.connect(N.roughD); N.roughD.connect(N.roarG.gain); N.roughL.start();
-      N.roughP = SP(N.roughD.gain);
+      N.roughP = SP(N.roughD.gain); N.roughLF = SP(N.roughL.frequency, 0.05);
+      // turbojet rasp: dry crackle without afterburner (strong on 'old')
+      var dcs = loopSrc(B.crk, 0.9); N.srcs.push(dcs);
+      N.dcF = BQ('bandpass', 1400, 0.6); N.dcG = G(0); dcs.connect(N.dcF); N.dcF.connect(N.dcG); N.dcG.connect(N.eng); N.dcP = SP(N.dcG.gain);
       // high whine harmonics (tracks RPM)
       N.wA = OSC('sine', 2000); N.wB = OSC('sine', 4040); N.wC = OSC('sine', 2012); N.hum = OSC('triangle', 230);
       N.wAG = G(0); N.wBG = G(0); N.wCG = G(0); N.humG = G(0);
@@ -15247,6 +15268,9 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       N.windF = BQ('bandpass', 500, 0.6); N.windG = G(0); ws.connect(N.windF); N.windF.connect(N.windG); N.windG.connect(N.windW);
       N.hissF = BQ('highpass', 4500, 0); N.hissG = G(0); ws2.connect(N.hissF); N.hissF.connect(N.hissG); N.hissG.connect(N.windW);
       N.windP = SP(N.windG.gain); N.windFP = SP(N.windF.frequency, 2); N.hissP = SP(N.hissG.gain);
+      // cockpit: canopy hiss (not behind the canopy filter) + faint ECS air
+      N.canF = BQ('bandpass', 2600, 0.7); N.canG = G(0); ws2.connect(N.canF); N.canF.connect(N.canG); N.canG.connect(N.bus.engine); N.canP = SP(N.canG.gain); N.canFP = SP(N.canF.frequency, 2);
+      N.ecsF = BQ('bandpass', 420, 1.2); N.ecsG = G(0); wm.connect(N.ecsF); N.ecsF.connect(N.ecsG); N.ecsG.connect(N.bus.engine); N.ecsP = SP(N.ecsG.gain);
 
       // ---- flyby voices for nearby jets (persistent, doppler + pan)
       for (var i = 0; i < FLYBYS; i++) {
@@ -15257,10 +15281,33 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         if (s.pan) { s.lp.connect(s.pan); s.pan.connect(N.engPre); } else s.lp.connect(N.engPre);
         s.o.start();
         s.nP = SP(s.nG.gain); s.oP = SP(s.oG.gain); s.nFP = SP(s.nF.frequency, 1); s.oFP = SP(s.o.frequency, 1);
-        s.lpP = SP(s.lp.frequency, 5); s.panP = s.pan ? SP(s.pan.pan, 0.005) : null;
-        s.px = 0; s.py = 0; s.pz = 0; s.has = false;
+        s.hF = BQ('highpass', 2500, 0.7); s.hG = G(0); ws.connect(s.hF); s.hF.connect(s.hG); s.hG.connect(s.lp);
+        s.lpP = SP(s.lp.frequency, 5); s.panP = s.pan ? SP(s.pan.pan, 0.005) : null; s.hP = SP(s.hG.gain); s.hFP = SP(s.hF.frequency, 2);
+        slotState(s);
         slots.push(s);
       }
+      // ---- incoming missile voices: motor roar + hiss + whistle, doppler, pan
+      for (i = 0; i < MSL_SLOTS; i++) {
+        var m = {};
+        m.rF = BQ('bandpass', 1100, 0.8); m.rG = G(0); m.hF = BQ('highpass', 4500, 0.5); m.hG = G(0);
+        m.o = OSC('triangle', 2600); m.oG = G(0); m.lp = BQ('lowpass', 12000, 0); m.pan = PAN();
+        ws.connect(m.rF); m.rF.connect(m.rG); m.rG.connect(m.lp); wm.connect(m.hF); m.hF.connect(m.hG); m.hG.connect(m.lp);
+        m.o.connect(m.oG); m.oG.connect(m.lp); m.o.start();
+        if (m.pan) { m.lp.connect(m.pan); m.pan.connect(N.sfxPre); } else m.lp.connect(N.sfxPre);
+        m.rP = SP(m.rG.gain); m.hP = SP(m.hG.gain); m.oP = SP(m.oG.gain); m.rFP = SP(m.rF.frequency, 2); m.hFP = SP(m.hF.frequency, 5);
+        m.oFP = SP(m.o.frequency, 2); m.lpP = SP(m.lp.frequency, 5); m.panP = m.pan ? SP(m.pan.pan, 0.005) : null;
+        slotState(m);
+        mslots.push(m);
+      }
+      // ---- radio static bed (gated by setRadio)
+      var rs = loopSrc(B.wm, 1.07), rc = loopSrc(B.crk, 1.3); N.srcs.push(rs, rc);
+      N.rsF = BQ('bandpass', 1900, 0.9); N.rsHP = BQ('highpass', 450, 0); N.rcF = BQ('highpass', 1400, 0);
+      N.rsAM = G(0.75); N.rsL1 = OSC('sine', 0.37); N.rsL2 = OSC('sine', 1.9); N.rsLD = G(0.2);
+      N.rsL1.connect(N.rsLD); N.rsL2.connect(N.rsLD); N.rsLD.connect(N.rsAM.gain); N.rsL1.start(); N.rsL2.start();
+      N.rsNG = G(0.5); N.rcG = G(0.9); N.rsG = G(0);
+      rs.connect(N.rsF); N.rsF.connect(N.rsHP); N.rsHP.connect(N.rsNG); N.rsNG.connect(N.rsAM);
+      rc.connect(N.rcF); N.rcF.connect(N.rcG); N.rcG.connect(N.rsAM);
+      N.rsAM.connect(N.rsG); N.rsG.connect(N.bus.radio); N.rsP = SP(N.rsG.gain);
 
       // ---- loops (cockpit tones on the ui bus, gun on sfx)
       N.loopGate = G(1); N.loopGate.connect(N.bus.ui);
@@ -15321,7 +15368,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         if (o.volume !== undefined && isFinite(o.volume)) vol = clamp(+o.volume, 0, 2);
       }
       var ref = def.ref || 50, att = d > ref ? Math.pow(ref / d, 0.9) : 1;
-      var level = (def.lvl || 0.5) * att * vol;
+      var gn = def.g || 1, level = (def.lvl || 0.5) * att * vol * gn;
       if (level < 0.0015) return null;
       sweep(t);
       if (voices.length >= MAX_VOICES) {
@@ -15333,14 +15380,15 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         var kv = voices[qi]; voices.splice(qi, 1); setTimeoutSafe(kv);
       }
       var delay = (hasPos || d > 0) && d > 30 ? Math.min(MAX_DELAY, d / C_SOUND) : 0;
-      var v = { out: G(att * vol), nodes: [], srcs: [], t0: t + delay, end: t + delay + 0.1, level: level, dead: false };
+      var v = { out: G(att * vol * gn), nodes: [], srcs: [], t0: t + delay, end: t + delay + 0.1, level: level, dead: false };
       v.nodes.push(v.out);
       var last = v.out;
       if (d > 60) {
         var lp = BQ('lowpass', clamp(20000 * Math.exp(-d / 1100), 280, 20000), 0); last.connect(lp); last = lp; v.nodes.push(lp);
       }
       if (pan) { var p = PAN(); if (p) { p.pan.value = clamp(pan * 0.85, -1, 1); last.connect(p); last = p; v.nodes.push(p); } }
-      last.connect(def.bus === 'ui' ? N.bus.ui : def.bus === 'radio' ? N.bus.radio : def.bus === 'engine' ? (def.drive ? N.engDrv : N.engPre) : def.drive ? N.drvIn : N.sfxPre);
+      last.connect(def.bus === 'ui' ? N.bus.ui : def.bus === 'radio' ? N.bus.radio : def.bus === 'cabin' ? N.bus.engine :
+        def.bus === 'engine' ? (def.drive ? N.engDrv : N.engPre) : def.drive ? N.drvIn : N.sfxPre);
       if (def.echo && d > 150) {
         var eg = G(def.echo * Math.min(1, (d - 150) / 600)); last.connect(eg); eg.connect(N.echoIn); v.nodes.push(eg);
       }
@@ -15380,7 +15428,11 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     function tn(v, t0, o) {
       var t = t0 + (o.at || 0), s = OSC(o.wave || 'sine', o.f), g = G(0), last = s;
       if (o.f2) { s.frequency.setValueAtTime(o.f, t); s.frequency.exponentialRampToValueAtTime(o.f2, t + (o.glide || 0.2)); }
-      if (o.lp) { var f = BQ('lowpass', o.lp, 0); s.connect(f); last = f; v.nodes.push(f); }
+      if (o.lp) {
+        var f = BQ('lowpass', o.lp, o.lq === undefined ? 0 : o.lq); s.connect(f); last = f; v.nodes.push(f);
+        if (o.lp2) { f.frequency.setValueAtTime(o.lp, t); f.frequency.exponentialRampToValueAtTime(o.lp2, t + (o.lglide || 0.1)); if (o.lp3) f.frequency.setTargetAtTime(o.lp3, t + (o.lglide || 0.1), 0.15); }
+      }
+      if (o.det) s.detune.value = o.det;
       last.connect(g); g.connect(v.out);
       var end = env(g.gain, t, o.a || 0.003, o.pk, o.h || 0, o.d || 0.2);
       s.start(t); s.stop(end + 0.02);
@@ -15398,6 +15450,17 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       tn(v, t, { at: at, f: 115 * k, f2: 60, glide: 0.12, pk: 0.5, a: 0.002, d: 0.16 });
       nz(v, t, { at: at, type: 'lowpass', f: 900, pk: 0.4, a: 0.001, d: 0.12 });
       nz(v, t, { at: at, type: 'bandpass', f: 2600 * k, q: 4, pk: 0.18, a: 0.001, d: 0.06 });
+    }
+    // struck bell: inharmonic partials (1, 2.76, 5.4, 8.9) with faster decay for the high ones
+    function bell(v, t, at, f, pk, d) {
+      var P = [[1, 1, 1], [2.76, 0.42, 0.55], [5.4, 0.22, 0.32], [8.93, 0.1, 0.2], [2.0, 0.3, 0.8]];
+      for (var i = 0; i < P.length; i++) tn(v, t, { at: at, f: f * P[i][0], pk: pk * P[i][1], a: 0.0015, d: d * P[i][2] });
+    }
+    // brass-like synth note: two detuned saws through an opening low-pass
+    function brass(v, t, at, f, pk, h, d) {
+      tn(v, t, { at: at, wave: 'sawtooth', f: f, det: -6, lp: 500, lp2: 3400, lp3: 1600, lglide: 0.06, pk: pk, a: 0.012, h: h, d: d });
+      tn(v, t, { at: at, wave: 'sawtooth', f: f, det: 7, lp: 500, lp2: 3000, lp3: 1400, lglide: 0.07, pk: pk * 0.8, a: 0.015, h: h, d: d });
+      tn(v, t, { at: at, wave: 'triangle', f: f / 2, pk: pk * 0.5, a: 0.01, h: h, d: d });
     }
     function notes(v, t, list, step, wave, pk, d, lp) {
       for (var i = 0; i < list.length; i++) {
@@ -15477,10 +15540,20 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       stall: { bus: 'ui', lvl: 0.45, fn: function (v, t) {
         for (var i = 0; i < 3; i++) tn(v, t, { at: i * 0.25, wave: 'sawtooth', f: 420, lp: 1300, pk: 0.13, a: 0.01, h: 0.12, d: 0.05 });
       } },
-      radio: { bus: 'radio', lvl: 0.4, fn: function (v, t) {
-        nz(v, t, { type: 'bandpass', f: 2200, q: 1.2, pk: 0.32, a: 0.002, d: 0.1 });
-        nz(v, t, { type: 'bandpass', f: 3000, q: 0.6, pk: 0.07, a: 0.01, h: 0.1, d: 0.15 });
-        tn(v, t, { f: 1900, pk: 0.05, a: 0.003, d: 0.05 });
+      radio: { bus: 'radio', lvl: 0.35, fn: function (v, t) {              // squelch-open "kssh" + key click
+        tn(v, t, { wave: 'square', f: 1300, lp: 3000, pk: 0.05, a: 0.001, d: 0.012 });
+        nz(v, t, { type: 'bandpass', f: 2000, q: 0.9, pk: 0.22, a: 0.002, h: 0.05, d: 0.08 });
+        nz(v, t, { buf: B.crk, type: 'highpass', f: 1500, pk: 0.12, a: 0.002, h: 0.05, d: 0.06 });
+      } },
+      squelchOn: { bus: 'radio', lvl: 0.35, fn: function (v, t) {
+        tn(v, t, { wave: 'square', f: 1250, lp: 2800, pk: 0.05, a: 0.001, d: 0.015 });
+        nz(v, t, { type: 'bandpass', f: 1800, q: 0.8, pk: 0.2, a: 0.004, h: 0.06, d: 0.1 });
+        tn(v, t, { at: 0.02, f: 1000, pk: 0.02, a: 0.003, h: 0.05, d: 0.04 });
+      } },
+      squelchOff: { bus: 'radio', lvl: 0.35, fn: function (v, t) {          // the "kshht" tail when the key is released
+        nz(v, t, { type: 'bandpass', f: 2400, f2: 1300, glide: 0.18, q: 0.7, pk: 0.24, a: 0.004, h: 0.08, d: 0.14 });
+        nz(v, t, { buf: B.crk, type: 'highpass', f: 1800, pk: 0.14, a: 0.003, h: 0.06, d: 0.1 });
+        tn(v, t, { at: 0.2, wave: 'square', f: 900, lp: 2500, pk: 0.04, a: 0.001, d: 0.015 });
       } },
       boostOn: { bus: 'engine', lvl: 0.7, fn: function (v, t, r) {
         nz(v, t, { type: 'bandpass', f: 250, f2: 2200, glide: 0.55, q: 0.9, pk: 0.45, a: 0.15, d: 0.6 });
@@ -15521,31 +15594,82 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         nz(v, t, { type: 'bandpass', f: 350, f2: 700, glide: 0.7, q: 0.7, pk: 0.3, a: 0.4, h: 0.3, d: 0.8 });
         clunk(v, t, 0.5, 1.3);
       } },
-      click: { bus: 'ui', lvl: 0.25, fn: function (v, t) {
-        tn(v, t, { f: 2400, pk: 0.16, a: 0.001, d: 0.025 });
-        nz(v, t, { type: 'highpass', f: 3000, pk: 0.05, a: 0.001, d: 0.012 });
+      click: { bus: 'ui', lvl: 0.22, fn: function (v, t, r) {              // crisp switch: tick + small body
+        nz(v, t, { type: 'bandpass', f: 3800 * r, q: 2.5, pk: 0.18, a: 0.0005, d: 0.012 });
+        tn(v, t, { f: 1250 * r, f2: 800, glide: 0.03, pk: 0.09, a: 0.001, d: 0.035 });
+        tn(v, t, { f: 180, pk: 0.05, a: 0.001, d: 0.03 });
       } },
-      hover: { bus: 'ui', lvl: 0.1, fn: function (v, t) { tn(v, t, { f: 3400, pk: 0.05, a: 0.002, d: 0.02 }); } },
-      levelUp: { bus: 'ui', lvl: 0.5, fn: function (v, t) {
-        notes(v, t, [523.25, 659.25, 783.99, 1046.5], 0.09, 'triangle', 0.15, 0.45);
-        nz(v, t, { type: 'highpass', f: 6000, pk: 0.03, at: 0.27, a: 0.02, d: 0.5 });
+      hover: { bus: 'ui', lvl: 0.07, fn: function (v, t, r) {               // very soft tick
+        nz(v, t, { type: 'bandpass', f: 5200 * r, q: 4, pk: 0.05, a: 0.0005, d: 0.008 });
+        tn(v, t, { f: 2600 * r, pk: 0.025, a: 0.001, d: 0.02 });
+      } },
+      purchase: { bus: 'ui', lvl: 0.45, fn: function (v, t) {             // cash register "cha-ching"
+        nz(v, t, { type: 'bandpass', f: 2400, q: 1.5, pk: 0.2, a: 0.001, d: 0.04 });          // "cha" - drawer latch
+        tn(v, t, { f: 260, f2: 150, glide: 0.05, pk: 0.12, a: 0.001, d: 0.06 });
+        nz(v, t, { at: 0.05, type: 'bandpass', f: 3600, q: 2, pk: 0.12, a: 0.001, d: 0.05 });
+        bell(v, t, 0.1, 1567.98, 0.13, 0.7);                                                     // "ching"
+        bell(v, t, 0.17, 2093.0, 0.12, 0.9);
+        nz(v, t, { at: 0.12, type: 'highpass', f: 7000, pk: 0.025, a: 0.01, h: 0.1, d: 0.4 });  // coin shimmer
+      } },
+      deny: { bus: 'ui', lvl: 0.3, fn: function (v, t) {
+        tn(v, t, { wave: 'square', f: 196, lp: 900, pk: 0.07, a: 0.003, h: 0.08, d: 0.05 });
+        tn(v, t, { at: 0.13, wave: 'square', f: 147, lp: 900, pk: 0.07, a: 0.003, h: 0.12, d: 0.08 });
+      } },
+      levelUp: { bus: 'ui', lvl: 0.5, fn: function (v, t) {                // short synth fanfare: G4 C5 E5 -> G5/C6 held
+        brass(v, t, 0, 392.0, 0.07, 0.04, 0.08);
+        brass(v, t, 0.1, 523.25, 0.07, 0.04, 0.08);
+        brass(v, t, 0.2, 659.25, 0.07, 0.04, 0.08);
+        brass(v, t, 0.31, 783.99, 0.075, 0.3, 0.5);
+        brass(v, t, 0.31, 1046.5, 0.05, 0.3, 0.5);
+        bell(v, t, 0.31, 2093.0, 0.05, 0.8);
+        nz(v, t, { at: 0.31, type: 'highpass', f: 7000, pk: 0.02, a: 0.02, h: 0.2, d: 0.5 });
       } },
       missionStart: { bus: 'ui', lvl: 0.5, fn: function (v, t) {
-        notes(v, t, [392, 587.33, 783.99], 0.2, 'sawtooth', 0.09, 0.4, 1500);
-        tn(v, t, { f: 70, f2: 45, glide: 0.3, pk: 0.3, a: 0.004, d: 0.35 });
+        brass(v, t, 0, 293.66, 0.06, 0.08, 0.1);
+        brass(v, t, 0.16, 392.0, 0.06, 0.08, 0.1);
+        brass(v, t, 0.32, 587.33, 0.065, 0.35, 0.45);
+        tn(v, t, { f: 70, f2: 45, glide: 0.3, pk: 0.28, a: 0.004, d: 0.35 });
+        nz(v, t, { at: 0.32, type: 'lowpass', f: 300, pk: 0.12, a: 0.005, d: 0.4 });
       } },
-      missionComplete: { bus: 'ui', lvl: 0.55, fn: function (v, t) {
-        notes(v, t, [523.25, 659.25, 783.99], 0.12, 'sawtooth', 0.07, 0.3, 2000);
-        var c = [523.25, 659.25, 783.99, 1046.5];
-        for (var i = 0; i < c.length; i++) {
-          tn(v, t, { at: 0.38, wave: 'sawtooth', f: c[i] * (1 + (i - 1.5) * 0.002), lp: 2200, pk: 0.05, a: 0.02, h: 0.6, d: 1.1 });
-          tn(v, t, { at: 0.38, wave: 'triangle', f: c[i], pk: 0.06, a: 0.02, h: 0.6, d: 1.1 });
-        }
+      missionComplete: { bus: 'ui', lvl: 0.55, fn: function (v, t) {        // sting: pickup, big C major stab, low hit, bell, shimmer
+        brass(v, t, 0, 392.0, 0.05, 0.03, 0.06);
+        brass(v, t, 0.09, 493.88, 0.05, 0.03, 0.06);
+        var c = [261.63, 392.0, 523.25, 659.25, 783.99];
+        for (var i = 0; i < c.length; i++) brass(v, t, 0.2, c[i], 0.045, 0.55, 0.9);
+        tn(v, t, { at: 0.2, f: 65, f2: 40, glide: 0.4, pk: 0.3, a: 0.003, d: 0.6 });
+        nz(v, t, { at: 0.2, type: 'lowpass', f: 900, f2: 120, glide: 0.4, pk: 0.14, a: 0.002, d: 0.5 });
+        bell(v, t, 0.2, 2093.0, 0.06, 1.2);
+        nz(v, t, { at: 0.2, type: 'highpass', f: 6500, pk: 0.025, a: 0.05, h: 0.3, d: 0.9 });
       } },
-      killConfirm: { bus: 'ui', lvl: 0.4, fn: function (v, t) {
-        tn(v, t, { f: 1318.5, pk: 0.18, a: 0.003, d: 0.22 });
-        tn(v, t, { f: 1760, pk: 0.18, a: 0.003, d: 0.3, at: 0.08 });
-        tn(v, t, { f: 3520, pk: 0.03, a: 0.003, d: 0.2, at: 0.08 });
+      killConfirm: { bus: 'ui', lvl: 0.4, fn: function (v, t) {             // "ding"
+        nz(v, t, { type: 'bandpass', f: 5000, q: 3, pk: 0.06, a: 0.0005, d: 0.01 });
+        bell(v, t, 0, 1760.0, 0.17, 0.9);
+        tn(v, t, { f: 880, pk: 0.04, a: 0.002, d: 0.4 });
+      } },
+      // ---- airframe / pilot (bus 'cabin' = engine bus, after the canopy filter)
+      creak: { bus: 'cabin', lvl: 0.3, fn: function (v, t, r) {             // airframe stress creak: resonant rasp, falling pitch
+        var f0 = rnd(150, 320) * r;
+        nz(v, t, { buf: B.crkFast, type: 'bandpass', f: f0 * 3, f2: f0 * 2.2, glide: 0.35, q: 9, pk: 0.5, a: 0.04, h: 0.08, d: 0.25 });
+        nz(v, t, { buf: B.crk, type: 'bandpass', f: f0 * 7, q: 6, pk: 0.18, a: 0.02, h: 0.05, d: 0.15 });
+        tn(v, t, { wave: 'sawtooth', f: f0, f2: f0 * 0.8, glide: 0.35, lp: 900, pk: 0.025, a: 0.05, h: 0.06, d: 0.2 });
+      } },
+      breath: { bus: 'cabin', lvl: 0.3, fn: function (v, t, r) {            // G-strain: short "hk" exhale through the mask, then inhale
+        nz(v, t, { type: 'bandpass', f: 1100 * r, q: 2.2, pk: 0.13, a: 0.03, h: 0.12, d: 0.12 });
+        nz(v, t, { type: 'bandpass', f: 2500 * r, q: 2.5, pk: 0.06, a: 0.03, h: 0.12, d: 0.1 });
+        nz(v, t, { type: 'bandpass', f: 700 * r, q: 3, pk: 0.05, a: 0.01, h: 0.04, d: 0.06 });
+        nz(v, t, { at: 0.42, type: 'bandpass', f: 1600 * r, f2: 2300, glide: 0.4, q: 1.5, pk: 0.05, a: 0.2, h: 0.05, d: 0.15 });
+      } },
+      // ---- close passes (fired by the flyby / threat tracker)
+      passJet: { bus: 'sfx', ref: 30, lvl: 0.8, drive: true, fn: function (v, t, r) {  // tearing whoosh, pitch drops through the pass
+        nz(v, t, { type: 'bandpass', f: 2600 * r, f2: 420, glide: 0.55, q: 0.8, pk: 0.5, a: 0.06, h: 0.03, d: 0.6 });
+        nz(v, t, { type: 'highpass', f: 5000, f2: 1500, glide: 0.4, pk: 0.18, a: 0.04, d: 0.35 });
+        nz(v, t, { buf: B.br, type: 'lowpass', f: 300, pk: 0.4, a: 0.05, d: 0.6 });
+        nz(v, t, { buf: B.crkFast, type: 'bandpass', f: 1500, q: 0.6, pk: 0.2, a: 0.04, d: 0.5 });
+      } },
+      passMissile: { bus: 'sfx', ref: 20, lvl: 0.7, drive: true, fn: function (v, t, r) {  // sharp rip + falling whistle
+        nz(v, t, { type: 'bandpass', f: 4200 * r, f2: 900, glide: 0.3, q: 1.2, pk: 0.5, a: 0.02, d: 0.35 });
+        tn(v, t, { wave: 'triangle', f: 3400 * r, f2: 1300, glide: 0.3, pk: 0.06, a: 0.01, d: 0.3 });
+        nz(v, t, { buf: B.crkFast, type: 'highpass', f: 2000, pk: 0.25, a: 0.01, d: 0.3 });
       } }
     };
 
