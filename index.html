@@ -1099,19 +1099,25 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; t.wrapS = THREE.ClampToEdgeWrapping; t.wrapT = THREE.RepeatWrapping; return t;
   }
 
+  function strataFnTex(fn, off, span) { // 4 x 512 bands from a height -> linear colour function
+    const H = 512, c = canvas(4, H), ctx = c.getContext('2d'), img = ctx.createImageData(4, H), D = img.data, o = [0, 0, 0];
+    for (let y = 0; y < H; y++) { fn(-off + (1 - (y + 0.5) / H) * span, o); for (let x = 0; x < 4; x++) { const i = (y * 4 + x) * 4; D[i] = Math.pow(clamp(o[0], 0, 1), 1 / 2.2) * 255; D[i + 1] = Math.pow(clamp(o[1], 0, 1), 1 / 2.2) * 255; D[i + 2] = Math.pow(clamp(o[2], 0, 1), 1 / 2.2) * 255; D[i + 3] = 255; } }
+    ctx.putImageData(img, 0, 0);
+    const t = new THREE.CanvasTexture(c); t.wrapS = THREE.ClampToEdgeWrapping; t.wrapT = THREE.ClampToEdgeWrapping; return t;
+  }
   // ================================================================ terrain material
   function terrainMaterial(ctx) {
     const P = ctx.def.ground || {};
     const U = ctx.fogU;
     const v3 = (hex) => { const l = lin(hex); return new THREE.Vector3(l[0], l[1], l[2]); };
     const TU = {
-      uRockMap: { value: ctx.track(rockTex(ctx.renderer)) }, uStrataMap: { value: P.strata ? ctx.track(strataTex(P.strata, 5)) : null },
-      uStrataOn: { value: P.strata ? 1 : 0 }, uStrataSpan: { value: P.strataSpan || 420 }, uStrataOff: { value: P.strataOff || 0 },
+      uRockMap: { value: ctx.track(rockTex(ctx.renderer)) }, uStrataMap: { value: P.strataFn ? ctx.track(strataFnTex(P.strataFn, P.strataOff || 0, P.strataSpan || 420)) : P.strata ? ctx.track(strataTex(P.strata, 5)) : null },
+      uStrataOn: { value: P.strata || P.strataFn ? 1 : 0 }, uStrataSpan: { value: P.strataSpan || 420 }, uStrataOff: { value: P.strataOff || 0 },
       uRockOn: { value: P.rockOn === undefined ? 1 : P.rockOn }, uRock1: { value: v3(P.rock1 || 0x6d665c) }, uRock2: { value: v3(P.rock2 || 0x9a9284) },
       uRockA: { value: P.rockA || 0.28 }, uRockB: { value: P.rockB || 0.5 },
       uSnowH: { value: P.snowH === undefined ? 1e6 : P.snowH }, uSnowF: { value: P.snowF || 60 }, uSnowCol: { value: v3(P.snow || 0xeef3f8) }, uSnowSlope: { value: P.snowSlope || 0.62 },
       uSandH: { value: P.sandH || 0 }, uSandCol: { value: v3(P.sand || 0xcdbb94) },
-      uFaceN: { value: P.faceN === undefined ? 1 : P.faceN }, uAux: { value: ctx.def.urban ? 0 : 1 }, uIce: { value: v3(P.ice || 0xa9bccb) }
+      uFaceN: { value: P.faceN === undefined ? 1 : P.faceN }, uAux: { value: ctx.def.urban ? 0 : 1 }, uIce: { value: v3(P.ice || 0xa9bccb) }, uRockTint: { value: P.rockTint || 0 }
     };
     ctx.terrainU = TU;
     const mat = new THREE.MeshStandardMaterial({ vertexColors: true, map: ctx.detailTex, roughness: P.roughness || 0.95, metalness: 0 });
@@ -1126,7 +1132,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         '#include <common>', 'varying float vUrban; varying vec3 vWN;',
         'uniform sampler2D uRockMap; uniform sampler2D uStrataMap; uniform float uStrataOn; uniform float uStrataSpan; uniform float uStrataOff;',
         'uniform float uRockOn; uniform vec3 uRock1; uniform vec3 uRock2; uniform float uRockA; uniform float uRockB;',
-        'uniform float uSnowH; uniform float uSnowF; uniform vec3 uSnowCol; uniform float uSnowSlope; uniform float uSandH; uniform vec3 uSandCol; uniform float uFaceN; uniform float uAux; uniform vec3 uIce;',
+        'uniform float uSnowH; uniform float uSnowF; uniform vec3 uSnowCol; uniform float uSnowSlope; uniform float uSandH; uniform vec3 uSandCol; uniform float uFaceN; uniform float uAux; uniform vec3 uIce; uniform float uRockTint;',
         'vec3 gFN;'].join('\n'))
         .replace('#include <map_fragment>', [
           '#ifdef USE_MAP',
@@ -1154,6 +1160,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
           '  float rkB = texture2D(uRockMap, vec2(vFW.z + vFW.x * 0.7, vFW.y * 1.3) * rS * 5.3).r;',
           '  rkB = mix(rkB, 0.5, smoothstep(600.0, 2500.0, camD));',
           '  vec3 rock = mix(uRock1, uRock2, rkA) * (0.72 + 0.56 * rkB);',
+          '  rock = mix(rock, col * (0.62 + 0.55 * rkA) * (0.8 + 0.4 * rkB), uRockTint);',
           '  if (uStrataOn > 0.5) { vec3 stc = pow(texture2D(uStrataMap, vec2(0.5, (vFW.y + uStrataOff + (rkA - 0.5) * 14.0 + (dt2.r - 0.5) * 30.0) / uStrataSpan)).rgb, vec3(2.2)); rock = stc * (0.8 + 0.25 * rkA + 0.2 * (rkB - 0.5)); }',
           '  float steep = 1.0 - upF + (rkA - 0.5) * 0.12;',
           '  float rockK = smoothstep(uRockA, uRockB, steep) * uRockOn;',
@@ -3496,125 +3503,237 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     return def;
   };
 
-  // ================================================================ MAP: Desert Canyon (Colorado Plateau)
+  // ================================================================ MAP: Desert Canyon (Grand Canyon style, Colorado Plateau)
+  // Plateau ~2080-2300 m cut by a 1300 m deep main canyon (3-6 km rim to rim) with the classic stepped profile:
+  // dark inner gorge + river, Tonto platform, Redwall cliff, Supai ledges, Hermit slope, Coconino cliff, Kaibab rim.
+  // Side canyons, temples/buttes inside the canyon, slot canyons in the plateau, Monument-Valley mesas, spires, arches.
   MAPDEFS.canyon = function () {
-    const MAIN = meander([-47000, -24000], [47000, 21000], 300, 3600, 11000, 601, 1300, 3100);
-    const BR = [];
-    { const R = makeRng(611);
-      const marks = [0.12, 0.2, 0.31, 0.4, 0.5, 0.58, 0.67, 0.76, 0.86];
+    const RIVER = 762;
+    // stratigraphic profile: x = 0 river ... 1 rim
+    const SX = [0, 0.03, 0.13, 0.40, 0.47, 0.55, 0.58, 0.63, 0.66, 0.71, 0.80, 0.83, 0.88, 0.92, 1.0];
+    const SH = [RIVER - 2, RIVER - 1, 1150, 1195, 1445, 1475, 1560, 1585, 1660, 1690, 1790, 1900, 1950, 2060, 2080];
+    function strat(x) {
+      if (x <= 0) return SH[0];
+      if (x >= 1) return SH[SH.length - 1];
+      let i = 1; while (SX[i] < x) i++;
+      const t = (x - SX[i - 1]) / (SX[i] - SX[i - 1]);
+      return SH[i - 1] + (SH[i] - SH[i - 1]) * t;
+    }
+    const MAIN = meander([-48500, -14000], [48500, 11000], 250, 6500, 21000, 607, 2200, 6400);
+    const mIdx = makeSegIndex([MAIN], 2000, 4200), mFar = makeSegIndex([MAIN], 4000, 12000);
+    const halfW = (s) => 1750 + 1100 * fbm(s / 9000 + 3, 1.1, 2, 661) + 500 * Math.max(0, Math.sin(s / 7300 + 1));
+    // side canyons
+    const SIDES = [];
+    { const R = makeRng(611), marks = [0.07, 0.15, 0.24, 0.33, 0.41, 0.52, 0.6, 0.69, 0.78, 0.87, 0.94];
       marks.forEach((f, i) => {
-        const k = Math.floor(f * (MAIN.length - 1)), a = MAIN[k], b = MAIN[Math.min(k + 1, MAIN.length - 1)], dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy);
-        const side = i % 2 ? 1 : -1, ang = Math.atan2(dy, dx) + side * (0.9 + R() * 0.7), len = 5000 + R() * 7000;
+        const k = Math.floor(f * (MAIN.length - 1)), a = MAIN[k], b = MAIN[Math.min(k + 1, MAIN.length - 1)];
+        const side = i % 2 ? 1 : -1, ang = Math.atan2(b[1] - a[1], b[0] - a[0]) + side * (1.1 + R() * 0.6), len = 7000 + R() * 7000;
         const end = [a[0] + Math.cos(ang) * len, a[1] + Math.sin(ang) * len];
-        BR.push({ P: meander(a, end, 150, 700 + R() * 600, 2600 + R() * 1500, 620 + i), hw: 45 + R() * 90, slot: i % 3 === 1 });
+        SIDES.push({ P: meander(a, end, 200, 900 + R() * 700, 3200 + R() * 1800, 620 + i), w: 900 + R() * 700 });
       });
     }
-    const mIdx = makeSegIndex([MAIN], 2000, 2400), bIdx = makeSegIndex(BR.map((b) => b.P), 1500, 1200), mFar = makeSegIndex([MAIN], 4000, 9000), bFar = makeSegIndex(BR.map((b) => b.P), 4000, 6000);
-    const MESAS = [];
-    { const R = makeRng(631); let tries = 0;
-      while (MESAS.length < 26 && tries++ < 600) {
-        const e = (R() - 0.5) * 92000, n = (R() - 0.5) * 92000, r = 250 + Math.pow(R(), 2) * 1600;
-        if (mFar.query(e, n) < r + 1500 || bFar.query(e, n) < r + 600) continue;
-        if (MESAS.some((m) => Math.hypot(m[0] - e, m[1] - n) < m[2] + r + 1500)) continue;
-        MESAS.push([e, n, r, 110 + R() * 230, R() * 100]);
+    const sIdx = makeSegIndex(SIDES.map((b) => b.P), 2000, 2600);
+    // slot canyons cut into the plateau (fly-through), starting at the rim
+    const SLOTS = [];
+    { const R = makeRng(617), marks = [0.2, 0.47, 0.74];
+      marks.forEach((f, i) => {
+        const k = Math.floor(f * (MAIN.length - 1)), a = MAIN[k], b = MAIN[Math.min(k + 1, MAIN.length - 1)], s = k * 250;
+        const side = i % 2 ? -1 : 1, ang = Math.atan2(b[1] - a[1], b[0] - a[0]) + side * Math.PI / 2;
+        const hw = halfW(s) * 0.92, st = [a[0] + Math.cos(ang) * hw, a[1] + Math.sin(ang) * hw], len = 4500 + R() * 2500;
+        const end = [st[0] + Math.cos(ang) * len, st[1] + Math.sin(ang) * len];
+        SLOTS.push({ P: meander(st, end, 40, 260, 1300, 640 + i, 90, 420), hw: 34 + R() * 14, D: 230 + R() * 60, name: ['Buckskin Gulch', 'Antelope Slot', 'Havasu Narrows'][i] });
+      });
+    }
+    const slIdx = makeSegIndex(SLOTS.map((b) => b.P), 1000, 200);
+    // temples / buttes inside the canyon
+    const TEMPLES = [];
+    { const R = makeRng(631);
+      for (let k = 0; k < 34; k++) {
+        const i = Math.floor(R() * (MAIN.length - 2)) + 1, a = MAIN[i - 1], b = MAIN[i + 1], dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy);
+        const side = R() < 0.5 ? -1 : 1, W = halfW(i * 250), d = W * (0.45 + R() * 0.3), r = 250 + R() * 550;
+        TEMPLES.push([MAIN[i][0] - dy / l * d * side, MAIN[i][1] + dx / l * d * side, r, 0.8 + R() * 0.17, R() * 9]);
       }
     }
-    const terr = (f, steps, sharp) => { const x = f * steps, i = Math.floor(x), t = x - i; return (i + Math.pow(sstep(0, 1, t), sharp)) / steps; };
-    let lastFloor = 0;
-    function plat(e, n) { return 640 + 70 * (fbm(e / 9000 + 2, n / 9000, 3, 641) - 0.5) + 10 * (fbm(e / 600, n / 600, 2, 643) - 0.5) + n * 0.0012; }
+    // Monument-Valley mesas on the plateau
+    const MESAS = [];
+    { const R = makeRng(641); let tries = 0;
+      while (MESAS.length < 22 && tries++ < 800) {
+        const e = (R() - 0.5) * 90000, n = (R() - 0.5) * 90000, r = 300 + Math.pow(R(), 2) * 1500;
+        if (mFar.query(e, n) < halfW(SQ.s || 0) + r + 2500 || sIdx.query(e, n) < r + 2000) continue;
+        if (MESAS.some((m) => Math.hypot(m[0] - e, m[1] - n) < m[2] + r + 1500)) continue;
+        MESAS.push([e, n, r, 140 + R() * 220, R() * 100]);
+      }
+    }
+    const plat = (e, n) => 20 * (fbm(e / 9000 + 2, n / 9000, 3, 643) - 0.5) + 140 * sstep(-10000, 30000, n) + 8 * (fbm(e / 700, n / 700, 2, 645) - 0.5);
+    let lastX = 1, lastPlat = 0;
     function raw(e, n) {
-      let h = plat(e, n), P = h;
-      for (let i = 0; i < MESAS.length; i++) {
-        const M = MESAS[i], d = Math.hypot(e - M[0], n - M[1]); if (d > M[2] * 1.6 + 300) continue;
-        const rr = M[2] * (0.8 + 0.4 * fbm(Math.atan2(n - M[1], e - M[0]) * 1.3 + M[4], 0.5, 2, 651));
-        const f = 1 - sstep(rr - 30, rr + 160 + M[3] * 0.4, d);
-        h += M[3] * terr(f, 3, 3.5);
-      }
-      lastFloor = 0;
+      let x = 1.5;
+      const jit = 0.035 * (fbm(e / 900, n / 900, 3, 651) - 0.5) + 0.015 * (fbm(e / 230, n / 230, 2, 653) - 0.5);
       let d = mIdx.query(e, n);
-      if (SQ.p >= 0 && d < 2400) {
-        const s = SQ.s, hw = 90 + 300 * fbm(s / 7000 + 3, 1.1, 2, 661) + 150 * Math.max(0, Math.sin(s / 5200)), D = 300 + 180 * fbm(s / 9000, 7.7, 2, 663);
-        const floor = P - D, w2 = hw + D * 0.55;
-        if (d < w2 + 40) {
-          const q = clamp((d - hw * 0.4) / (w2 - hw * 0.4), 0, 1);
-          const f = terr(q, 4, 4.5) * 0.85 + q * 0.15;
-          const ch = floor + 3 * Math.pow(Math.min(d / (hw * 0.4), 1), 2) + (P - floor) * f;
-          if (ch < h) h = ch;
-          if (d < hw * 0.55) lastFloor = 1 - sstep(hw * 0.35, hw * 0.55, d);
-        }
+      if (SQ.p >= 0) x = d / halfW(SQ.s);
+      d = sIdx.query(e, n);
+      if (SQ.p >= 0) { const S = SIDES[SQ.p], fr = SQ.s / SQ.len, w = S.w * (1 - 0.55 * fr); const xs = Math.max(d / w, 0) * (1 - fr) + Math.pow(fr, 0.8) * 0.97 + 0.08; if (xs < x) x = xs; }
+      for (let i = 0; i < TEMPLES.length; i++) {
+        const T = TEMPLES[i], de = e - T[0], dn = n - T[1]; if (Math.abs(de) > T[2] * 1.4 || Math.abs(dn) > T[2] * 1.4) continue;
+        const db = Math.hypot(de, dn) * (0.85 + 0.3 * fbm(Math.atan2(dn, de) * 1.4 + T[4], 0.3, 2, 655));
+        const xb = (1 - db / T[2]) * T[3] * 1.35; if (xb > x) x = Math.min(xb, T[3]);
       }
-      d = bIdx.query(e, n);
-      if (SQ.p >= 0 && d < 1200) {
-        const B = BR[SQ.p], fr = SQ.s / SQ.len, hw = B.hw * (1 - 0.5 * fr), Dm = mIdx.query(B.P[0][0], B.P[0][1]) >= 0 ? 380 : 380;
-        const D = (B.slot ? 260 : 330) * (1 - Math.pow(fr, 2.2)) + 10, floor = P - D, w2 = hw + D * (B.slot ? 0.15 : 0.45);
-        if (d < w2 + 30) {
-          const q = clamp((d - hw * 0.3) / (w2 - hw * 0.3), 0, 1);
-          const f = B.slot ? sstep(0, 1, q) : terr(q, 3, 4);
-          const ch = floor + (P - floor) * f;
-          if (ch < h) h = ch;
-          if (d < hw * 0.5) lastFloor = Math.max(lastFloor, 1 - sstep(hw * 0.3, hw * 0.5, d));
+      x += jit;
+      lastX = x;
+      const P = plat(e, n);
+      let h = strat(x) + P * sstep(0.86, 1.0, x);
+      lastPlat = 0;
+      if (x > 0.98) {
+        lastPlat = 1;
+        for (let i = 0; i < MESAS.length; i++) {
+          const M = MESAS[i], dd = Math.hypot(e - M[0], n - M[1]); if (dd > M[2] * 1.6 + 300) continue;
+          const rr = M[2] * (0.8 + 0.4 * fbm(Math.atan2(n - M[1], e - M[0]) * 1.3 + M[4], 0.5, 2, 657));
+          const f = 1 - sstep(rr - 20, rr + 120 + M[3] * 0.5, dd);
+          const tf = f * 3, ti = Math.floor(tf), tt = tf - ti;
+          h += M[3] * (ti + Math.pow(sstep(0, 1, tt), 3.5)) / 3 * (f > 0 ? 1 : 0);
+        }
+        d = slIdx.query(e, n);
+        if (SQ.p >= 0) {
+          const S = SLOTS[SQ.p], fr = SQ.s / SQ.len, D = S.D * (1 - Math.pow(fr, 3)), hw = S.hw * (1 + 0.25 * Math.sin(SQ.s / 70));
+          const hs = h - D * (1 - sstep(hw * 0.7, hw * 1.05, d));
+          if (hs < h) { h = hs; lastPlat = 0.5; }
         }
       }
       return h;
     }
-    const BASE = { name: 'Kaibab Air Station', e: -30000, n: 26000, hdg: 115, len: 3100, w: 45, seed: 71, blend: 700, minH: 100, q: 0.5 };
-    const EBASE = { name: 'Navajo Mesa compound', e: 34000, n: -26000, hdg: 20, len: 1800, w: 40, seed: 72, blend: 500, mini: true, enemy: true, minH: 100, q: 0.5 };
-    for (const B of [BASE, EBASE]) { for (let k = 0; k < 40 && (mFar.query(B.e, B.n) < 5000 || bFar.query(B.e, B.n) < 3000 || MESAS.some((m) => Math.hypot(m[0] - B.e, m[1] - B.n) < m[2] + 3000)); k++) { B.e += 1300 * Math.cos(k * 2.4); B.n += 1300 * Math.sin(k * 2.4); } }
-    const cPlat = lin(0xb0704a), cPlat2 = lin(0x9a5f3e), cSand = lin(0xc49a70), cBed = lin(0xc29a72), cScrub = lin(0x8a7050);
-    const s0 = Math.floor(MAIN.length * 0.42), cv = MAIN[s0], cv2 = MAIN[s0 + 6];
+    const BASE = { name: 'Kaibab Air Station', e: -26000, n: 33000, hdg: 112, len: 3100, w: 45, seed: 71, blend: 700, minH: 1500, q: 0.5 };
+    const EBASE = { name: 'Moenkopi compound', e: 30000, n: -30000, hdg: 20, len: 1800, w: 40, seed: 72, blend: 500, mini: true, enemy: true, minH: 1500, q: 0.5 };
+    for (const B of [BASE, EBASE]) for (let k = 0; k < 60 && (mFar.query(B.e, B.n) < 6500 || sIdx.query(B.e, B.n) < 2600 || MESAS.some((m) => Math.hypot(m[0] - B.e, m[1] - B.n) < m[2] + 3000)); k++) { B.e += 1300 * Math.cos(k * 2.4); B.n += 1300 * Math.sin(k * 2.4); }
+    // layer colours by height
+    const L = (h) => lin(h);
+    const LAY = [[RIVER + 4, L(0xb39a76)], [1150, L(0x4a3d38)], [1205, L(0x8d8a6c)], [1445, L(0xa9573b)], [1700, L(0xa24c31)], [1790, L(0xab4a32)], [1900, L(0xe2d2ab)], [1950, L(0xc8a883)], [2075, L(0xcbbfa6)], [2250, L(0xb15c3d)], [2400, L(0xc27a55)], [9000, L(0xd59a72)]];
+    const cRiver = L(0xb39a76), cPlat = L(0x8c8668), cPin = L(0x5d6343), tmp = [0, 0, 0];
+    function layerCol(h, o, e, n) {
+      let i = 0; while (i < LAY.length - 1 && h > LAY[i][0]) i++;
+      const c = LAY[i][1], band = 0.9 + 0.12 * Math.sin(h * 0.21 + 2 * Math.sin(h * 0.047)) + 0.06 * (vnoise(e / 300, n / 300, 7) - 0.5);
+      o[0] = c[0] * band; o[1] = c[1] * band; o[2] = c[2] * band;
+      if (i > 0) { const pc = LAY[i - 1][1], t = sstep(LAY[i - 1][0] - 6, LAY[i - 1][0] + 6, h); if (t < 1) mix3(o, [pc[0] * band, pc[1] * band, pc[2] * band], o, t); }
+      return o;
+    }
     const def = {
-      name: 'Desert Canyon', region: 'Colorado Plateau, USA', N: 400, noWater: true,
-      sky: { sunAz: 262, sunEl: 5, fog: 0xc89a86, fogD: 0.0000085, hfogA: 0.000014, hfogB: 1 / 900, zenith: [0.07, 0.07, 0.2], glow: [1.25, 0.55, 0.22], glowW: 0.55, sunCol: [1.0, 0.62, 0.3], disk: 24,
-        band: [0.25, 0.08, 0.12], sunHex: 0xffb070, sunI: 2.6, hemiSky: 0x9a8ab8, hemiGround: 0x7a4a34, hemiI: 0.5, white: 0xe6c8b8, envGround: [0.2, 0.1, 0.07] },
-      ground: { rockOn: 1, rock1: 0x8a4a2e, rock2: 0xc07a4a, rockA: 0.18, rockB: 0.36, faceN: 1,
-        strata: ['#a4532f', '#b8643a', '#c98a5a', '#d9b48a', '#9a4a2c', '#e0c49a', '#8c4028', '#c06a3e', '#b07a52', '#d8a070'], strataSpan: 300 },
+      name: 'Desert Canyon', region: 'Colorado Plateau, USA', N: 400, noWater: true, lodK: 0.04,
+      sky: { sunAz: 262, sunEl: 7, fog: 0xc89a86, fogD: 0.0000075, hfogA: 0.000009, hfogB: 1 / 1400, zenith: [0.07, 0.07, 0.2], glow: [1.25, 0.55, 0.22], glowW: 0.55, sunCol: [1.0, 0.62, 0.3], disk: 24,
+        band: [0.25, 0.08, 0.12], sunHex: 0xffb070, sunI: 2.7, hemiSky: 0x9a8ab8, hemiGround: 0x7a4a34, hemiI: 0.55, white: 0xe6c8b8, envGround: [0.2, 0.1, 0.07] },
+      ground: { rockOn: 1, rockTint: 1, rock1: 0x8a4a2e, rock2: 0xc07a4a, rockA: 0.2, rockB: 0.42, faceN: 0.6, strataFn: (h, o) => layerCol(h, o, 0, 0), strataOff: -700, strataSpan: 2560 },
       bases: [BASE, EBASE], raw: raw,
-      levels: [{ tile: 1920, cell: 48, max: 240, score: (e0, n0, e1, n1) => { const e = (e0 + e1) / 2, n = (n0 + n1) / 2; const a = mIdx.query(e, n), b = bIdx.query(e, n); const d = Math.min(a, b + 300); return d < 1900 ? 2000 - d : 0; } }],
-      aux: () => lastFloor,
+      aux: () => lastPlat,
+      levels: [
+        { tile: 1920, cell: 64, max: 320, score: (e0, n0, e1, n1, g) => { let lo = 1e9, hi = -1e9; for (let i = 0; i <= 4; i++) for (let j = 0; j <= 4; j++) { const h = triH(g.H, g.NV, (e0 + i * 480 + 48000) / g.cell, (48000 - (n0 + j * 480)) / g.cell); lo = Math.min(lo, h); hi = Math.max(hi, h); } const sl = slIdx.query((e0 + e1) / 2, (n0 + n1) / 2) < 200 ? 5000 : 0; return Math.max(hi - lo > 160 ? hi - lo : 0, sl); } },
+        { tile: 480, cell: 16, select: (e0, n0, e1, n1) => slIdx.query((e0 + e1) / 2, (n0 + n1) / 2) < 190 }],
       color: function (e, n, h, il, curv, o, cell, k, aux) {
-        mix3(o, cPlat, cPlat2, fbm(e / 1200, n / 1200, 3, 671));
-        mix3(o, o, cScrub, sstep(0.55, 0.7, fbm(e / 2500 + 4, n / 2500, 2, 673)) * 0.6);
-        mix3(o, o, cSand, sstep(3, 30, curv) * 0.5);
-        mix3(o, o, cBed, aux || 0);
+        layerCol(h, o, e, n);
+        if (h < RIVER + 6) { o[0] = cRiver[0]; o[1] = cRiver[1]; o[2] = cRiver[2]; }
+        const flat = sstep(0.93, 0.985, il);
+        if (aux > 0.9 || h > 2040) { mix3(tmp, cPlat, cPin, sstep(0.5, 0.7, fbm(e / 900, n / 900, 3, 671))); mix3(o, o, tmp, flat * (h < 2200 ? 0.85 : 0.35)); }
+        else if (h > 1150 && h < 1215) mix3(o, o, L(0x8f8c6e), flat * 0.6);
         return 0;
       },
-      zones: [],
-      towns: [], roads: null, traffic: 90,
+      zones: [], towns: [], roads: null, traffic: 80,
       veg: [
-        { kind: 'juniper', per: 120, scale: [0.6, 1.2], cap: 5000, test: (e, n, h, sl) => sl < 0.35 ? 0.6 : 0 },
-        { kind: 'scrub', per: 260, scale: [0.5, 1.1], cap: 7000, shadow: false, test: (e, n, h, sl) => sl < 0.5 ? 0.7 : 0 },
-        { kind: 'boulder', per: 50, scale: [0.6, 2.5], cap: 2500, shadow: false, test: (e, n, h, sl) => sl < 1.0 ? 0.6 : 0 }],
-      clouds: { seed: 1301, cumulus: 26, cuBase: [3200, 4200], cuSize: 1.3, lit: [1.25, 0.72, 0.48], shadow: [0.36, 0.26, 0.36], opacity: 0.85,
-        banks: [[20000, 30000, 9000, 4000, 400, 4300], [-25000, -30000, 8000, 4000, 400, 4600]] },
+        { kind: 'juniper', per: 150, scale: [0.6, 1.2], cap: 5000, farThin: 2, test: (e, n, h, sl) => sl < 0.3 && h > 2000 ? 0.75 : (sl < 0.25 && h > 1150 && h < 1220 ? 0.25 : 0) },
+        { kind: 'scrub', per: 240, scale: [0.5, 1.1], cap: 6000, shadow: false, test: (e, n, h, sl) => sl < 0.45 ? 0.6 : 0 },
+        { kind: 'boulder', per: 40, scale: [0.6, 2.5], cap: 2000, shadow: false, test: (e, n, h, sl) => sl < 1.0 ? 0.5 : 0 }],
+      clouds: { seed: 1301, cumulus: 26, cuBase: [3600, 4600], cuSize: 1.3, lit: [1.25, 0.72, 0.48], shadow: [0.36, 0.26, 0.36], opacity: 0.85,
+        banks: [[20000, 30000, 9000, 4000, 400, 4700], [-25000, -30000, 8000, 4000, 400, 5000]] },
       extras: function (ctx) {
         const sampleH = ctx.sampleH;
+        // ---- river ribbon (Colorado green) on the canyon floor
+        const rb = new Builder(), rc = lin(0x2f5a4c);
+        let prev = -1;
+        for (let i = 0; i < MAIN.length; i++) {
+          const a = MAIN[Math.max(i - 1, 0)], c = MAIN[Math.min(i + 1, MAIN.length - 1)], dx = c[0] - a[0], dy = c[1] - a[1], l = Math.hypot(dx, dy) || 1, nx = -dy / l, ny = dx / l;
+          const w = 0.026 * halfW(i * 250);
+          const i0 = rb.vert(MAIN[i][0] + nx * w, RIVER + 0.4, -(MAIN[i][1] + ny * w), 0, 1, 0, 0, 0, rc[0], rc[1], rc[2]);
+          rb.vert(MAIN[i][0] - nx * w, RIVER + 0.4, -(MAIN[i][1] - ny * w), 0, 1, 0, 1, 0, rc[0], rc[1], rc[2]);
+          if (prev >= 0) rb.ix.push(prev, i0, prev + 1, prev + 1, i0, i0 + 1);
+          prev = i0;
+        }
+        const rmat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.15, metalness: 0, side: THREE.DoubleSide, envMapIntensity: 0.8 });
+        rmat.onBeforeCompile = function (sh) { sh.vertexShader = sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n  mvPosition.xyz *= 0.999; gl_Position = projectionMatrix * mvPosition;'); };
+        rmat.customProgramCacheKey = function () { return 'fl-river'; };
+        const river = new THREE.Mesh(rb.build(), rmat); river.name = 'river'; ctx.add(river);
+        // ---- spires (meshes, strata coloured) and natural arches on the plateau
+        const rock = new Builder(), F = [], R = makeRng(691), o3 = [0, 0, 0];
+        const spires = [];
+        for (const M of MESAS.slice(0, 12)) for (let k = 0; k < 2; k++) {
+          const a = R() * 6.283, d = M[2] + 500 + R() * 900, e = M[0] + Math.cos(a) * d, n = M[1] + Math.sin(a) * d;
+          if (mFar.query(e, n) < halfW(SQ.s || 0) + 600 || slIdx.query(e, n) < 150) continue;
+          spires.push([e, n, 22 + R() * 30, 110 + R() * 200]);
+        }
+        for (const S of spires) {
+          const h0 = sampleH(S[0], S[1]) - 8, H = S[3], g = new THREE.CylinderGeometry(S[2] * 0.55, S[2], H, 10, 8), Pp = g.attributes.position;
+          for (let i = 0; i < Pp.count; i++) { const x = Pp.getX(i), y = Pp.getY(i), z = Pp.getZ(i), k = 0.8 + 0.35 * fbm(Math.atan2(z, x) * 1.5 + S[0] * 0.01, y / 25, 2, 693); Pp.setXYZ(i, x * k, y, z * k); }
+          g.computeVertexNormals();
+          const C = new Float32Array(Pp.count * 3);
+          for (let i = 0; i < Pp.count; i++) { layerCol(h0 + Pp.getY(i) + H / 2 + 200, o3, S[0], S[1]); C[i * 3] = o3[0]; C[i * 3 + 1] = o3[1]; C[i * 3 + 2] = o3[2]; }
+          g.setAttribute('color', new THREE.BufferAttribute(C, 3)); g.translate(S[0], h0 + H / 2, -S[1]);
+          // Builder.geo takes one colour: copy per-vertex colours manually
+          const base = rock.nv; rock.geo(g, new THREE.Matrix4(), [1, 1, 1]);
+          for (let i = 0; i < Pp.count; i++) { rock.c[(base + i) * 3] = C[i * 3]; rock.c[(base + i) * 3 + 1] = C[i * 3 + 1]; rock.c[(base + i) * 3 + 2] = C[i * 3 + 2]; }
+          g.dispose();
+          const x0 = S[0], z0 = -S[1], r0 = S[2] * 0.9;
+          F.push({ x0: x0 - S[2], x1: x0 + S[2], z0: z0 - S[2], z1: z0 + S[2], y0: h0, y1: h0 + H, test: function (x, y, z) { const dx = x - x0, dz = z - z0, rr = r0 * (1 - 0.4 * (y - h0) / H); return dx * dx + dz * dz < rr * rr; } });
+        }
+        const arches = [];
+        for (let k = 0; k < 4 && k < MESAS.length; k++) {
+          const M = MESAS[MESAS.length - 1 - k], a = R() * 6.283, d = M[2] + 400, e = M[0] + Math.cos(a) * d, n = M[1] + Math.sin(a) * d;
+          if (mFar.query(e, n) < halfW(SQ.s || 0) + 800) continue;
+          const Rr = 55 + R() * 35, tube = 13 + R() * 6, yaw = R() * Math.PI, h0 = sampleH(e, n) - 4;
+          const g = new THREE.TorusGeometry(Rr, tube, 10, 28, Math.PI), Pp = g.attributes.position;
+          for (let i = 0; i < Pp.count; i++) { const x = Pp.getX(i), y = Pp.getY(i), z = Pp.getZ(i), kk = 1 + 0.18 * (fbm(x / 20, y / 20 + z / 20, 2, 697) - 0.5); Pp.setXYZ(i, x * kk, y * kk, z * 1.6); }
+          g.computeVertexNormals();
+          const m = mat4(e, h0, -n, yaw);
+          const base = rock.nv; rock.geo(g, m, [1, 1, 1]);
+          for (let i = base; i < rock.nv; i++) { layerCol(rock.p[i * 3 + 1] + 160, o3, e, n); rock.c[i * 3] = o3[0]; rock.c[i * 3 + 1] = o3[1]; rock.c[i * 3 + 2] = o3[2]; }
+          g.dispose();
+          const cy = Math.cos(yaw), sy = Math.sin(yaw), x0 = e, z0 = -n, lim = Rr + tube * 1.4;
+          F.push({ x0: x0 - lim, x1: x0 + lim, z0: z0 - lim, z1: z0 + lim, y0: h0, y1: h0 + Rr + tube, test: function (x, y, z) {
+            const dx = x - x0, dz = z - z0, lx = dx * cy - dz * sy, lz = dx * sy + dz * cy, ly = y - h0; // arch plane = local x/y
+            if (Math.abs(lz) > tube * 1.5) return false; const rr = Math.hypot(lx, ly) - Rr; return ly >= 0 && rr * rr + (lz / 1.6) * (lz / 1.6) < tube * tube; } });
+          arches.push([e, n, h0, Rr, yaw]);
+        }
+        if (rock.nv) { const mm = new THREE.Mesh(rock.build(), new THREE.MeshStandardMaterial({ vertexColors: true, map: ctx.track(rockTex(ctx.renderer)), color: new THREE.Color(1.7, 1.7, 1.7), roughness: 0.95 })); mm.castShadow = true; mm.receiveShadow = true; mm.name = 'spires'; ctx.add(mm); }
+        // ---- zones
+        const P = (f) => MAIN[Math.floor(f * (MAIN.length - 1))];
         const Z = [
-          { id: 'horseshoe', name: 'Horseshoe Bend Canyon', p: MAIN[Math.floor(MAIN.length * 0.3)], r: 3000, type: 'valley' },
-          { id: 'marble', name: 'Marble Canyon', p: MAIN[Math.floor(MAIN.length * 0.55)], r: 3500, type: 'valley' },
-          { id: 'glen', name: 'Glen Canyon Gorge', p: MAIN[Math.floor(MAIN.length * 0.8)], r: 3500, type: 'valley' },
-          { id: 'buckskin', name: 'Buckskin Gulch (slot canyon)', p: BR[1].P[Math.floor(BR[1].P.length * 0.5)], r: 2500, type: 'valley' },
-          { id: 'paria', name: 'Paria Wash', p: BR[4].P[Math.floor(BR[4].P.length * 0.6)], r: 2500, type: 'valley' },
-          { id: 'vermilion', name: 'Vermilion Cliffs Mesa', p: MESAS[0], r: 3000, type: 'desert' },
-          { id: 'echo', name: 'Echo Cliffs Mesa', p: MESAS[1], r: 3000, type: 'desert' },
-          { id: 'kaibab', name: 'Kaibab Plateau', p: [BASE.e + 9000, BASE.n - 6000], r: 6000, type: 'hills' },
-          { id: 'navajo', name: 'Navajo Mesa compound (enemy)', p: [EBASE.e, EBASE.n], r: 2500, type: 'airbase', enemy: true }];
+          { id: 'brightangel', name: 'Bright Angel Canyon', p: SIDES[3].P[Math.floor(SIDES[3].P.length * 0.4)], r: 3000, type: 'valley' },
+          { id: 'vishnu', name: 'Vishnu Temple', p: TEMPLES[0], r: 2500, type: 'mountain' },
+          { id: 'tonto', name: 'Tonto Platform', p: P(0.35), r: 4000, type: 'valley' },
+          { id: 'marble', name: 'Marble Canyon', p: P(0.12), r: 4000, type: 'valley' },
+          { id: 'inner', name: 'Inner Gorge (Colorado River)', p: P(0.6), r: 3500, type: 'valley' },
+          { id: 'havasu', name: SLOTS[2].name + ' (slot canyon)', p: SLOTS[2].P[Math.floor(SLOTS[2].P.length * 0.4)], r: 2000, type: 'valley' },
+          { id: 'buckskin', name: SLOTS[0].name + ' (slot canyon)', p: SLOTS[0].P[Math.floor(SLOTS[0].P.length * 0.4)], r: 2000, type: 'valley' },
+          { id: 'monument', name: 'Monument Mesas', p: MESAS[0], r: 4000, type: 'desert' },
+          { id: 'desertview', name: 'Desert View Rim', p: P(0.85), r: 3500, type: 'hills' },
+          { id: 'moenkopi', name: 'Moenkopi compound (enemy)', p: [EBASE.e, EBASE.n], r: 2500, type: 'airbase', enemy: true }];
         def.zones.push.apply(def.zones, Z.map((z) => ({ id: z.id, name: z.name, e: Math.round(z.p[0]), n: Math.round(z.p[1]), r: z.r, type: z.type, enemy: z.enemy })));
-        const fl = sampleH(cv[0], cv[1]);
-        return { debug: { canyonView: [cv[0], cv[1], Math.atan2(cv2[0] - cv[0], cv2[1] - cv[1]) / DEG, fl + 110] } };
+        const ci = Math.floor(MAIN.length * 0.42), cv = MAIN[ci], cv2 = MAIN[ci + 8];
+        const sl = SLOTS[1].P, si = Math.floor(sl.length * 0.25), sv = sl[si], sv2 = sl[si + 6];
+        return {
+          solids: makeSolids(F),
+          debug: { canyonView: [cv[0], cv[1], Math.atan2(cv2[0] - cv[0], cv2[1] - cv[1]) / DEG, RIVER + 260], slotView: [sv[0], sv[1], sampleH(sv[0], sv[1]) + 40, sv2[0], sv2[1], sampleH(sv2[0], sv2[1]) + 40],
+            rimView: [cv[0] + 4500, cv[1] - 4500, 2500, cv[0], cv[1], 1300], arches: arches.map((a) => a.map(Math.round)), spires: spires.length }
+        };
       }
     };
-    // desert hamlets on the plateau + roads
+    // villages on the rim plateau + roads (A* refuses cliffs, so roads stay on one side or route around)
     const R = makeRng(681), towns = [];
-    for (let k = 0; k < 40 && towns.length < 6; k++) {
+    const TN = ['Grand Canyon Village', 'Tusayan', 'Jacob Lake', 'Cameron', 'Cedar Ridge', 'Gap'];
+    for (let k = 0; k < 80 && towns.length < 6; k++) {
       const e = (R() - 0.5) * 84000, n = (R() - 0.5) * 84000;
-      if (mFar.query(e, n) < 3000 || bFar.query(e, n) < 1500 || MESAS.some((m) => Math.hypot(m[0] - e, m[1] - n) < m[2] + 1200) || Math.hypot(e - BASE.e, n - BASE.n) < 6000 || towns.some((t) => Math.hypot(t.e - e, t.n - n) < 12000)) continue;
-      towns.push({ e: e, n: n, r: 420, count: 26, style: 'desert', grid: true, seed: 690 + k });
+      if (mFar.query(e, n) < 5000 || sIdx.query(e, n) < 2600 || slIdx.query(e, n) < 900 || MESAS.some((m) => Math.hypot(m[0] - e, m[1] - n) < m[2] + 1200) || Math.hypot(e - BASE.e, n - BASE.n) < 6000 || Math.hypot(e - EBASE.e, n - EBASE.n) < 5000 || towns.some((t) => Math.hypot(t.e - e, t.n - n) < 11000)) continue;
+      towns.push({ e: e, n: n, r: 380, count: 26, style: 'desert', grid: true, seed: 690 + k, name: TN[towns.length] });
     }
     def.towns = towns;
     def.roads = function (ctx) {
       const nodes = [ctx.bases[0].gateOut].concat(towns.map((t) => [t.e, t.n])).concat([ctx.bases[1].gateOut]);
-      const order = nodes.map((p, i) => i).slice(1).sort((a, b) => Math.hypot(nodes[a][0] - nodes[0][0], nodes[a][1] - nodes[0][1]) - Math.hypot(nodes[b][0] - nodes[0][0], nodes[b][1] - nodes[0][1]));
-      const links = []; let prev = 0; for (const i of order) { links.push([prev, i, prev === 0 ? 'hwy' : 'road']); prev = i; }
+      const links = [];
+      for (let i = 1; i < nodes.length; i++) { let best = -1, bd = 1e18; for (let j = 0; j < i; j++) { const d = Math.hypot(nodes[i][0] - nodes[j][0], nodes[i][1] - nodes[j][1]); if (d < bd) { bd = d; best = j; } } links.push([best, i, best === 0 ? 'hwy' : 'road']); }
       return { nodes: nodes, links: links, bridgeK: 0 };
     };
     return def;
@@ -13246,7 +13365,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     { id: 'svs', name: 'Terrain vision', tag: 'SVS', base: 1300, desc: 'See terrain outlines through clouds. Red = terrain above you.', v: { svsRange: [0, 2500, 4000, 5500, 7500, 10000], svsWarn: [0, 0, 1, 1, 1, 1] } },
     { id: 'bombs', name: 'Bomb racks', tag: 'BMB', base: 1000, desc: 'Multiple-ejector racks. Each bomb pylon carries more bombs. Wider blast.', v: { bombRack: [1, 2, 2, 3, 3, 3], bombBlastMul: [1, 1, 1.15, 1.15, 1.3, 1.45] } },
     // wingman.js reads P.upg.wingman. minLevel: player level needed for the first level (mid game)
-    { id: 'wingman', name: 'Wingman', tag: 'WGM', base: 25000, minLevel: 8, desc: 'A friendly jet flies on your right wing. When you attack, he fights alone, then rejoins. Better jet and pilot each level. Keys: J = attack my target, U = cover me.', v: { wingTier: [0, 3, 4, 5, 6, 7], wingSkill: [0, 0.55, 0.65, 0.75, 0.88, 1] } }
+    { id: 'wingman', name: 'Wingman', tag: 'WGM', base: 25000, minLevel: 8, desc: 'A friendly jet flies on your right wing. When you attack, he fights alone, then rejoins. Better jet and pilot each level. Keys: Y = attack my target, U = cover me.', v: { wingTier: [0, 3, 4, 5, 6, 7], wingSkill: [0, 0.55, 0.65, 0.75, 0.88, 1] } }
   ];
   var UPG = {}; UPGRADES.forEach(function (u) { UPG[u.id] = u; });
   function upgPrice(u, lvl) { return lvl >= 5 ? 0 : Math.round(u.base * LV[lvl] / 50) * 50; }
@@ -13885,7 +14004,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       convoy: { title: 'CONVOY HUNT', base: 2600 }, bridge: { title: 'BRIDGE STRIKE', base: 3000 }, naval: { title: 'NAVAL STRIKE', base: 3800 },
       cave: { title: 'CAVE RUN', base: 4200 }, bomber: { title: 'INTERCEPT', base: 4500 }, train: { title: 'TRAIN HUNT', base: 3600 },
       compound: { title: 'ASSAULT', base: 5000 }, boss: { title: 'BOSS', base: 12000 },
-      intercept: { title: 'INTERCEPT', base: 2200 }, samsite: { title: 'SAM SITE', base: 2000 }
+      intercept: { title: 'INTERCEPT', base: 2200 }, samsite: { title: 'SAM SITE', base: 2000 },
+      carrier: { title: 'CARRIER STRIKE', base: 9000 }
     };
 
     // mission mix (solo player or co-op host): 'air' = air only, 'airmost', 'mixed', 'ground' = mostly ground
@@ -13912,6 +14032,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       if (MX.air >= 1) { add('intercept', 1.5); if (!late) add('bomber', hasKind('tu95') ? 1.2 : 0.6); }
       add('strike', 3); add('cap', 2.5); add('convoy', 2); add('bridge', 1.2); add('sead', late ? 2 : 1);
       if (sea) add('naval', 2);
+      if (missionNo >= 4 && hasKind('navcarrier') && FL.navalSpot && (w.openSea || sea)) add('carrier', late ? 1.6 : 1);   // carrier.js: enemy carrier group
       if (late) {
         add('compound', hasKind('compound') ? 2 : 0.8);
         add('train', hasKind('train') ? 1.8 : 0);
@@ -13983,6 +14104,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       convoy: ['Convoy at {zone}, {dir}, {km}. Stop it.', 'Trucks on the road, {dir}, {km}. Flak with them.'],
       bridge: ['Bridge at {zone}, {dir}, {km}. Drop it.'],
       naval: ['Frigate on the sea lane, {dir}, {km}. Sink it.'],
+      carrier: ['Enemy carrier group, {dir}, {km}. Kill the island, the catapults, the lift and the fuel. Watch the ship flak and the SAMs.'],
       cave: ['Depot in the sea cave at {zone}, {dir}, {km}. Fly in, drop, fly out.'],
       bomber: ['Bombers heading for {zone}. Intercept them, {dir}, {km}.'],
       train: ['Armored train at {zone}, {dir}, {km}. Stop it.'],
@@ -14000,6 +14122,10 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         var lt = laneTarget();
         if (!lt) { type = m.type = 'strike'; m.title = TYPE.strike.title; z = chooseZone(type); }
         else z = { id: 'lane', name: 'the sea lane', e: lt.e, n: lt.n, r: 2500, hdg: lt.hdg };
+      } else if (type === 'carrier') {
+        var ns = FL.navalSpot(w, pE(), pN(), 13000, FL.friendlyCarrierPos ? FL.friendlyCarrierPos() : null);
+        if (!ns) { type = m.type = 'strike'; m.title = TYPE.strike.title; z = chooseZone(type); }
+        else z = { id: 'carrier', name: 'the open sea', e: ns.e, n: ns.n, r: 3000 };
       } else if (type === 'cave') {
         var cv = pick(w.caves);
         z = { id: 'cave', name: 'the cliffs', e: cv.e, n: cv.n, r: 2000, cave: cv };
@@ -14015,7 +14141,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       if (type === 'strike') m.variant = missionNo === 3 ? 'depot' : pick(['command', 'depot', 'bunker']);
       m.label = { strike: 'Destroy the ' + TGT_NAME[m.variant], sead: 'Kill radar and SAMs', cap: 'Clear the bandits', convoy: 'Destroy the convoys',
         bridge: 'Destroy the bridge', naval: 'Sink the frigate', cave: 'Destroy the cave depot', bomber: 'Stop the bombers', train: 'Destroy the train',
-        compound: 'Bomb the HQ', boss: 'Destroy the Sky Carrier', intercept: 'Shoot down the MiGs', samsite: 'Destroy the SAM site' }[type];
+        compound: 'Bomb the HQ', boss: 'Destroy the Sky Carrier', carrier: 'Sink the carrier', intercept: 'Shoot down the MiGs', samsite: 'Destroy the SAM site' }[type];
       var zn2 = (z.name || '').toUpperCase();
       m.title = short(TYPE[type].title + (zn2 ? ' · ' + zn2 : ''), 40);
       // ambush plan
@@ -14100,6 +14226,10 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         obj(spawn('compound', P2(r * 0.1, { variant: 'command' }), m), 'HQ', true);
         obj(spawn('sam', P2(r * 0.8, { count: sc(2, 4) }), m), 'SAM', false, 500);
         obj(spawn(hasKind('tank') ? 'tank' : 'convoy', P2(r * 0.6, { count: 1 }), m), 'Armor', false, 400);
+      } else if (t === 'carrier') {
+        obj(spawn('navcarrier', { e: z.e, n: z.n, count: 1, heading: rnd(0, 360) }, m), 'Carrier', true);
+        obj(spawn('boat', { e: z.e + rnd(-1500, 1500), n: z.n + rnd(-1500, 1500), variant: 'frigate', count: 1 }, m), 'Frigate', false, 600);
+        obj(spawn('boat', { e: z.e + rnd(-1800, 1800), n: z.n + rnd(-1800, 1800), variant: 'patrol', count: sc(2, 3) }, m), 'Patrol boats', false, 400);
       } else if (t === 'boss') {
         var alt = Math.max(pAlt(), H(z.e, z.n) + 2500);
         obj(spawn('carrier', { e: z.e, n: z.n, alt: alt, heading: bearing(z.e, z.n) + 180, count: 1 }, m), 'Sky Carrier', true);
@@ -14614,7 +14744,9 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       '.flc-ring b{width:42px;height:42px;border-radius:50%;background:#071312;display:grid;place-items:center;font:800 18px/1 var(--disp);color:var(--g)}',
       '.flc-ring.max{background:var(--a)}.flc-ring.max b{color:var(--a)}',
       '.flc-mast dl{display:grid;grid-template-columns:auto auto;gap:3px 10px;margin:0;font:11.5px/1.2 var(--mono)}.flc-mast dt{color:var(--dim);text-transform:uppercase;letter-spacing:.08em}.flc-mast dd{margin:0;color:var(--ink);text-align:right}',
-      '.flc-stat{display:grid;grid-template-columns:70px 1fr;gap:4px 10px;align-items:center;font:11px/1 var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.08em}',
+      '.flc-stat{display:grid;grid-template-columns:84px 1fr 18px;gap:5px 10px;align-items:center;font:11px/1 var(--mono);color:var(--dim);text-transform:uppercase;letter-spacing:.08em}',
+      '.flc-stat i.n10{display:grid;grid-template-columns:repeat(10,1fr);gap:2px;height:8px;background:none}.flc-stat i.n10 b{position:static;display:block;background:rgba(147,255,196,.13)}.flc-stat i.n10 b.on{background:var(--g)}',
+      '.flc-stat em{font-style:normal;color:var(--ink);text-align:right}',
       '.flc-stat i{height:5px;background:rgba(147,255,196,.13);position:relative}.flc-stat i b{position:absolute;inset:0 auto 0 0;background:var(--g)}',
       '.flc-sk{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:18px;align-items:start}',
       '.flc-br{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}',
@@ -14854,6 +14986,22 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       list.forEach(function (a) { var s = a.stats || derive(a); for (var k in s) if (typeof s[k] === 'number') { keys[k] = 1; maxes[k] = Math.max(maxes[k] || 0, s[k]); } });
       return { keys: Object.keys(keys).slice(0, 5), maxes: maxes };
     }
+    // 1..10 ratings from real data (normalised over all jets), blended with the designer stats (1..5)
+    function score10(a, list) {
+      function rng(f) { var lo = 1e9, hi = -1e9; list.forEach(function (x) { var v = f(x); if (v != null && isFinite(v)) { lo = Math.min(lo, v); hi = Math.max(hi, v); } }); return [lo, hi]; }
+      function norm(v, r) { return r[1] > r[0] ? (v - r[0]) / (r[1] - r[0]) : 0.5; }
+      var fSpd = function (x) { return x.topSpeedKmh || (x.machMax ? x.machMax * 1060 : null); };
+      var fAgi = function (x) { return (x.rollRate || 150) * 0.25 + (x.pitchRate || 60) * 0.8 + (x.thrustAB && x.mass ? x.thrustAB / (x.mass * 9.81) * 60 : 0) + (x.maxG || 7) * 4; };
+      var fFire = function (x) { return (x.hardpoints || 2) * 2 + (x.missiles || 2); };
+      var fTgh = function (x) { return (x.mass || 10000) / 1000 + (x.stats && x.stats.toughness || 2) * 3; };
+      var st = a.stats || {}, out = {};
+      [['speed', fSpd], ['agility', fAgi], ['firepower', fFire], ['toughness', fTgh]].forEach(function (kv) {
+        var r = rng(kv[1]), v = kv[1](a), real = v == null ? null : 1 + 9 * norm(v, r), des = st[kv[0]] ? st[kv[0]] * 2 : null;
+        var x = real == null ? (des || 5) : des == null ? real : real * 0.6 + des * 0.4;
+        out[kv[0]] = Math.max(1, Math.min(10, Math.round(x)));
+      });
+      return out;
+    }
     function derive(a) {
       var o = {};
       if (a.thrustAB && a.mass) o.power = a.thrustAB / a.mass;
@@ -14887,9 +15035,11 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       var list = acList(), bars = acBars(list);
       return htmlMastery(P.ac) + '<div class="flc-sec">Jets</div><div class="flc-grid">' + list.map(function (a, i) {
         var inf = acInfo(a, i), own = P.ownedAc.indexOf(a.id) >= 0, cur = P.ac === a.id, gated = P.level < inf.level, s = a.stats || derive(a);
-        var sb = bars.keys.map(function (k) {
-          var v = s[k] || 0, m = bars.maxes[k] || 1, pc = m <= 1 ? v * 100 : m <= 10 ? v * 10 : v / m * 100;
-          return '<span>' + esc(k).slice(0, 9) + '</span><i><b style="width:' + Math.round(clamp(pc, 3, 100)) + '%"></b></i>';
+        var sc10 = score10(a, list);
+        var sb = ['speed', 'agility', 'firepower', 'toughness'].map(function (k) {
+          var v = sc10[k], seg = '';
+          for (var q = 1; q <= 10; q++) seg += '<b' + (q <= v ? ' class="on"' : '') + '></b>';
+          return '<span>' + esc(k) + '</span><i class="n10" title="' + v + ' of 10">' + seg + '</i><em>' + v + '</em>';
         }).join('');
         var btn = cur ? '<button disabled data-key="ac-' + a.id + '">Selected</button>' : own ? '<button data-act="selac" data-id="' + a.id + '" data-key="ac-' + a.id + '">Select</button>'
           : '<button data-act="buyac" data-id="' + a.id + '" data-key="ac-' + a.id + '"' + (gated || P.credits < inf.price ? ' aria-disabled="true"' : '') + '>' + (gated ? 'Level ' + inf.level : 'Buy') + '</button>';
@@ -24580,7 +24730,9 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
  *   target dies, after 40 s, or 8 km from you. Lost: back next mission (repair fee 1500 cr, free if you cannot pay).
  * Commands: key Y = "attack my target" (your designated air target), key U = "cover me" (45 s: form, kill threats near you).
  *   FL.wingman.command('attack'|'cover'|'form').
- * Co-op: SOLO ONLY (despawns while a net session is connected).
+ * Co-op: the HOST simulates up to 3 wingmen (its own first, then clients whose state 'wl' = wingman level >= 1), each on
+ *   its owner's wing. Clients get them in the entity snapshot (msg.wg via combat._wingSnap / _wingApply) and show them as
+ *   friendly ai PTs (remotePlayers -> model, blue tag 'TWO' for your own). Notes: WINGMAN: NEXT MISSION / ROOM FULL / SOLO ONLY.
  *
  * ---- named enemy aces ----
  * FL.ACES = roster (10). From campaign mission 6, air missions (cap/intercept/bomber/boss) may get one ace
@@ -24671,29 +24823,47 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   function after(s, fn) { later.push({ t: clock + s, fn: fn }); }
   var clock = 0;
 
-  // ======================================================================= wingman state
-  var W = null;                       // the PT (built in attach)
-  var wd = null;                      // W.data (pilot memory for flyBTT / bfm)
+  // ======================================================================= wingman state (one instance per owner)
+  // Solo / co-op host simulates: the local player's wingman + (host) one for each client that owns the upgrade.
+  // MAXW wingmen in total (local first). use(inst) points the "current" vars below at one instance.
+  var MAXW = 3, CODES = ['off', 'join', 'form', 'engage', 'regroup', 'hold', 'down'];
+  var W = null, wd = null, st = null, slot = null, fS = null, rS = null, uS = null, O = null, I = null;
+  var INST = [], FULL = {}, dbgLevel = 0, manT = 0, lvlSendT = 0;
   var FCTX = { world: null, rand: Math.random, dt: 0, time: 0 };
-  var st = { state: 'off', tgt: null, engT: 0, engCd: 0, cmd: '', cmdT: 0, decT: 0, thrT: 0, thr: null, thrD: 1e9,
-    flareCd: 0, flares: 30, msl: 4, mslCd: 0, lockT: 0, burst: 0, gunCd: 0, groundT: 0, lostNo: -99, lostT: -999,
-    level: 0, tier: 3, skill: 0.6, perf: null, spawnCd: 0, hpMax: 100, armor: 1, wreckT: 0, wreckP: V(), wreckV: V(), smkT: 0,
-    lastMissionNo: -1, deadT: 0, pAliveWas: true, debugLevel: 0 };
-  var slot = V(), slotS = V(), fS = V(0, 0, -1), rS = V(1, 0, 0), uS = V(0, 1, 0), want = V(), tmpA = V(), tmpB = V(), tmpC = V(), tmpD = V();
+  var want = V(), tmpA = V(), tmpB = V(), tmpC = V(), tmpD = V();
   var accV = V(), vDes = V(), pUp = V(), fW = V(), rW = V(), uW = V(), aimP = V(), launchP = V(), launchV = V(), mkQ = new T.Matrix4();
   var tgtProxy = { pos: V(), vel: V(), alive: true };
   var madeFlares = [];
   var SLOT_X = 55, SLOT_Y = -4, SLOT_Z = 50;
 
-  function mkPT() {
-    var p = { kind: 'player', id: 'wing2', local: false, ai: true, slot: 0, name: 'TWO', aircraftId: 'mig21',
+  function newSt() {
+    return { state: 'off', tgt: null, engT: 0, engCd: 0, cmd: '', cmdT: 0, decT: 0, thrT: 0, thr: null, thrD: 1e9,
+      flareCd: 0, flares: 30, msl: 4, mslCd: 0, lockT: 0, burst: 0, gunCd: 0, groundT: 0, lostNo: -99, lostT: -999,
+      level: 0, tier: 3, skill: 0.6, perf: null, hpMax: 100, armor: 1, wreckT: 0, wreckP: V(), wreckV: V(), smkT: 0,
+      pAliveWas: true, joinSaid: false, defending: false };
+  }
+  function mkPT(inst) {
+    var p = { kind: 'player', id: 'w:local', local: false, ai: true, slot: 0, name: 'TWO', aircraftId: 'mig21',
       aim: V(), vel: V(), q: new T.Quaternion(), fwd: V(0, 0, -1), up: V(0, 1, 0), alive: false, airborne: true, agl: 1000, cloud: 0,
       detectMul: 1, flareEff: 1, hp: 100, kills: 0, thr: 0.7, ab: 0, gearT: 0, lockId: 0, locked: false, gun: false, gunAcc: 0,
       gunRate: 20, gunDmg: 12, gunSpread: 0.005, gunSpeed: 1000, dmgMul: 1, track: null, disp: null, pos: null, state: 'off', data: {} };
     p.pos = p.aim;
-    p.onHit = function (amount, cause) { onHit(amount, cause); };
+    if (inst) p.onHit = function (amount, cause) { use(inst); onHit(amount, cause); };
     return p;
   }
+  function mkInst(key, P) {
+    var inst = { key: key, P: P || null, local: !P, st: newSt(), slot: V(), fS: V(0, 0, -1), rS: V(1, 0, 0), uS: V(0, 1, 0), W: null, O: null };
+    inst.W = mkPT(inst);
+    inst.O = P ? { pos: P.aim, vel: P.vel, q: P.q, alive: function () { return !!P.alive; }, airborne: function () { return P.airborne !== false; } } : R.opt.player;
+    return inst;
+  }
+  function use(inst) { I = inst; W = inst.W; wd = W.data; st = inst.st; slot = inst.slot; fS = inst.fS; rS = inst.rS; uS = inst.uS; O = inst.O; }
+  function localInst() { for (var i = 0; i < INST.length; i++) if (INST[i].local) return INST[i]; return null; }
+  function ownerPT() { var A = A_(); return I.local ? A.LP : I.P; }
+  function ownerId(inst) { var A = A_(); return inst.local ? A.myId() : inst.P.id; }
+  // wingman radio: only the local player's own wingman talks on this machine
+  function wr(key, text, prio, cd, inst) { inst = inst || I; if (inst && inst.local) radio(key, text, prio, cd, 'TWO', VO_TWO); }
+
   function A_() { return R.combat && R.combat._ally; }
   function world() { var A = A_(); return A ? A.world() : (R.opt && R.opt.world); }
   function gAt(x, z) { var w = world(); if (!w) return 0; var g = w.groundY ? w.groundY(x, -z) : Math.max(0, w.sampleH(x, -z)); return isFinite(g) ? g : 0; }
@@ -24708,10 +24878,11 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     return q;
   }
   function campaignLevel() {
-    if (st.debugLevel) return st.debugLevel;
+    if (dbgLevel) return dbgLevel;
     var c = R.campaign; if (!c || !c.profile) return 0;
     try { var P = c.profile(); return (P && P.upg && P.upg.wingman) | 0; } catch (e) { return 0; }
   }
+  function instLevel(inst) { return inst.local ? campaignLevel() : clamp(inst.P.wingLvl | 0, 0, 5); }
   function upgV(key, l) {
     var U = FL.UPGRADES || [], u = null; for (var i = 0; i < U.length; i++) if (U[i].id === 'wingman') u = U[i];
     if (u && u.v && u.v[key]) return u.v[key][clamp(l, 0, 5)];
@@ -24719,13 +24890,13 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   }
   function missionNo() { var c = R.campaign; try { var m = c && c.mission ? c.mission() : null; return m ? m.no : -1; } catch (e) { return -1; } }
   function pickJet(cap) {
-    var L = FL.AIRCRAFT || [], mine = (A_() && A_().LP.aircraftId) || 'su27', best = null, i;
+    var A = A_(), L = FL.AIRCRAFT || [], mine = (I.local ? A && A.LP.aircraftId : I.P.aircraftId) || 'su27', best = null, i;
     for (i = 0; i < L.length; i++) if (L[i].id === mine && (L[i].tier || 3) <= cap) return L[i];
     for (i = 0; i < L.length; i++) { var t = L[i].tier || 3; if (t <= cap && (!best || t > (best.tier || 3))) best = L[i]; }
     return best || { id: mine, tier: cap };
   }
   function setupPilot() {
-    var l = st.level = campaignLevel();
+    var l = st.level = instLevel(I);
     var cap = upgV('wingTier', l), jet = pickJet(cap), t = Math.min(jet.tier || 3, cap), s = st.skill = upgV('wingSkill', l);
     st.tier = t;
     W.aircraftId = jet.id;
@@ -24737,7 +24908,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
 
   // ======================================================================= spawn / despawn
   function frameFromPlayer(h) {
-    var p = R.opt.player, pv = p.vel, sp = pv.length();
+    var p = O, pv = p.vel, sp = pv.length();
     if (sp > 30) tmpA.copy(pv).divideScalar(sp); else tmpA.set(0, 0, -1).applyQuaternion(p.q);
     if (h > 0) fS.lerp(tmpA, Math.min(1, h * 4)).normalize(); else fS.copy(tmpA);
     tmpB.crossVectors(fS, UP); if (tmpB.lengthSq() > 1e-4) rS.copy(tmpB.normalize());
@@ -24746,22 +24917,21 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     var gy = gAt(slot.x, slot.z) + 50; if (slot.y < gy) slot.y = gy;
     return slot;
   }
-  function spawnW(why) {
+  function spawnW() {
     var A = A_(); if (!A) return;
     setupPilot();
-    var p = R.opt.player;
+    W.id = 'w:' + ownerId(I);
+    W.name = I.local ? 'TWO' : (String(I.P.name || 'PILOT').toUpperCase().slice(0, 10) + ' 2');
     frameFromPlayer(0);
     W.aim.copy(slot).addScaledVector(fS, -650); W.aim.y += 60;
     var gy = gAt(W.aim.x, W.aim.z) + 150; if (W.aim.y < gy) W.aim.y = gy;
-    W.vel.copy(p.vel); if (W.vel.length() < 150) W.vel.copy(fS).multiplyScalar(180);
+    W.vel.copy(O.vel); if (W.vel.length() < 150) W.vel.copy(fS).multiplyScalar(180);
     wd.spd = W.vel.length(); wd.up = V(0, 1, 0); wd.wS = fS.clone(); wd.thr = 0.8;
     qFromFwdUp(W.q, W.vel, UP);
     W.hp = st.hpMax; W.alive = true; W.gun = false; W.gunAcc = 0; W.locked = false; W.lockId = 0; W.kills = W.kills || 0;
-    st.flares = 24 + 4 * st.level; st.msl = Math.min(6, 2 + st.level); st.mslCd = 3; st.tgt = null; st.engCd = 4; st.cmd = '';
+    st.flares = 24 + 4 * st.level; st.msl = Math.min(6, 2 + st.level); st.mslCd = 3; st.tgt = null; st.engCd = 4; st.cmd = ''; st.joinSaid = false; st.pAliveWas = true;
     if (A.pts.indexOf(W) < 0) A.pts.push(W);
     setState('join');
-    if (why === 'repair') radio('spawn', 'Two. New jet. Joining on your right wing.', 2, 20, 'TWO', VO_TWO);
-    else radio('spawn', pick(['Two, airborne. Joining on your right wing.', 'Two is up. Joining.']), 2, 30, 'TWO', VO_TWO);
   }
   function despawnW() {
     var A = A_(); if (A && W) A.drop(W);
@@ -24775,7 +24945,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     var d = amount * st.armor;
     W.hp -= d;
     if (W.hp <= 0) { downW(cause); return; }
-    if (d > 20) radio('hit', W.hp < 45 ? 'Two is hit! Heavy damage!' : 'Two is hit!', 3, 8, 'TWO', VO_TWO);
+    if (d > 20) wr('hit', W.hp < 45 ? 'Two is hit! Heavy damage!' : 'Two is hit!', 3, 8);
   }
   function downW(cause) {
     var fx = R.opt.fx;
@@ -24783,7 +24953,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     st.wreckP.copy(W.aim); st.wreckV.copy(W.vel); st.wreckT = 8;
     st.lostNo = missionNo(); st.lostT = clock;
     despawnW(); setState('down');
-    radio('down', pick(['Two is going down! Ejecting!', 'Two is hit! I am out! Ejecting!']), 3, 5, 'TWO', VO_TWO);
+    wr('down', pick(['Two is going down! Ejecting!', 'Two is hit! I am out! Ejecting!']), 3, 5);
+    if (I.local) after(2, function () { note('WINGMAN: NEXT MISSION'); });
   }
   function updateWreck(dt) {
     if (st.wreckT <= 0) return;
@@ -24797,13 +24968,12 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
 
   // ======================================================================= perception
   function pickTarget() {
-    var A = A_(), best = null, bs = 1e18, des = A.desig(), n = 0, LP = A.LP, pl = R.opt.player.alive() ? R.opt.player.pos : null;
+    var A = A_(), best = null, bs = 1e18, des = I.local ? A.desig() : null, OP = ownerPT(), pl = O.alive() ? O.pos : null;
     for (var i = 0; i < A.tgts.length; i++) {
       var t = A.tgts[i];
       if (!t.alive || t.cat !== 'air' || (t.maxHp || 0) >= 50000 || (t.reg && t.reg.targetable === false)) continue;
       var d = t.aim.distanceTo(W.aim); if (d > 14000 || (pl && t.aim.distanceToSquared(pl) > 9000 * 9000)) continue;
-      n++;
-      var s = d + (t === des ? 5000 : 0) - (t.detect && t.tp === LP ? 1500 : 0) - (t.ace ? 800 : 0);
+      var s = d + (t === des || (!I.local && I.P.lockId === t.id) ? 5000 : 0) - (t.detect && t.tp === OP ? 1500 : 0) - (t.ace ? 800 : 0);
       if (s < bs) { bs = s; best = t; }
     }
     return best;
@@ -24816,9 +24986,13 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     }
     return best;
   }
+  function ownerDesig() {
+    var A = A_(); if (I.local) return A.desig();
+    var id = I.P.lockId; return id ? A.ents[id] || null : null;
+  }
   function playerFired() {
-    var A = A_(); if (A.LP.gun) return true;
-    for (var i = 0; i < A.missiles.length; i++) { var m = A.missiles[i]; if (m.alive && m.owner === A.LP && m.side === 'player' && m.age < 1.5) return true; }
+    var A = A_(), OP = ownerPT(); if (OP.gun) return true;
+    for (var i = 0; i < A.missiles.length; i++) { var m = A.missiles[i]; if (m.alive && m.owner === OP && m.side === 'player' && m.age < 1.5) return true; }
     return false;
   }
   function scanThreat() {
@@ -24831,20 +25005,20 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     st.thr = best; st.thrD = best ? Math.sqrt(bd) : 1e9;
   }
   function decide(pAlive) {
-    var A = A_(), p = R.opt.player.pos, s = st.state, des = A.desig();
+    var p = O.pos, s = st.state, des = ownerDesig(), me = I;
     if (st.cmd === 'cover' && clock > st.cmdT) st.cmd = '';
     if (s === 'engage') {
       var t = st.tgt;
       if (!t || !t.alive) {
         st.tgt = null; st.engCd = 3; W.locked = false;
         setState('regroup');
-        if (pAlive) after(1.2, function () { radio('rejoin', pick(['Two, rejoining.', 'Two. Target is down. Rejoining.']), 2, 10, 'TWO', VO_TWO); });
+        if (pAlive) after(1.2, function () { wr('rejoin', pick(['Two, rejoining.', 'Two. Target is down. Rejoining.']), 2, 10, me); });
         return;
       }
       var tooLong = st.engT > 40 && st.cmd !== 'attack', tooFar = pAlive && W.aim.distanceTo(p) > 8000;
       if (tooLong || tooFar) {
         st.tgt = null; st.engCd = 8; W.locked = false; setState('regroup');
-        radio('rejoin', 'Two, rejoining.', 2, 10, 'TWO', VO_TWO); return;
+        wr('rejoin', 'Two, rejoining.', 2, 10); return;
       }
       if (st.cmd === 'cover' && pAlive && t.aim.distanceTo(p) > 4500) { st.tgt = null; setState('regroup'); return; }
       return;
@@ -24859,7 +25033,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     }
     if (tgt) {
       st.tgt = tgt; st.lockT = 0; setState('engage'); wd.seenAge = 99;
-      if (st.cmd !== 'attack') radio('engage', pick(['Two, engaging.', 'Two. Tally. Engaging bandit.', 'Two, breaking off. Engaging.']), 2, 12, 'TWO', VO_TWO);
+      if (st.cmd !== 'attack') wr('engage', pick(['Two, engaging.', 'Two. Tally. Engaging bandit.', 'Two, breaking off. Engaging.']), 2, 12);
     }
   }
 
@@ -24870,13 +25044,12 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       maxSpd: maxSpd || P.maxSpd, minSpd: 100, drag: 14, maxAlt: 11000, turnGain: lerp(1.8, 2.6, st.skill), wishResp: lerp(3, 5, st.skill) });
   }
   function avoidPlayer() {
-    var p = R.opt.player.pos;
-    tmpA.subVectors(W.aim, p); var d = tmpA.length();
+    tmpA.subVectors(W.aim, O.pos); var d = tmpA.length();
     if (d < 160 && d > 1) { want.normalize().addScaledVector(tmpA.divideScalar(d), (160 - d) / 60); }
   }
   // station keeping in the slot: vDes = lead velocity + Kp * error, accel limited; attitude from the lift vector
   function formStep(h) {
-    var p = R.opt.player;
+    var p = O;
     tmpA.subVectors(slot, W.aim);
     var e = tmpA.length();
     vDes.copy(tmpA).multiplyScalar(0.75); if (e * 0.75 > 70) vDes.multiplyScalar(70 / (e * 0.75));
@@ -24884,13 +25057,11 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     var vs = vDes.length(); if (vs < 90) vDes.multiplyScalar(90 / Math.max(vs, 1e-3));
     accV.subVectors(vDes, W.vel).multiplyScalar(2.4);
     var aMax = st.perf.maxG * G * 1.1, am = accV.length(); if (am > aMax) accV.multiplyScalar(aMax / am);
-    // keep 30 m from the lead (never collide)
-    tmpB.subVectors(W.aim, p.pos); var dp = tmpB.length();
+    tmpB.subVectors(W.aim, p.pos); var dp = tmpB.length();                 // keep 30 m from the lead
     if (dp < 30 && dp > 0.1) accV.addScaledVector(tmpB, (30 - dp) * 0.6 / dp);
     W.vel.addScaledVector(accV, h);
     W.aim.addScaledVector(W.vel, h);
     var gy = gAt(W.aim.x, W.aim.z) + 25; if (W.aim.y < gy) { W.aim.y = gy; if (W.vel.y < 0) W.vel.y = 0; }
-    // attitude: lift = accel + 1 g, blended with the lead's wing plane, smoothed
     var sp = W.vel.length(); fW.copy(W.vel).divideScalar(Math.max(sp, 1));
     tmpC.copy(accV); tmpC.y += G; tmpC.addScaledVector(fW, -tmpC.dot(fW));
     if (tmpC.lengthSq() < 1e-4) tmpC.set(0, 1, 0); tmpC.normalize();
@@ -24904,7 +25075,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     return e;
   }
   function joinStep(h) {
-    var p = R.opt.player, ps = p.vel.length();
+    var p = O, ps = p.vel.length();
     tmpA.copy(slot).addScaledVector(p.vel, 1.5);
     want.subVectors(tmpA, W.aim);
     tmpB.subVectors(slot, W.aim); var d = tmpB.length();
@@ -24953,16 +25124,14 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   function weapons(h, t, dist) {
     var A = A_();
     fW.set(0, 0, -1).applyQuaternion(W.q);
-    // gun: nose on the lead point (bullets inherit our velocity)
-    var tof = dist / 1000; aimP.copy(t.aim).addScaledVector(t.vel || ZERO, tof);
+    var tof = dist / 1000; aimP.copy(t.aim).addScaledVector(t.vel || ZERO, tof);     // gun: nose on the lead point
     tmpA.subVectors(aimP, W.aim); var la = tmpA.length() || 1;
     var offLead = Math.acos(clamp(fW.dot(tmpA) / la, -1, 1));
     st.gunCd -= h;
     if (st.burst > 0) { st.burst -= h; if (st.burst <= 0 || dist > 1100) { st.burst = 0; st.gunCd = lerp(1.2, 0.6, st.skill); } }
     else if (st.gunCd <= 0 && dist < 950 && offLead < lerp(1.6, 2.6, st.skill) * DEG) st.burst = lerp(0.7, 1.2, st.skill);
     W.gun = st.burst > 0;
-    // missile: R-73 class, lock builds while the target is inside 18 deg and in sight
-    st.mslCd -= h;
+    st.mslCd -= h;                                                                     // missile: lock inside 18 deg, in sight
     tmpB.subVectors(t.aim, W.aim);
     var off = Math.acos(clamp(fW.dot(tmpB) / (dist || 1), -1, 1));
     var inCone = st.msl > 0 && dist > 800 && dist < 6500 && off < 18 * DEG;
@@ -24973,7 +25142,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       launchP.copy(W.aim).addScaledVector(rW, (st.msl & 1) ? 2.6 : -2.6); launchP.y -= 1.0;
       launchV.copy(W.vel);
       var m = A.launch(launchP, launchV, t, 'r73', W, 700 + 40 * st.tier, 30 + 3 * st.tier);
-      if (m) { st.msl--; st.mslCd = lerp(9, 5, st.skill); radio('fox', 'Two. Fox two.', 2, 8, 'TWO', VO_TWO); }
+      if (m) { st.msl--; st.mslCd = lerp(9, 5, st.skill); wr('fox', 'Two. Fox two.', 2, 8); }
     }
   }
   function ownMissileOn(t) {
@@ -24982,7 +25151,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     return false;
   }
 
-  // ======================================================================= main tick
+  // ======================================================================= main tick (host / solo)
   function step(h, pAlive) {
     st.engCd -= h; st.thrT -= h; st.decT -= h; if (st.state === 'engage') st.engT += h;
     if (st.thrT <= 0) { st.thrT = 0.25; scanThreat(); }
@@ -24990,7 +25159,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     if (pAlive) frameFromPlayer(h);
     var s = st.state;
     if (st.thr && st.thr.alive && st.thr.target === W) {
-      if (!st.defending) { st.defending = true; radio('defend', pick(['Two, defending! Missile!', 'Two. Missile. Defending!']), 3, 12, 'TWO', VO_TWO); }
+      if (!st.defending) { st.defending = true; wr('defend', pick(['Two, defending! Missile!', 'Two. Missile. Defending!']), 3, 12); }
       defendStep(h);
       if (s === 'form') setState('regroup');
     } else {
@@ -24999,23 +25168,23 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       else if (!pAlive) { if (s !== 'hold') setState('hold'); holdStep(h); }
       else if (s === 'hold') setState('regroup');
       else if (s === 'form') { if (formStep(h) > 700) setState('regroup'); }
-      else { var d = joinStep(h); tmpA.subVectors(W.vel, R.opt.player.vel); if (d < 220 && tmpA.length() < 70) setState('form'); }
+      else {
+        var d = joinStep(h); tmpA.subVectors(W.vel, O.vel);
+        if (d < 220 && tmpA.length() < 70) { setState('form'); if (!st.joinSaid) { st.joinSaid = true; wr('join', 'Two, on your wing.', 2, 20); } }
+      }
       if (st.state !== 'engage') W.gun = false;
     }
-    // PT fields read by combat / enemies
-    W.fwd.set(0, 0, -1).applyQuaternion(W.q); W.up.set(0, 1, 0).applyQuaternion(W.q);
+    W.fwd.set(0, 0, -1).applyQuaternion(W.q); W.up.set(0, 1, 0).applyQuaternion(W.q);       // PT fields read by combat / enemies
     W.agl = W.aim.y - gAt(W.aim.x, W.aim.z);
     W.thr = wd.thr != null ? wd.thr : 0.7; W.ab = clamp((W.thr - 0.85) * 6, 0, 1);
   }
-
-  function updateWing(dt) {
-    var A = A_(), p = R.opt.player;
-    if (!A || !p || !FL.ENEMY_UTIL || !FL.ENEMY_UTIL.flyBTT) return;
-    FCTX.world = world(); FCTX.time = clock;
+  function updateInst(dt) {
+    var A = A_(), p = O;
     var pAlive = !!(p.alive && p.alive()), air = p.airborne ? !!p.airborne() : true;
-    if (A.netOn() || A.isClient()) { if (st.state !== 'off' && st.state !== 'down') despawnW(); return; }   // solo only
     updateWreck(dt);
-    var lvl = campaignLevel();
+    // removed from the player list by the net layer (setNet / endNet): rejoin from behind
+    if (st.state !== 'off' && st.state !== 'down' && (!W.alive || A.pts.indexOf(W) < 0)) { A.drop(W); W.alive = false; setState('off'); }
+    var lvl = instLevel(I);
     if (st.state === 'off' || st.state === 'down') {
       if (lvl < 1 || !pAlive || !air) return;
       var agl = p.pos.y - gAt(p.pos.x, p.pos.z);
@@ -25023,17 +25192,18 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       if (st.state === 'down') {
         var no = missionNo(), next = no >= 0 ? no > st.lostNo : clock - st.lostT > 120;
         if (!next || clock - st.lostT < 20) return;
-        payRepair(); spawnW('repair');
-      } else spawnW('');
+        if (I.local) payRepair();
+      }
+      spawnW();
       return;
     }
-    // landed / taxiing: RTB, comes back when you take off
-    if (pAlive && !air) { st.groundT += dt; if (st.groundT > 4) { despawnW(); radio('rtb', 'Two, RTB.', 1, 30, 'TWO', VO_TWO); } return; }
+    if (pAlive && !air) { st.groundT += dt; if (st.groundT > 4) { despawnW(); wr('rtb', 'Two, RTB.', 1, 30); } return; }   // landed: RTB
     st.groundT = 0;
-    // you respawned far away: he catches up out of sight
-    if (pAlive && !st.pAliveWas && W.aim.distanceTo(p.pos) > 9000) { frameFromPlayer(0); W.aim.copy(slot).addScaledVector(fS, -1500); W.vel.copy(p.vel); wd.spd = W.vel.length(); setState('join'); }
+    if (pAlive && !st.pAliveWas && W.aim.distanceTo(p.pos) > 9000) {      // owner respawned far away: catch up out of sight
+      frameFromPlayer(0); W.aim.copy(slot).addScaledVector(fS, -1500); W.vel.copy(p.vel); wd.spd = W.vel.length(); setState('join');
+    }
     st.pAliveWas = pAlive;
-    if (lvl !== st.level) setupPilot();
+    if (lvl !== st.level && lvl >= 1) setupPilot();
     var n = Math.max(1, Math.ceil(dt / (1 / 30))), h = dt / n;
     for (var i = 0; i < n && W.alive; i++) step(h, pAlive);
   }
@@ -25041,22 +25211,134 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     var c = R.campaign; if (!c || !c.profile) return;
     try { var P = c.profile(); if (P && P.credits >= 1500) { P.credits -= 1500; if (c.save) c.save(); } } catch (e) { /* ignore */ }
   }
+  // which owners get a wingman: local first, then co-op clients that own the upgrade; MAXW in total
+  function manage() {
+    var A = A_(), keys = [], Ps = [], i, k;
+    for (k in FULL) delete FULL[k];
+    if (campaignLevel() >= 1) { keys.push('local'); Ps.push(null); }
+    if (A.hosting()) for (i = 0; i < A.pts.length; i++) {
+      var P = A.pts[i]; if (P.local || P.ai || (P.wingLvl | 0) < 1) continue;
+      if (keys.length < MAXW) { keys.push(P.id); Ps.push(P); } else FULL[P.id] = 1;
+    }
+    for (i = INST.length - 1; i >= 0; i--) {
+      var ix = keys.indexOf(INST[i].key);
+      if (ix < 0 || (INST[i].P && INST[i].P !== Ps[ix])) { use(INST[i]); despawnW(); INST.splice(i, 1); }
+    }
+    for (i = 0; i < keys.length; i++) {
+      var have = false; for (var j = 0; j < INST.length; j++) if (INST[j].key === keys[i]) have = true;
+      if (!have) INST.push(mkInst(keys[i], Ps[i]));
+    }
+  }
+  function updateWings(dt) {
+    var A = A_();
+    if (!A || !R.opt.player || !FL.ENEMY_UTIL || !FL.ENEMY_UTIL.flyBTT) return;
+    FCTX.world = world(); FCTX.time = clock;
+    lvlSendT -= dt; if (lvlSendT <= 0 && R.combat.setLocalInfo) { lvlSendT = 1; R.combat.setLocalInfo({ wingLvl: campaignLevel() }); }
+    if (A.isClient()) { for (var c = INST.length - 1; c >= 0; c--) { use(INST[c]); despawnW(); } INST.length = 0; clientTick(dt); return; }
+    if (VIEWS_N) clearViews();
+    manT -= dt; if (manT <= 0) { manT = 0.5; manage(); }
+    for (var i = 0; i < INST.length; i++) { use(INST[i]); updateInst(dt); }
+    localNotes();
+  }
+
+  // host -> clients: wingman rows in the entity snapshot (combat.sendSnapshot calls combat._wingSnap)
+  function wingSnap() {
+    var A = A_(), r = [], s = {}, k;
+    for (var i = 0; i < INST.length; i++) {
+      var n = INST[i], w = n.W, oid = ownerId(n);
+      if (n.st.state === 'down') s[oid] = 'next';
+      if (!w.alive) continue;
+      var q = w.q;
+      r.push([w.id, oid, w.name, w.aircraftId, Math.round(w.aim.x * 10), Math.round(w.aim.y * 10), Math.round(w.aim.z * 10),
+        Math.round(w.vel.x), Math.round(w.vel.y), Math.round(w.vel.z), Math.round(q.x * 1e4), Math.round(q.y * 1e4), Math.round(q.z * 1e4), Math.round(q.w * 1e4),
+        Math.round(w.thr * 100), Math.round(w.ab * 100), Math.round(w.hp), CODES.indexOf(n.st.state)]);
+    }
+    for (k in FULL) s[k] = 'full';
+    return { r: r, s: s };
+  }
+
+  // ======================================================================= co-op client: friendly views of the host's wingmen
+  var VIEWS = {}, VIEWS_N = 0, hostWing = false, lastWgT = -99, myStatus = '', ownSeen = false;
+  function clearViews() { var A = A_(); for (var id in VIEWS) { if (A) A.drop(VIEWS[id].pt); VIEWS[id].pt.alive = false; delete VIEWS[id]; } VIEWS_N = 0; }
+  function wingApply(wg, T0) {
+    var A = A_(); if (!A || !A.isClient()) return;
+    if (!wg) return;
+    hostWing = true; lastWgT = clock;
+    var me = A.myId(), seen = {}, i, id;
+    myStatus = (wg.s && wg.s[me]) || '';
+    for (i = 0; i < (wg.r || []).length; i++) {
+      var r = wg.r[i]; id = String(r[0]); seen[id] = 1;
+      var v = VIEWS[id];
+      if (!v) { v = VIEWS[id] = { pt: mkPT(null), rp: V(), rv: V(), rq: new T.Quaternion(), rt: 0, fresh: true, joinSaid: false }; v.pt.id = id; VIEWS_N++; }
+      var pt = v.pt, own = r[1] === me;
+      pt.name = own ? 'TWO' : String(r[2] || 'WINGMAN').slice(0, 14); pt.aircraftId = String(r[3] || 'su27');
+      v.rp.set(r[4] / 10, r[5] / 10, r[6] / 10); v.rv.set(r[7], r[8], r[9]); v.rq.set(r[10] / 1e4, r[11] / 1e4, r[12] / 1e4, r[13] / 1e4).normalize(); v.rt = T0 || A.now();
+      pt.thr = r[14] / 100; pt.ab = r[15] / 100; pt.hp = r[16]; pt.state = CODES[r[17]] || ''; pt.alive = true;
+      if (v.fresh) { v.fresh = false; pt.aim.copy(v.rp); pt.vel.copy(v.rv); pt.q.copy(v.rq); }
+      if (A.pts.indexOf(pt) < 0) A.pts.push(pt);
+      if (own) { ownSeen = true; if (pt.state === 'form' && !v.joinSaid) { v.joinSaid = true; radio('join', 'Two, on your wing.', 2, 20, 'TWO', VO_TWO); } }
+    }
+    for (id in VIEWS) if (!seen[id]) { A.drop(VIEWS[id].pt); VIEWS[id].pt.alive = false; delete VIEWS[id]; VIEWS_N--; }
+  }
+  function clientTick(dt) {
+    var A = A_();
+    if (VIEWS_N && clock - lastWgT > 3) clearViews();
+    var k = 1 - Math.exp(-dt * 8), now = A.now();
+    for (var id in VIEWS) {
+      var v = VIEWS[id], pt = v.pt, age = clamp((now - v.rt) / 1000, 0, 0.6);
+      tmpA.copy(v.rp).addScaledVector(v.rv, age);
+      if (pt.aim.distanceToSquared(tmpA) > 300 * 300) pt.aim.copy(tmpA); else pt.aim.lerp(tmpA, k);
+      pt.vel.copy(v.rv); pt.q.slerp(v.rq, k);
+      pt.fwd.set(0, 0, -1).applyQuaternion(pt.q); pt.up.set(0, 1, 0).applyQuaternion(pt.q);
+    }
+    // onscreen note: why no wingman (once per take-off)
+    var p = R.opt.player, air = p.alive() && (!p.airborne || p.airborne()) && p.pos.y - gAt(p.pos.x, p.pos.z) > 100;
+    if (!air) { airT = 0; noteDone = false; ownSeen = false; return; }
+    airT += dt;
+    if (noteDone || campaignLevel() < 1 || airT < 15) return;
+    var mine = false; for (id in VIEWS) if (VIEWS[id].pt.name === 'TWO') mine = true;
+    if (mine) { noteDone = true; return; }
+    noteDone = true;
+    note(myStatus === 'next' ? 'WINGMAN: NEXT MISSION' : myStatus === 'full' ? 'WINGMAN: ROOM FULL (MAX 3)' : !hostWing ? 'WINGMAN: SOLO ONLY' : 'WINGMAN: NEXT TAKE-OFF');
+  }
+  var airT = 0, noteDone = false;
+  function localNotes() {
+    var p = R.opt.player, air = p.alive() && (!p.airborne || p.airborne()) && p.pos.y - gAt(p.pos.x, p.pos.z) > 100;
+    if (!air) { airT = 0; noteDone = false; return; }
+    airT += 0; if (noteDone) return; noteDone = true;
+    var L = localInst(); if (L && L.st.state === 'down') note('WINGMAN: NEXT MISSION');
+  }
+  // small onscreen note (top centre, 4 s)
+  var noteEl = null, noteT = 0, noteLast = {};
+  function note(text) {
+    if (noteLast[text] != null && clock - noteLast[text] < 25) return;
+    noteLast[text] = clock;
+    var d = root.document; if (!d || !d.body || !d.createElement) return;
+    if (!noteEl) {
+      noteEl = d.createElement('div');
+      noteEl.style.cssText = 'position:fixed;left:50%;top:17%;transform:translateX(-50%);z-index:40;pointer-events:none;font:700 13px/1.2 system-ui,sans-serif;' +
+        'letter-spacing:.14em;color:#5cb8ff;background:rgba(0,14,34,.6);padding:6px 12px;border-radius:4px;text-shadow:0 1px 2px #000;display:none';
+      d.body.appendChild(noteEl);
+    }
+    noteEl.textContent = text; noteEl.style.display = 'block'; noteT = 4;
+  }
 
   function command(cmd) {
-    var A = A_(); if (!A || !W || !W.alive) return false;
+    var A = A_(), L = localInst(); if (!A || !L || !L.W.alive) return false;
+    use(L);
     if (cmd === 'attack') {
       var d = A.desig();
-      if (!d || !d.alive) { radio('cmd', 'Two. No target.', 2, 2, 'TWO', VO_TWO); return false; }
-      if (d.cat !== 'air') { radio('cmd', 'Two. Unable. Air targets only.', 2, 2, 'TWO', VO_TWO); return false; }
+      if (!d || !d.alive) { wr('cmd', 'Two. No target.', 2, 2); return false; }
+      if (d.cat !== 'air') { wr('cmd', 'Two. Unable. Air targets only.', 2, 2); return false; }
       st.cmd = 'attack'; st.tgt = d; st.lockT = 0; setState('engage'); wd.seenAge = 99;
-      radio('cmd', 'Two, copy. Attacking your target.', 2, 2, 'TWO', VO_TWO); return true;
+      wr('cmd', 'Two, copy. Attacking your target.', 2, 2); return true;
     }
     if (cmd === 'cover') {
       st.cmd = 'cover'; st.cmdT = clock + 45;
-      if (st.state === 'engage' && st.tgt && st.tgt.aim.distanceTo(R.opt.player.pos) > 3500) { st.tgt = null; setState('regroup'); }
-      radio('cmd', 'Two, copy. Covering you.', 2, 2, 'TWO', VO_TWO); return true;
+      if (st.state === 'engage' && st.tgt && st.tgt.aim.distanceTo(O.pos) > 3500) { st.tgt = null; setState('regroup'); }
+      wr('cmd', 'Two, copy. Covering you.', 2, 2); return true;
     }
-    if (cmd === 'form') { st.cmd = ''; st.tgt = null; st.engCd = 15; if (st.state === 'engage') setState('regroup'); radio('cmd', 'Two, copy. Rejoining.', 2, 2, 'TWO', VO_TWO); return true; }
+    if (cmd === 'form') { st.cmd = ''; st.tgt = null; st.engCd = 15; if (st.state === 'engage') setState('regroup'); wr('cmd', 'Two, copy. Rejoining.', 2, 2); return true; }
     return false;
   }
   if (root.addEventListener) root.addEventListener('keydown', function (e) {
@@ -25179,7 +25461,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     try { if (c && c.addScore) c.addScore(bounty, "SPLASH '" + a.P.name + "'"); } catch (e) { /* ignore */ }
     try { if (cg && cg.award) cg.award(bounty, Math.round(bounty * 0.4), 'ace'); } catch (e) { /* ignore */ }
     var rec = aceRec(a.P.id), cgm = missionNo();
-    if (rec) { rec.defeated = true; rec.by = ev.by === 'local' ? 'you' : ev.by === (W && W.id) ? 'wingman' : 'team'; rec.mission = cgm; saveCampaign(); }
+    if (rec) { rec.defeated = true; rec.by = ev.by === 'local' ? 'you' : /^w:/.test(String(ev.by || '')) ? 'wingman' : 'team'; rec.mission = cgm; saveCampaign(); }
     say(a, pick(LINES.dies), 3, 0);
     after(4.3, function () {
       radio('ace_dn', "Splash '" + name + "'! Ace down. Bounty " + bounty + ' credits.' + (a.nemesis ? ' Revenge, Flanker One.' : ''), 3, 0);
@@ -25253,8 +25535,9 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     if (!ev) return;
     var a = aceById(ev.id);
     if (a && !a.killed) onAceKilled(a, ev);
-    if (W && ev.by === W.id) {
-      if (a) after(a ? 8.6 : 0.1, function () { radio('wkill', 'Two. I got the ace!', 2, 4, 'TWO', VO_TWO); });
+    var L = localInst();
+    if (L && ev.by === L.W.id) {
+      if (a) after(8.6, function () { radio('wkill', 'Two. I got the ace!', 2, 4, 'TWO', VO_TWO); });
       else radio('wkill', pick(['Two. Splash one!', 'Two. Kill. Splash one.']), 2, 4, 'TWO', VO_TWO);
     }
   }
@@ -25277,7 +25560,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   // ======================================================================= attach to a combat instance
   function attach(c, opt) {
     R.combat = c; R.opt = opt;
-    W = mkPT(); wd = W.data; st.state = 'off'; st.lostNo = -99; aceLive.length = 0;
+    INST.length = 0; aceLive.length = 0; VIEWS = {}; VIEWS_N = 0;
     var upd = c.update;
     c.update = function (dt) {
       var r = upd.apply(c, arguments);
@@ -25285,7 +25568,9 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       return r;
     };
     var sw = c.setWorld;
-    if (sw) c.setWorld = function () { despawnW(); st.wreckT = 0; return sw.apply(c, arguments); };
+    if (sw) c.setWorld = function () { for (var i = 0; i < INST.length; i++) { use(INST[i]); despawnW(); st.wreckT = 0; } clearViews(); return sw.apply(c, arguments); };
+    c._wingSnap = function () { try { return wingSnap(); } catch (e) { return undefined; } };
+    c._wingApply = function (wg, T0) { wingApply(wg, T0); };
     if (c.on) {
       c.on('kill', function (ev) { try { onKill(ev); } catch (e) { /* ignore */ } });
       c.on('playerHit', function (ev) { try { onPlayerHit(ev); } catch (e) { /* ignore */ } });
@@ -25296,22 +25581,30 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     if (!(dt > 0) || !R.opt || !R.opt.player) return;
     dt = Math.min(dt, 0.1); clock += dt;
     for (var i = later.length - 1; i >= 0; i--) if (clock >= later[i].t) { var f = later[i].fn; later.splice(i, 1); try { f(); } catch (e) { /* ignore */ } }
-    updateWing(dt);
+    if (noteT > 0) { noteT -= dt; if (noteT <= 0 && noteEl) noteEl.style.display = 'none'; }
+    updateWings(dt);
     aceTick(dt);
   }
 
+  function localOrMake() { var L = localInst(); if (!L && R.opt) { L = mkInst('local', null); INST.unshift(L); } return L; }
   FL.wingman = {
     command: command,
-    state: function () { return W ? { state: st.state, alive: W.alive, hp: W.hp, target: st.tgt ? st.tgt.id : 0, pos: W.aim, vel: W.vel, aircraftId: W.aircraftId, tier: st.tier, skill: st.skill, level: st.level, msl: st.msl, flares: st.flares, kills: W.kills, cmd: st.cmd, slot: slot } : null; },
+    state: function () {
+      var L = localInst(); if (!L) return null; var s = L.st, w = L.W;
+      return { state: s.state, alive: w.alive, hp: w.hp, target: s.tgt ? s.tgt.id : 0, pos: w.aim, vel: w.vel, aircraftId: w.aircraftId, tier: s.tier, skill: s.skill, level: s.level, msl: s.msl, flares: s.flares, kills: w.kills, cmd: s.cmd, slot: L.slot };
+    },
+    all: function () { return INST.map(function (n) { return { owner: n.key, id: n.W.id, name: n.W.name, state: n.st.state, alive: n.W.alive }; }); },
+    views: function () { var o = []; for (var id in VIEWS) o.push({ id: id, name: VIEWS[id].pt.name, state: VIEWS[id].pt.state, pos: VIEWS[id].pt.aim }); return o; },
     enabled: function () { return campaignLevel() >= 1; },
-    unlockDebug: function (l) { st.debugLevel = clamp(l == null ? 3 : l | 0, 0, 5); if (W && W.alive) setupPilot(); return st.debugLevel; },
-    spawnNow: function () { if (!W) return false; if (W.alive) despawnW(); spawnW(''); return true; },
-    kill: function () { if (W && W.alive) downW('test'); },
-    pt: function () { return W; },
+    unlockDebug: function (l) { dbgLevel = clamp(l == null ? 3 : l | 0, 0, 5); return dbgLevel; },
+    spawnNow: function () { var L = localOrMake(); if (!L) return false; use(L); if (L.W.alive) despawnW(); spawnW(); return true; },
+    kill: function () { var L = localInst(); if (L && L.W.alive) { use(L); downW('test'); } },
+    pt: function () { var L = localInst(); return L ? L.W : null; },
     spawnAce: function (which, o) { return spawnAce(which == null ? 0 : which, o); },
     aces: function () { return aceLive; },
     roster: ACES,
-    aceChance: null
+    aceChance: null,
+    MAX: MAXW
   };
 })();
 
@@ -25658,6 +25951,213 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     return { group: grp, radar: radar, olsX: olsX, olsZ: olsZ, TUR: TUR, cI: cI, cWh: cWh, cG2: cG2 };
   }
 
+  // waterline foam strips (bow wave + side wash) in ship-local coordinates
+  function buildHullFoam() {
+    var z, i, foamTex = foamTexture(), fp = [], fc = [], fu = [], fi = [], FZ = [];
+    for (z = -146; z <= K.STERN + 1; z += 9) FZ.push(z);
+    for (var sd = -1; sd <= 1; sd += 2) {
+      var base0 = fp.length / 3;
+      for (i = 0; i < FZ.length; i++) {
+        var wlz = EWL[eIdx(FZ[i])], bowK = Math.max(0, 1 - (FZ[i] + 146) / 70), sternK = Math.max(0, (FZ[i] - 110) / 45);
+        var wdt = 3 + 9 * bowK + 7 * sternK, br = 0.25 + 0.75 * Math.max(bowK, sternK * 0.7);
+        fp.push(sd * (wlz + 0.3), 0.35, FZ[i], sd * (wlz + 0.3 + wdt), 0.35, FZ[i] + wdt * 0.6);
+        fc.push(br, br, br, 0, 0, 0); fu.push(0.5, i * 0.3, sd > 0 ? 1 : 0, i * 0.3);
+      }
+      for (i = 0; i < FZ.length - 1; i++) { var p0 = base0 + i * 2; if (sd > 0) fi.push(p0, p0 + 2, p0 + 1, p0 + 1, p0 + 2, p0 + 3); else fi.push(p0, p0 + 1, p0 + 2, p0 + 1, p0 + 3, p0 + 2); }
+    }
+    var fgeo = new T.BufferGeometry(); fgeo.setAttribute('position', new T.Float32BufferAttribute(fp, 3)); fgeo.setAttribute('color', new T.Float32BufferAttribute(fc, 3)); fgeo.setAttribute('uv', new T.Float32BufferAttribute(fu, 2)); fgeo.setIndex(fi);
+    var foamMat = new T.MeshBasicMaterial({ map: foamTex, vertexColors: true, transparent: true, depthWrite: false, blending: T.AdditiveBlending, fog: false, side: T.DoubleSide });
+    return { geo: fgeo, mat: foamMat };
+  }
+
+  // ================================================================== enemy carrier group (plug-in kinds for combat.js)
+  // navcarrier       container ('air' category so the host's crash-kill path scores the sinking; not lockable). Sails a circle.
+  // navcarrier_part  sub-targets 0 island, 1 catapults, 2 deck lift, 3 fuel bunker ('sea': guns, bombs, rockets, AGM, Kh-35).
+  //                  All four dead -> the carrier sinks (+ points), the AA mounts die with it.
+  // navcarrier_aa    4 mounts: 0, 1 flak + gun (aaThink), 2, 3 SAM (samThink) -> combat's enemy flak / missile paths.
+  // Parked MiG-29s launch from the bow while the catapults live (spawnFree: they do not die with the ship).
+  var ENEMY = [], WRECKS = [], SHARED = { scene: null, fx: null };
+  var CY = 20;
+  var PARTS = [[27, K.D + 18, 2, 'Island', 900, 20], [-6, K.D + 1.5, -62, 'Catapults', 450, 12], [24, K.D + 1.5, -40, 'Deck lift', 450, 12], [-2, K.D + 1.5, 95, 'Fuel bunker', 450, 12]];
+  var AAS = [[-34, K.D + 0.6, -20], [24, K.D + 0.6, -95], [-21, K.D + 0.6, 125], [27, K.D + 0.6, 112]];
+  var PARK = [[13, 62, 0.35], [13, 80, 0.35], [-24, 22, -0.5], [-27, 2, -0.5]];
+  var UPV = T ? new T.Vector3(0, 1, 0) : null, nv1 = T ? new T.Vector3() : null, nv2 = T ? new T.Vector3() : null, nv3 = T ? new T.Vector3() : null;
+  function KIT() { return root.FL.ENEMY_UTIL && root.FL.ENEMY_UTIL.kit; }
+  function entOk(e) { return !!e && e.alive !== false && e.hp > 0; }
+  function vL(x, y, z) { return new T.Vector3(x, y - CY, z); }
+  function ncPose(ent, d, dt) {
+    if (d.R > 0) d.ang += d.dir * d.spd / d.R * dt;
+    var x = d.cx, z = d.cz, tx = Math.sin(d.psi0), tz = -Math.cos(d.psi0), v = 0;
+    if (d.R > 0) { x += Math.cos(d.ang) * d.R; z += Math.sin(d.ang) * d.R; tx = -Math.sin(d.ang) * d.dir; tz = Math.cos(d.ang) * d.dir; v = d.spd; }
+    ent.pos.set(x, CY, z); ent.vel.set(tx * v, 0, tz * v);
+    ent.q.setFromAxisAngle(UPV, -Math.atan2(tx, -tz));
+  }
+  function ncSpawn(ent, opts, ctx) {
+    var kit = KIT(), d = kit.ensure(ent), w = ctx.world, i;
+    d.cat = 'navcarrier'; d.spd = 6; d.dir = Math.random() < 0.5 ? 1 : -1; d.ang = Math.random() * 6.283;
+    d.psi0 = opts.heading != null ? (Math.abs(opts.heading) > 6.3 ? opts.heading * DEG : opts.heading) : 0;
+    d.cx = opts.e != null ? opts.e : ent.pos.x; d.cz = opts.n != null ? -opts.n : ent.pos.z; d.R = 0;
+    var Rs = [opts.radius || 3000, 2200, 1500, 900];
+    for (var ri = 0; ri < Rs.length && !d.R && w; ri++) {
+      var ok = true;
+      for (var k = 0; k < 32 && ok; k++) {
+        var a = k / 32 * 6.283;
+        for (var dr = -450; dr <= 450 && ok; dr += 450) {
+          var px = d.cx + Math.cos(a) * (Rs[ri] + dr), pz = d.cz + Math.sin(a) * (Rs[ri] + dr);
+          if (!(w.sampleH(px, -pz) < -16) || (w.solidAt && w.solidAt(px, 15, pz))) ok = false;
+        }
+      }
+      if (ok) d.R = Rs[ri];
+    }
+    ncPose(ent, d, 0); kit.syncGroup(ent);
+    d.parts = []; d.aa = []; d.parked = PARK.length; d.launchT = 12 + Math.random() * 10; d.net = { pk: d.parked, dmg: 0 };
+    if (ctx.spawnChild) {
+      for (i = 0; i < PARTS.length; i++) { var c = ctx.spawnChild('navcarrier_part', i, { mount: ent, local: vL(PARTS[i][0], PARTS[i][1], PARTS[i][2]) }, ent); if (c) d.parts.push(c); }
+      for (i = 0; i < AAS.length; i++) { var ca = ctx.spawnChild('navcarrier_aa', i, { mount: ent, local: vL(AAS[i][0], AAS[i][1], AAS[i][2]) }, ent); if (ca) d.aa.push(ca); }
+    }
+  }
+  function ncLaunch(ent, d, ctx, kit) {
+    var KS = root.FL.ENEMY_KINDS, kind = KS.mig29 ? 'mig29' : KS.mig21 ? 'mig21' : null; if (!kind) return;
+    var f = nv1.set(0, 0, -1).applyQuaternion(ent.q);
+    var p = nv2.set(0, K.D + 6 - CY, K.BOW + 6).applyQuaternion(ent.q).add(ent.pos);
+    var v = nv3.copy(f).multiplyScalar(88).add(ent.vel); v.y += 16;
+    var c = kit.spawnFree(ctx, kind, 0, { pos: p.clone(), vel: v.clone(), launched: ent, drop: 0.6, group: (ent.group != null ? ent.group : 'nc') + '_air', independent: true }, ent);
+    if (c) { c.pos.copy(p); c.vel.copy(v); if (c.data) { c.data.drop = 0.6; c.data.launchedBy = ent; } kit.syncGroup(c); }
+    d.parked--; d.net.pk = d.parked;
+    for (var i = 0; i < 4; i++) { nv1.copy(p); nv1.x += (Math.random() - 0.5) * 8; nv1.z += (Math.random() - 0.5) * 8; kit.puff(ctx, nv1, 10, 3, 0.8); }
+  }
+  function ncThink(ent, dt, ctx) {
+    var kit = KIT(), d = ent.data; if (!d.cat) ncSpawn(ent, {}, ctx);
+    if (d.sunk) return;
+    ncPose(ent, d, dt); kit.syncGroup(ent);
+    var i, deck = 0, isl = false, dmg = 0;
+    for (i = 0; i < d.parts.length; i++) { kit.followMount(d.parts[i]); if (!entOk(d.parts[i])) dmg |= 1 << i; else if (i === 0) isl = true; else deck++; }
+    for (i = 0; i < d.aa.length; i++) { kit.followMount(d.aa[i]); if (!entOk(d.aa[i])) dmg |= 16 << i; }
+    d.net.dmg = dmg;
+    kit.perceive(ent, dt, ctx, 26000);
+    d.launchT -= dt;
+    if (d.launchT <= 0) {
+      d.launchT = 30 + Math.random() * 15;
+      if (!(dmg & 2) && d.parked > 0 && (d.det || d.npDist < 28000) && ctx.spawnChild) ncLaunch(ent, d, ctx, kit);
+    }
+    if (d.parts.length && !isl && deck === 0) { d.sunk = true; ent.pos.y = -10; }   // host: below the surface -> crash kill: points, kill event, AA mounts die
+  }
+  function fireTex() {
+    if (fireTex.t) return fireTex.t;
+    var cv = document.createElement('canvas'); cv.width = cv.height = 64; var g = cv.getContext('2d'), gr = g.createRadialGradient(32, 36, 2, 32, 32, 30);
+    gr.addColorStop(0, 'rgba(255,240,190,1)'); gr.addColorStop(0.35, 'rgba(255,150,40,0.9)'); gr.addColorStop(0.7, 'rgba(180,50,10,0.45)'); gr.addColorStop(1, 'rgba(60,10,0,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 64); var t = new T.CanvasTexture(cv); t.encoding = T.sRGBEncoding; return (fireTex.t = t);
+  }
+  function flagTex() {
+    if (flagTex.t) return flagTex.t;
+    var cv = document.createElement('canvas'); cv.width = 96; cv.height = 64; var g = cv.getContext('2d');
+    g.fillStyle = '#a3161a'; g.fillRect(0, 0, 96, 64); g.fillStyle = '#111'; g.fillRect(0, 26, 96, 12);
+    g.fillStyle = '#f2c230'; g.beginPath(); g.arc(30, 32, 13, 0, 6.283); g.fill(); g.fillStyle = '#a3161a'; g.beginPath(); g.arc(30, 32, 7, 0, 6.283); g.fill();
+    var t = new T.CanvasTexture(cv); t.encoding = T.sRGBEncoding; return (flagTex.t = t);
+  }
+  function markOwn(o) { o.traverse(function (c) { if (c.isMesh || c.isPoints) c.userData.ncOwn = true; }); }
+  function disposeOwn(o) {
+    o.traverse(function (c) { if (c.userData && c.userData.ncOwn) { if (c.geometry) c.geometry.dispose(); if (c.material && c.material.dispose) c.material.dispose(); } });
+  }
+  function buildEnemyShip() {
+    var g = new T.Group(); g.name = 'navcarrier';
+    var inner = new T.Group(); inner.position.y = -CY; g.add(inner);
+    var B = buildShipBody(PAL.enemy); inner.add(B.group);
+    var HF = buildHullFoam(); inner.add(new T.Mesh(HF.geo, HF.mat));
+    var flag = new T.Mesh(new T.PlaneGeometry(7, 4.6), new T.MeshStandardMaterial({ map: flagTex(), side: T.DoubleSide, roughness: 0.8 }));
+    flag.position.set(27, K.D + 41.5, 4.2); flag.rotation.y = Math.PI / 2; inner.add(flag);
+    var emb = new T.Mesh(new T.PlaneGeometry(10, 6.6), new T.MeshStandardMaterial({ map: flagTex(), roughness: 0.8 }));
+    emb.position.set(20.9, K.D + 9, 8); emb.rotation.y = -Math.PI / 2; inner.add(emb);
+    markOwn(inner);
+    var jets = [], KS = root.FL.ENEMY_KINDS || {}, i;
+    for (i = 0; i < PARK.length; i++) {
+      var jm = null; try { jm = KS.mig29 && KS.mig29.build ? KS.mig29.build(0) : null; } catch (e) { jm = null; }
+      if (!jm || !jm.group) continue;
+      jm.group.position.set(PARK[i][0], K.D + 1.9, PARK[i][1]); jm.group.rotation.y = PARK[i][2]; inner.add(jm.group); jets.push(jm.group);
+    }
+    var fm = new T.SpriteMaterial({ map: fireTex(), transparent: true, depthWrite: false, blending: T.AdditiveBlending, color: new T.Color(2.2, 1.6, 1.2) }), fires = [], fp = PARTS.concat(AAS);
+    for (i = 0; i < fp.length; i++) { var sp = new T.Sprite(fm); sp.position.set(fp[i][0], fp[i][1] + (i === 0 ? 4 : 3), fp[i][2]); sp.scale.set(14, 18, 1); sp.visible = false; inner.add(sp); fires.push(sp); }
+    var smkT = 0, wrecked = false, me = null;
+    var m = {
+      group: g, fires: fires,
+      update: function (dt, ent) {
+        me = ent;
+        if (ENEMY.indexOf(ent) < 0 && entOk(ent)) ENEMY.push(ent);
+        nv1.set(0, 0, -1).applyQuaternion(ent.q); ent.data._psi = Math.atan2(nv1.x, -nv1.z);
+        B.radar.rotation.y += dt * 1.6;
+        var n = ent.data.net || {}, dmg = n.dmg | 0, pk = n.pk != null ? n.pk : jets.length;
+        for (var j = 0; j < jets.length; j++) jets[j].visible = j < pk;
+        smkT -= dt;
+        for (var k = 0; k < fires.length; k++) {
+          var on = !!(dmg & (1 << k)); fires[k].visible = on;
+          if (on) { var sc = (k < 4 ? 16 : 9) * (0.85 + Math.random() * 0.3); fires[k].scale.set(sc, sc * 1.3, 1); if (smkT <= 0 && SHARED.fx && SHARED.fx.smokePuff) { fires[k].getWorldPosition(nv2); nv2.y += 6; SHARED.fx.smokePuff(nv2, k < 4 ? 26 : 14, 9, 0.12); } }
+        }
+        if (smkT <= 0) smkT = 0.25;
+      },
+      onDeath: function (ent) {
+        var i2 = ENEMY.indexOf(ent); if (i2 >= 0) ENEMY.splice(i2, 1);
+        var sc = SHARED.scene || g.parent; if (!sc) return null;
+        wrecked = true;
+        var wr = new T.Group(); wr.name = 'navcarrierWreck'; wr.position.copy(g.position); wr.quaternion.copy(g.quaternion);
+        wr.add(inner); sc.add(wr);
+        for (var k = 0; k < fires.length; k++) fires[k].visible = true;
+        WRECKS.push({ g: wr, t: 0, side: Math.random() < 0.5 ? -1 : 1, fires: fires, boomT: 0 });
+        return null;
+      },
+      dispose: function () { if (me) { var i3 = ENEMY.indexOf(me); if (i3 >= 0) ENEMY.splice(i3, 1); } if (!wrecked) disposeOwn(inner); }
+    };
+    return m;
+  }
+  function stepWrecks(dt) {
+    for (var i = WRECKS.length - 1; i >= 0; i--) {
+      var W = WRECKS[i], g = W.g; W.t += dt;
+      g.position.y -= dt * (0.2 + W.t * 0.011);
+      if (W.t < 40) { g.rotateZ(W.side * 0.0045 * dt); g.rotateX(0.003 * dt); }
+      W.boomT -= dt;
+      if (W.boomT <= 0 && SHARED.fx) {
+        W.boomT = W.t < 12 ? 0.6 + Math.random() * 1.2 : 2.5;
+        nv1.set((Math.random() - 0.5) * 50, CY + 2, (Math.random() - 0.5) * 260).applyQuaternion(g.quaternion).add(g.position);
+        nv1.y = Math.max(nv1.y, 3);
+        if (W.t < 14 && SHARED.fx.explosion) SHARED.fx.explosion(nv1, 1.6 + Math.random() * 1.8, { air: false });
+        else if (SHARED.fx.smokePuff) SHARED.fx.smokePuff(nv1, 40, 12, 0.1);
+      }
+      for (var k = 0; k < W.fires.length; k++) W.fires[k].visible = W.t < 45;
+      if (W.t > 85) { if (g.parent) g.parent.remove(g); disposeOwn(g); WRECKS.splice(i, 1); }
+    }
+  }
+  function clearNaval() { for (var i = 0; i < WRECKS.length; i++) { var g = WRECKS[i].g; if (g.parent) g.parent.remove(g); disposeOwn(g); } WRECKS.length = 0; ENEMY.length = 0; }
+  // physics: enemy hulls / islands are solid (no deck landings on them)
+  function enemySolid(x, y, z, phys) {
+    if (y > K.D + 50 || y < -12) return false;
+    for (var i = 0; i < ENEMY.length; i++) {
+      var e = ENEMY[i], dx = x - e.pos.x, dz = z - e.pos.z; if (dx * dx + dz * dz > 175 * 175 || !entOk(e)) continue;
+      var psi = e.data._psi || 0, c = Math.cos(psi), s = Math.sin(psi), lx = dx * c + dz * s, lz = -dx * s + dz * c, I = K.ISL;
+      if ((lx > I.x0 - 5 && lx < I.x1 + 5 && lz > I.z0 - 5 && lz < I.z1 + 5 && y < K.D + I.h) || (inDeckL(lx, lz) && y < K.D + rampH(lz) + 1.5)) { phys.crash('HIT THE ENEMY CARRIER'); return true; }
+    }
+    return false;
+  }
+  (function defineNaval() {
+    var KS = root.FL.ENEMY_KINDS, U = root.FL.ENEMY_UTIL;
+    if (!KS || !U || !U.kit || !T || KS.navcarrier) return;
+    function mounted(ent, ctx) { var kit = KIT(); if (!ent.data.mount) kit.mountSpawn(ent, {}, ctx); if (kit.mountGone(ent)) { kit.selfDestruct(ent, ctx, 'parent'); return false; } kit.followMount(ent); return true; }
+    KS.navcarrier = { kind: 'navcarrier', category: 'air', label: 'Enemy carrier', hp: 100000, points: 6000, lockRange: 1, radius: 0.5, radarRange: 26000, killMsg: 'CARRIER SUNK', needsBombs: false,
+      targetable: false, boss: true, noWaves: true, build: function () { return buildEnemyShip(); }, spawn: ncSpawn, think: ncThink };
+    KS.navcarrier_part = { kind: 'navcarrier_part', category: 'sea', label: 'Carrier', hp: 450, points: 1500, lockRange: 12000, radius: 12, radarRange: 0, killMsg: 'CARRIER HIT', needsBombs: false, subTarget: true,
+      build: function () { return { group: new T.Group(), update: null, onDeath: function () { return null; }, dispose: function () {} }; },
+      spawn: function (ent, opts, ctx) { KIT().mountSpawn(ent, opts, ctx); var P = PARTS[ent.variant | 0] || PARTS[1]; ent.label = P[3]; ent.hp = ent.maxHp = P[4]; ent.hitR = P[5] + 5; },
+      think: function (ent, dt, ctx) { mounted(ent, ctx); } };
+    KS.navcarrier_aa = { kind: 'navcarrier_aa', category: 'sea', label: 'Ship AA', hp: 160, points: 500, lockRange: 9000, radius: 6, radarRange: 11000, killMsg: 'SHIP AA DOWN', needsBombs: false, subTarget: true,
+      build: function () { var m = null; try { m = KS.carrier_aa && KS.carrier_aa.build ? KS.carrier_aa.build() : null; } catch (e) { m = null; } return m && m.group ? m : { group: new T.Group() }; },
+      spawn: function (ent, opts, ctx) { KIT().mountSpawn(ent, opts, ctx); },
+      think: function (ent, dt, ctx) {
+        if (!mounted(ent, ctx)) return;
+        var mo = ent.data.mount; if (mo && mo.data && mo.data.sunk) return;
+        var kit = KIT();
+        if ((ent.variant | 0) < 2) kit.aaThink(ent, dt, ctx, { flakRange: 5000, flakCd: 0.8, flakDmg: 8, gunRange: 2000, rate: 14, dmg: 3, minP: -0.05, yawRate: 1.4 });
+        else kit.samThink(ent, dt, ctx, { min: 1200, max: 10000, cd: 12, speed: 680, g: 20, kind: 'sam' });
+      } };
+  })();
+
   // ------------------------------------------------------------------ factory
   root.FL.createCarrier = function (opts) {
     opts = opts || {};
@@ -25667,6 +26167,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     var WIND_FROM = opts.windFromDeg != null ? opts.windFromDeg : 246.4;   // weather.js: wind toward ~066 deg
     var OFFSHORE = opts.offshore || 3000;   // m from the coast to the nearest point of the course
     var headless = typeof document === 'undefined' || !scene || !T;
+    SHARED.scene = scene || null; SHARED.fx = fx;
+    root.FL.friendlyCarrierPos = function () { return on ? { e: P.e, n: P.n } : null; };
     var st = phys.st, GEAR_H = phys.GEAR_H || 2.4;
     var baseWorld = null, course = null, on = false, tS = clock();
     var P = { e: 0, n: 0, x: 0, z: 0, psi: 0, c: 1, s: 0, vx: 0, vz: 0, w: 0 };
@@ -25684,6 +26186,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     // ---- frame transforms
     function toLocal(x, z) { var dx = x - P.x, dz = z - P.z; QX = dx * P.c + dz * P.s; QZ = -dx * P.s + dz * P.c; }
     function deckL(x, z) {   // world x,z -> sets QX, QZ; true over the flight deck
+      if (!on) return false;
       var dx = x - P.x, dz = z - P.z; if (dx * dx + dz * dz > 170 * 170) return false;
       toLocal(x, z); return inDeckL(QX, QZ);
     }
@@ -25716,6 +26219,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     }
     // hull below the deck, the island (+ wing margin) and the mast are solid; calls phys.crash with a clear reason
     function shipSolid(x, y, z) {
+      if (ENEMY.length && enemySolid(x, y, z, phys)) return true;
       if (!on || y > K.D + 50 || y < -12) return false;
       var dx = x - P.x, dz = z - P.z; if (dx * dx + dz * dz > 175 * 175) return false;
       toLocal(x, z); var lx = QX, lz = QZ, I = K.ISL;
@@ -25847,13 +26351,13 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         if (!(id in COURSES) || COURSES[id] && COURSES[id].w !== w) { var cc = null; try { cc = fitCourse(w, WIND_FROM, OFFSHORE); } catch (e) { cc = null; } if (cc) cc.w = w; COURSES[id] = cc; }
         course = COURSES[id];
       }
-      on = !!course; pw = on ? makePW(w) : null;
+      on = !!course; pw = w ? makePW(w) : null; clearNaval();
       if (on) poseAt(course, tS, P);
       trap.active = false; hold.on = false;
       if (model) { model.group.visible = on; model.wake.visible = on; if (model.ols) for (var i = 0; i < model.ols.length; i++) model.ols[i].visible = false; }
       info.available = on; info.mapId = id || '';
     }
-    phys.setWorld = function (w) { setWorld(w); origSetWorld(on ? pw : w); };
+    phys.setWorld = function (w) { setWorld(w); origSetWorld(pw || w); };
     phys.step = stepW;
 
     // ------------------------------------------------------------------ visuals
@@ -25891,21 +26395,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       var lights = new T.Points(lg, new T.PointsMaterial({ size: 1.5, map: dot, vertexColors: true, transparent: true, depthWrite: false, blending: T.AdditiveBlending, sizeAttenuation: true }));
       lights.frustumCulled = false; grp.add(lights);
       // ---- hull foam (bow wave + side wash), attached to the ship
-      var foamTex = foamTexture(), fp = [], fc = [], fu = [], fi = [], FZ = [];
-      for (z = -146; z <= K.STERN + 1; z += 9) FZ.push(z);
-      for (var sd = -1; sd <= 1; sd += 2) {
-        var base0 = fp.length / 3;
-        for (i = 0; i < FZ.length; i++) {
-          var wlz = EWL[eIdx(FZ[i])], bowK = Math.max(0, 1 - (FZ[i] + 146) / 70), sternK = Math.max(0, (FZ[i] - 110) / 45);
-          var wdt = 3 + 9 * bowK + 7 * sternK, br = 0.25 + 0.75 * Math.max(bowK, sternK * 0.7);
-          fp.push(sd * (wlz + 0.3), 0.35, FZ[i], sd * (wlz + 0.3 + wdt), 0.35, FZ[i] + wdt * 0.6);
-          fc.push(br, br, br, 0, 0, 0); fu.push(0.5, i * 0.3, sd > 0 ? 1 : 0, i * 0.3);
-        }
-        for (i = 0; i < FZ.length - 1; i++) { var p0 = base0 + i * 2; if (sd > 0) fi.push(p0, p0 + 2, p0 + 1, p0 + 1, p0 + 2, p0 + 3); else fi.push(p0, p0 + 1, p0 + 2, p0 + 1, p0 + 3, p0 + 2); }
-      }
-      var fgeo = new T.BufferGeometry(); fgeo.setAttribute('position', new T.Float32BufferAttribute(fp, 3)); fgeo.setAttribute('color', new T.Float32BufferAttribute(fc, 3)); fgeo.setAttribute('uv', new T.Float32BufferAttribute(fu, 2)); fgeo.setIndex(fi);
-      var foamMat = new T.MeshBasicMaterial({ map: foamTex, vertexColors: true, transparent: true, depthWrite: false, blending: T.AdditiveBlending, fog: false, side: T.DoubleSide });
-      grp.add(new T.Mesh(fgeo, foamMat));
+      var HF = buildHullFoam(), foamMat = HF.mat;
+      grp.add(new T.Mesh(HF.geo, foamMat));
       // ---- wake ribbon (world space, follows the course history)
       var wpos = new Float32Array(NW * 2 * 3), wcol = new Float32Array(NW * 2 * 3), wuv = new Float32Array(NW * 2 * 2), widx = [];
       for (i = 0; i < NW; i++) {
@@ -25936,6 +26427,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     function update(dt, camera) {
       dt = Math.min(dt || 0, 0.1);
       msg.t += dt;
+      stepWrecks(dt);
       if (!on) { info.available = false; return; }
       // follow the shared clock (pause / hangar time included); carry the jet while it sits on the deck
       var target = clock(), diff = target - tS, cc = contact();
@@ -26026,7 +26518,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         var H = null; try { H = combat.hud(); } catch (e) { H = null; }
         var L = H && H.targets, bd = 3500 * 3500;
         if (L) for (i = 0; i < L.length; i++) {
-          var t = L[i]; if (!t.pos || !(t.cat === 'air' || t.kind === 'bandit' || t.kind === 'heli')) continue;
+          var t = L[i]; if (!t.pos || t.kind === 'navcarrier' || !(t.cat === 'air' || t.kind === 'bandit' || t.kind === 'heli')) continue;
           var ex = t.pos.x - P.x, ey = t.pos.y, ez = t.pos.z - P.z, d2 = ex * ex + ez * ez + ey * ey;
           if (d2 < bd && ey < 4000) { bd = d2; tgt.pos = t.pos; }
         }
@@ -29099,7 +29591,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793151117', updShown = false;
+  var BUILD = '1793151279', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
