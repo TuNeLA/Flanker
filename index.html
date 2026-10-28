@@ -24520,7 +24520,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
  *   BFM + guns + R-73) -> regroup ("Two, rejoining") -> form. defend (beam + flares) overrides when a missile tracks him.
  *   Engage when: enemy air within 6 km of you or him, you fire, or you designate an air target. Regroup when his
  *   target dies, after 40 s, or 8 km from you. Lost: back next mission (repair fee 1500 cr, free if you cannot pay).
- * Commands: key J = "attack my target" (your designated air target), key U = "cover me" (45 s: form, kill threats near you).
+ * Commands: key Y = "attack my target" (your designated air target), key U = "cover me" (45 s: form, kill threats near you).
  *   FL.wingman.command('attack'|'cover'|'form').
  * Co-op: SOLO ONLY (despawns while a net session is connected).
  *
@@ -25005,7 +25005,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
     var t = e.target; if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
     if (R.campaign && R.campaign.hangarOpen) return;
-    if (e.code === 'KeyJ') command('attack'); else if (e.code === 'KeyU') command('cover');
+    if (e.code === 'KeyY') command('attack'); else if (e.code === 'KeyU') command('cover');
   });
 
   // ======================================================================= enemy aces
@@ -25426,7 +25426,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     var baseWorld = null, course = null, on = false, tS = clock();
     var P = { e: 0, n: 0, x: 0, z: 0, psi: 0, c: 1, s: 0, vx: 0, vz: 0, w: 0 };
     var LX = 0, LZ = 0, QX = 0, QZ = 0;     // last deck-local results (step logic / world queries)
-    var qY = T ? new T.Quaternion() : null, vY = T ? new T.Vector3(0, 1, 0) : null, eul = T ? new T.Euler() : null;
+    var fwdV = T ? new T.Vector3() : null, qY = T ? new T.Quaternion() : null, vY = T ? new T.Vector3(0, 1, 0) : null, eul = T ? new T.Euler() : null;
     var trap = { active: false, wire: 0, stopT: 0, done: false, armed: false, sinceTD: 9, prevAH: 0, skipMsg: false, bolterMsg: false };
     var hold = { on: false, msgT: 0 }, deckState = { stillT: 0, latch: false, fromHangar: false, onDeck: false, relKmh: 0 };
     var msg = { text: '', t: 99 };
@@ -25551,8 +25551,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         var ang = rampAng(LZ), fs = st.vel.x * P.s - st.vel.z * P.c;
         if (fs > 3) {
           st.vel.y = Math.max(st.vel.y, fs * Math.tan(ang));
-          var ax = phys.axes(), pitch = Math.asin(Math.max(-1, Math.min(1, ax.fwd.y)));
-          if (pitch < ang) { eul.set(ang, -Math.atan2(ax.fwd.x, -ax.fwd.z), 0, 'YXZ'); st.q.setFromEuler(eul); }
+          var fw = fwdV.set(0, 0, -1).applyQuaternion(st.q), pitch = Math.asin(Math.max(-1, Math.min(1, fw.y)));
+          if (pitch < ang) { eul.set(ang, -Math.atan2(fw.x, -fw.z), 0, 'YXZ'); st.q.setFromEuler(eul); }
         }
       }
     }
@@ -25837,7 +25837,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     var tmpP = { e: 0, n: 0, x: 0, z: 0, psi: 0, c: 1, s: 0, vx: 0, vz: 0, w: 0 };
     var tv1 = T ? new T.Vector3() : null, tv2 = T ? new T.Vector3() : null, tgt = { pos: null, kind: '', scanT: 0 }, tgtPrev = T ? new T.Vector3() : null, tgtVel = T ? new T.Vector3() : null;
     var radarA = 0;
-    var CALL = { ok: 'ON GLIDE SLOPE', high: 'YOU ARE HIGH', low: 'POWER — YOU ARE LOW', vlow: 'TOO LOW — WAVE OFF', left: 'COME LEFT', right: 'COME RIGHT', gear: 'GEAR DOWN', fast: 'TOO FAST — SLOW DOWN' };
+    var CALL = { ok: 'ON GLIDE SLOPE', high: 'YOU ARE HIGH', low: 'POWER — YOU ARE LOW', vlow: 'TOO LOW — WAVE OFF', left: 'COME LEFT', right: 'COME RIGHT', fast: 'TOO FAST — SLOW DOWN' };
 
     function update(dt, camera) {
       dt = Math.min(dt || 0, 0.1);
@@ -25879,8 +25879,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       var c = '';
       if (o.onFinal && back < 5000) {
         var relS = Math.hypot(st.vel.x - P.vx, st.vel.z - P.vz);
-        if (st.gearT < 0.9 && back < 3000) c = CALL.gear;
-        else if (o.glideErr < -1.6 && back < 1500) c = CALL.vlow;
+        if (o.glideErr < -1.6 && back < 1500) c = CALL.vlow;
         else if (o.glideErr < -0.7) c = CALL.low;
         else if (o.glideErr > 0.9) c = CALL.high;
         else if (o.lineupErr > 1.5) c = CALL.left;
@@ -27782,6 +27781,12 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     if (el > 0.08) { r.vc += ((r.d - t.dist) / el - r.vc) * Math.min(1, el * 3); r.d = t.dist; r.t = simTime; }
     return clamp(r.vc * 3.6, -9990, 9990);
   }
+  // ace name for the designated target (from the target list), else null
+  function acePick(ch, lk) {
+    var tg = ch && ch.targets; if (!tg || lk.id == null) return null;
+    for (var i = 0; i < tg.length; i++) if (tg[i].id === lk.id && tg[i].ace) return '\u2605 ' + String(tg[i].ace).toUpperCase();
+    return null;
+  }
   function tagOf(k) {
     var EK = FL.ENEMY_KINDS && FL.ENEMY_KINDS[k];
     if (EK && EK.label) return EK.label;
@@ -27838,7 +27843,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         var free = true;
         for (var j = 0; j < i; j++) { var q = TPj[j]; if (q.lab && Math.abs(q.x - p.x) < 70 * u && Math.abs(q.y - p.y) < 18 * u) { free = false; break; } }
         p.lab = free && nlab < 8;
-        if (p.lab) { nlab++; text(tagOf(t.kind) + ' ' + (t.dist / 1000).toFixed(1), p.x + s + 5 * u, p.y, 11 * u, tc); }
+        if (p.lab) { nlab++; text((t.ace ? '\u2605 ' + String(t.ace).toUpperCase() : tagOf(t.kind)) + ' ' + (t.dist / 1000).toFixed(1), p.x + s + 5 * u, p.y, 11 * u, t.ace ? AMB : tc); }
       } else if (t.dist < 15000 && !isD) {
         var dx = p.x - cxs, dy = p.y - cys; if (p.behind) { dx = -dx; dy = -dy; }
         var ang = Math.atan2(dy, dx);
@@ -27876,7 +27881,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
           if (hasLS) hx.letterSpacing = '0px';
         } else if (kL > 0.01) text('LOCKING', dp.x, dp.y - bs - 9 * u, 10.5 * u, AMB, 'center');
         var lc = locked ? RED : WHITE, lx2 = dp.x + bs + 7 * u;
-        text((lk.kind ? tagOf(lk.kind) : 'TGT'), lx2, dp.y - 6 * u, 12 * u, lc);
+        text((acePick(ch, lk) || (lk.kind ? tagOf(lk.kind) : 'TGT')), lx2, dp.y - 6 * u, 12 * u, lc);
         var vc = 0; for (i = 0; i < tg.length; i++) if (tg[i].designated) vc = closingKmh(tg[i]);
         text((lk.dist / 1000).toFixed(1) + ' KM  ' + (vc >= 0 ? '+' : '−') + Math.abs(Math.round(vc / 10) * 10), lx2, dp.y + 8 * u, 10.5 * u, locked ? RED : HCdim);
         var yW2 = yb + (locked || kL <= 0.01 ? 4 : 12) * u;
