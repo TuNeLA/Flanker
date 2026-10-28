@@ -249,6 +249,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
           <label class="opt"><span>Quality</span>
             <select id="optQuality"><option value="ultra">Ultra</option><option value="high" selected>High</option><option value="fast">Fast</option></select></label>
           <p class="note">Use Fast on slow computers and phones.</p>
+          <label class="opt"><span>Resolution<small>Sharp and Max cost more GPU.</small></span>
+            <select id="optRes"><option value="auto" selected>Auto (min 75%)</option><option value="native">Native 100%</option><option value="sharp">Sharp 150%</option><option value="max">Max 200%</option></select></label>
           <label class="opt"><span>Frame rate and log<small>Key F3.</small></span><input type="checkbox" id="optDbg"></label>
           <h3 style="margin-top:14px"><span class="sec">2.5</span>Other</h3>
           <label class="opt" title="Anonymous gameplay stats (frame rate, settings, events) help to make the game better. No personal data."><span>Share gameplay stats<small>Frame rate, settings and events. No personal data.</small></span><input type="checkbox" id="optTele" checked></label>
@@ -8539,7 +8541,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       // scrapeWater = it was water (spray, not sparks); scrapeSpeed m/s; belly = belly slide on the ground; lastHurt = last damage.
       scrapeT: 0, scrapes: 0, scrapeWater: false, scrapeSpeed: 0, belly: false, lastHurt: 0
     };
-    var BOOST_T = [0, 0.7, 0.95, 1.2], BOOST_A = [0, 22, 32, 45], BOOST_TURN = [0, 1.6, 2.2, 2.8];
+    var BOOST_T = [0, 0.7, 0.95, 1.2], BOOST_A = [0, 8, 12, 16], BOOST_TURN = [0, 1.6, 2.2, 2.8];
     var COB_PEAK = 100 * DEG, COB_UP = 0.55, COB_DOWN = 0.85, cobA0 = 0, pendBoost = 0, tv = new T.Vector3();
     function ease(x) { return 0.5 - 0.5 * Math.cos(Math.PI * x); }
     function easeD(x) { return 0.5 * Math.PI * Math.sin(Math.PI * x); }
@@ -19606,6 +19608,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       playerT: LP, pts: pts, flankersBuilt: function () { return flBuilt; }, LO: LO, wl: function () { return wl; },
       desig: function () { return desig; }, Smooth: Smooth, Clock: Clock, snapClock: function () { return snapClock; }, proxies: proxyMissiles, rt: function () { return lastRT; } };
     // per-jet gun muzzle: local Vector3 (nose -Z, right +X), e.g. model.gunMuzzle; pair = true -> guns on both sides (alternate)
+    combat._dbg.gunPick = function () { var g = firstOf('gun'); var A = gunPick(g ? g.spec : DEF_W.gun); return { id: A.t ? A.t.id : 0, f: A.f, zone: gunZone(), aa: aaVal(), sel: selW().spec.id, aaOn: aaOn }; };
     combat.setGunMuzzle = function (v, pair) {
       if (v && isFinite(v.x) && isFinite(v.y) && isFinite(v.z)) { gunMuzzleL = (gunMuzzleL || new THREE.Vector3()).set(v.x, v.y, v.z); gunMuzzleMirror = !!pair; }
       else { gunMuzzleL = null; gunMuzzleMirror = false; }
@@ -23311,15 +23314,15 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       p: { cloudOp: 0, cloudDen: 0, fogMul: 0.7, glowMul: 1.05, sunMul: 1.06, windSpd: 3 } },
     { id: 'scattered', name: 'Scattered clouds', desc: 'The map’s own sky: puffy cumulus you can hide in.', p: {} },
     { id: 'overcast', name: 'Overcast', desc: 'Grey cloud deck at 2,400 m. Climb through it to find the sun.',
-      p: { cloudOp: 0.85, cloudTint: [0.78, 0.8, 0.84], deckOp: 1, deckCover: 0.9, deckBase: 2400, deckThick: 900, deckBot: [0.36, 0.38, 0.41],
+      p: { cloudOp: 0.85, cloudTint: [0.6, 0.62, 0.66], deckOp: 1, deckCover: 0.9, deckBase: 2400, deckThick: 900, deckBot: [0.36, 0.38, 0.41],
         fogMul: 1.7, fogMix: 0.85, fogCol: 0xa7aeb4, inCol: 0xc9ced3, skyMix: 0.9, zen: [0.3, 0.32, 0.35], glowMul: 0.25, diskMul: 0.1,
         sunMul: 0.4, sunTint: [0.9, 0.93, 1.0], hemiMul: 0.95, env: true, turb: 0.12, windSpd: 7 } },
     { id: 'heavy', name: 'Heavy clouds', desc: 'Low, thick, dark deck at 1,600 m, towering cells and light rain.',
-      p: { cloudOp: 0.9, cloudTint: [0.55, 0.58, 0.63], deckOp: 1, deckCover: 0.97, deckBase: 1600, deckThick: 1500, deckBot: [0.2, 0.215, 0.24], deckTop: [0.95, 0.95, 0.95],
+      p: { cloudOp: 0.9, cloudTint: [0.32, 0.34, 0.38], deckOp: 1, deckCover: 0.97, deckBase: 1600, deckThick: 1500, deckBot: [0.2, 0.215, 0.24], deckTop: [0.95, 0.95, 0.95],
         fogMul: 2.4, fogAdd: 0.00001, fogMix: 0.95, fogCol: 0x80888f, inCol: 0x9aa1a8, skyMix: 1, zen: [0.16, 0.17, 0.19], glowMul: 0.1, diskMul: 0,
         sunMul: 0.22, sunTint: [0.85, 0.9, 1.0], hemiMul: 0.75, env: true, rain: 0.3, cells: 1, turb: 0.35, windSpd: 11 } },
     { id: 'thunderstorm', name: 'Thunderstorm', desc: 'Black sky, heavy rain, lightning and thunder, rough air.',
-      p: { cloudOp: 0.9, cloudTint: [0.3, 0.32, 0.37], deckOp: 1, deckCover: 1, deckBase: 1300, deckThick: 2300, deckBot: [0.075, 0.082, 0.1], deckTop: [0.8, 0.8, 0.82],
+      p: { cloudOp: 0.9, cloudTint: [0.13, 0.14, 0.17], deckOp: 1, deckCover: 1, deckBase: 1300, deckThick: 2300, deckBot: [0.075, 0.082, 0.1], deckTop: [0.8, 0.8, 0.82],
         fogMul: 3.2, fogAdd: 0.00004, fogMix: 1, fogCol: 0x454c55, inCol: 0x5a6068, skyMix: 1, zen: [0.035, 0.04, 0.05], glowMul: 0.03, diskMul: 0,
         sunMul: 0.08, sunTint: [0.8, 0.86, 1.0], hemiMul: 0.42, hemiTint: [0.8, 0.85, 0.95], env: true, envGnd: [0.03, 0.03, 0.03],
         rain: 1, rainCol: [0.42, 0.45, 0.5], lightning: 10, cells: 1, turb: 0.7, windSpd: 16 } },
@@ -23327,14 +23330,14 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       p: { cloudOp: 0.7, fogMul: 1.2, fogAdd: 0.00034, fogLowAlt: 1, fogMix: 1, fogCol: 0xb9bfc4, inCol: 0xd0d4d8, skyMix: 0.75, zen: [0.42, 0.45, 0.5],
         glowMul: 0.35, diskMul: 0.25, sunMul: 0.6, hemiMul: 1.05, env: true, windSpd: 1.5 } },
     { id: 'snow', name: 'Snow', desc: 'Grey winter sky and falling snow. Best on the Norway fjords.',
-      p: { cloudOp: 0.8, cloudTint: [0.82, 0.84, 0.88], deckOp: 1, deckCover: 0.82, deckBase: 1900, deckThick: 1100, deckBot: [0.42, 0.44, 0.48],
+      p: { cloudOp: 0.8, cloudTint: [0.7, 0.72, 0.77], deckOp: 1, deckCover: 0.82, deckBase: 1900, deckThick: 1100, deckBot: [0.42, 0.44, 0.48],
         fogMul: 2.2, fogAdd: 0.00006, fogMix: 0.95, fogCol: 0xb4bbc3, inCol: 0xd3d8dd, skyMix: 0.9, zen: [0.34, 0.36, 0.4], glowMul: 0.2, diskMul: 0.05,
         sunMul: 0.35, sunTint: [0.9, 0.95, 1.05], hemiMul: 1.0, env: true, snow: 1, turb: 0.15, windSpd: 6 } },
     { id: 'sunset', name: 'Sunset', desc: 'Low orange sun, long shadows, pink clouds.',
       p: { cloudTint: [1.2, 0.72, 0.55], fogMix: 0.7, fogCol: 0xc29a86, inCol: 0xe0c4b4, skyMix: 0.65, zen: [0.06, 0.07, 0.17], glowMul: 1.7, diskMul: 1,
         sunMul: 0.85, sunTint: [1.0, 0.62, 0.36], hemiMul: 0.7, hemiTint: [1.0, 0.8, 0.75], sunElMix: 1, sunEl: 3.5, env: true, envGnd: [0.08, 0.06, 0.05] } },
     { id: 'night', name: 'Night', desc: 'Moonlit night with stars. Afterburners and tracers glow.',
-      p: { cloudOp: 0.8, cloudTint: [0.1, 0.11, 0.15], fogMul: 1.1, fogMix: 1, fogCol: 0x0c121b, inCol: 0x1a2129, skyMix: 1, zen: [0.002, 0.004, 0.012], glowMul: 0.02, diskMul: 0.05,
+      p: { cloudOp: 0.8, cloudTint: [0.06, 0.065, 0.09], fogMul: 1.1, fogMix: 1, fogCol: 0x0c121b, inCol: 0x1a2129, skyMix: 1, zen: [0.002, 0.004, 0.012], glowMul: 0.02, diskMul: 0.05,
         sunMul: 0.07, sunTint: [0.6, 0.72, 1.0], hemiMul: 0.16, hemiTint: [0.55, 0.65, 1.0], env: true, envGnd: [0.004, 0.004, 0.005], stars: 1, windSpd: 3 } }
   ];
   FL.WEATHER_PRESETS = PRESETS.map((p) => ({ id: p.id, name: p.name, desc: p.desc }));
@@ -23453,16 +23456,21 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       '  float th = 1.0 - uCover;',
       '  float a = smoothstep(th - uSoft, th + uSoft, n);',
       '  float d = length(q - uCam.xz);',
-      '  a *= (1.0 - smoothstep(uR * 0.72, uR * 0.98, d)) * uOpacity;',
+      // coverage is cut hard at 0.5 so the deck can write depth (hides cumulus / towers behind it); soft only by distance + opacity
+      '  if (!(a > 0.5)) discard;',
+      '  a = smoothstep(0.5, 0.8, a) * (1.0 - smoothstep(uR * 0.72, uR * 0.98, d)) * uOpacity;',
       '  if (!(a > 0.004)) discard;',
       '  float thick = clamp((n - th) / max(1.0 - th, 0.05), 0.0, 1.0);',
       '  vec3 col = uTop > 0.5 ? uCol * (0.8 + 0.28 * thick) : uCol * (1.15 - 0.45 * thick);',
       '  col += uFlashCol * uFlash * exp(-length(vW - uFlashPos) / 3200.0);',
       '  gl_FragColor = vec4(max(col, vec3(0.0)), clamp(a, 0.0, 1.0));',
-      '  #include <tonemapping_fragment>', '  #include <encodings_fragment>', '  #include <fog_fragment>', '}']).join('\n');
+      '  #include <tonemapping_fragment>', '  #include <encodings_fragment>', '  #include <fog_fragment>',
+      '  #ifdef USE_FOG',
+      '  gl_FragColor.rgb = mix(gl_FragColor.rgb, fogColor, 0.85 * smoothstep(uR * 0.3, uR * 0.9, d));',   // far deck melts into the horizon colour
+      '  #endif', '}']).join('\n');
     function deckMat(top) {
       const u = Object.assign({}, THREE.UniformsUtils.clone(THREE.UniformsLib.fog), DU, { uCol: { value: new V3(0.4, 0.4, 0.4) }, uTop: { value: top ? 1 : 0 } });
-      return new THREE.ShaderMaterial({ uniforms: u, vertexShader: deckVS, fragmentShader: deckFS, transparent: true, depthWrite: false, depthTest: true, fog: true, side: THREE.FrontSide });
+      return new THREE.ShaderMaterial({ uniforms: u, vertexShader: deckVS, fragmentShader: deckFS, transparent: true, depthWrite: true, depthTest: true, fog: true, side: THREE.FrontSide });
     }
     const deckGeo = new THREE.PlaneGeometry(DECK_R * 2, DECK_R * 2, 1, 1);
     const deckBot = new THREE.Mesh(deckGeo, deckMat(false)); deckBot.rotation.x = Math.PI / 2;   // normal -Y
@@ -23634,16 +23642,18 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       for (let t = 0; t < 7; t++) {
         let x = 0, z = 0;
         for (let k = 0; k < 20; k++) { x = (R() - 0.5) * 64000; z = (R() - 0.5) * 64000; if (Math.hypot(x - sp.x, z - sp.z) > 5000 && towers.every((o) => Math.hypot(o.x - x, o.z - z) > 11000)) break; }
-        const base = 1300, top = 7800 + R() * 2500, H = top - base, rad = 1500 + R() * 600;
+        const base = 1300, top = 8000 + R() * 2500, H = top - base, rad = 2600 + R() * 1000;
         const g = w.groundY ? w.groundY(x, -z) : 0;
         towers.push({ x: x, z: z, base: base, top: top, r: rad, g: g,
-          cores: [[x, base + H * 0.22, z, rad * 1.05], [x, base + H * 0.55, z, rad * 0.95], [x + rad * 0.4, top - H * 0.1, z, rad * 1.9]] });
-        const np = 22;
+          cores: [[x, base + H * 0.22, z, rad * 1.0], [x, base + H * 0.55, z, rad * 0.9], [x + rad * 0.8, top - H * 0.1, z, rad * 1.9]] });
+        const np = 13;
         for (let i = 0; i < np; i++) {
-          const h = i / (np - 1), y = base + 250 + h * (H - 300);
-          let rr = rad * (0.85 + 0.25 * Math.sin(h * 2.6)); if (h > 0.78) rr += (h - 0.78) * 5.5 * rad;   // anvil
-          const a = R() * 6.283, o = (0.15 + R() * 0.45) * rr;
-          puffs.push([x + Math.cos(a) * o + (h > 0.78 ? rad * 0.5 : 0), y, z + Math.sin(a) * o, rr * (1.6 + R() * 0.5), R() * 6.283, 0.1 + h * 0.85, Math.floor(R() * 4)]);
+          const h = i / (np - 1), y = base + 350 + h * (H - 500);
+          let rr = rad * (0.8 + 0.2 * Math.sin(h * 2.6)); if (h > 0.75) rr += (h - 0.75) * 7 * rad;   // anvil spreads downwind
+          for (let k = 0; k < 3; k++) {
+            const a = R() * 6.283, o = (0.2 + R() * 0.5) * rr;
+            puffs.push([x + Math.cos(a) * o + (h > 0.75 ? (h - 0.75) * 4 * rad : 0), y + (R() - 0.5) * 300, z + Math.sin(a) * o, rr * (1.3 + R() * 0.4), R() * 6.283, 0.05 + h * 0.9, Math.floor(R() * 4)]);
+          }
         }
       }
       cells = { towers: towers, puffs: puffs, mesh: null, shafts: [], lastSort: new V3(1e9, 0, 0) };
@@ -23750,7 +23760,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       uniforms: { uZen: { value: new V3() }, uHor: { value: new V3() }, uGnd: { value: new V3() } },
       vertexShader: 'varying vec3 vD; void main(){ vD = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
       fragmentShader: 'uniform vec3 uZen; uniform vec3 uHor; uniform vec3 uGnd; varying vec3 vD; void main(){ vec3 d = normalize(vD); float h = d.y;' +
-        ' vec3 c = h > 0.0 ? mix(uHor, uZen, pow(clamp(h, 0.0, 1.0), 0.5)) : mix(uHor * 0.9, uGnd, smoothstep(0.0, -0.25, h)); gl_FragColor = vec4(max(c, vec3(0.0)), 1.0); }',
+        ' vec3 c = h > 0.0 ? mix(uHor, uZen, pow(clamp(h, 0.0, 1.0), 0.5)) : mix(uHor * 0.9, uGnd, smoothstep(0.0, -0.25, h)); gl_FragColor = vec4(max(c, vec3(0.0)), 1.0);\n#include <encodings_fragment>\n}',
       side: THREE.BackSide, depthTest: false, depthWrite: false
     });
     envScene.add(new THREE.Mesh(new THREE.SphereGeometry(100, 32, 16), envMat));
@@ -23840,8 +23850,6 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       deckBot.visible = deckTop.visible = dOn;
       if (dOn) {
         deckBot.position.set(cp.x, P.deckBase, cp.z); deckTop.position.set(cp.x, P.deckBase + P.deckThick, cp.z);
-        // transparent order: below the deck, cumulus / shafts (nearer) draw after it; above it, the deck covers what is below
-        const ro = cp.y > P.deckBase + P.deckThick * 0.5 ? 6 : 4; deckBot.renderOrder = deckTop.renderOrder = ro;
         DU.uCam.value.copy(cp); DU.uCover.value = P.deckCover; DU.uOpacity.value = Math.min(1, P.deckOp);
         DU.uFlash.value = fl * 3.0;
         const sc = W && W.sun ? W.sun.color : B0.sunCol, sm = 0.55 + 0.45 * Math.min(1, P.sunMul * 2.5);
@@ -24079,11 +24087,20 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     ins.t = parseFloat(cs.paddingTop) || 0; ins.r = parseFloat(cs.paddingRight) || 0;
     ins.b = parseFloat(cs.paddingBottom) || 0; ins.l = parseFloat(cs.paddingLeft) || 0;
   }
+  // render resolution: 'auto' (drops a little when slow, never below 75%), 'native' (100%), 'sharp' (150% supersample), 'max' (200%)
+  var RES_SS = { auto: 1, native: 1, sharp: 1.5, max: 2 }, resMode = 'auto';
+  try { var rm0 = localStorage.getItem('flk_res'); if (rm0 && RES_SS[rm0]) resMode = rm0; } catch (e) {}
+  function basePR() { return Math.min(devicePixelRatio || 1, resMode === 'auto' ? 1.6 : 2) * RES_SS[resMode]; }
+  function setResMode(m) {
+    if (!RES_SS[m]) return; resMode = m; try { localStorage.setItem('flk_res', m); } catch (e) {}
+    if (m !== 'auto') resScale = 1;
+    resize(); if (typeof applyResScale === 'function') applyResScale(); glog('resolution mode ' + m);
+  }
   function resize() {
     W = innerWidth; H = innerHeight; dpr = Math.min(devicePixelRatio || 1, 2);
-    renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.6) * (post ? 1 : (resScale || 1)));
+    renderer.setPixelRatio(basePR() * (post ? 1 : (resScale || 1)));
     renderer.setSize(W, H, false);
-    if (post) { post.setSize(W, H, Math.min(devicePixelRatio || 1, 1.6)); if (post.setResolutionScale) post.setResolutionScale(resScale || 1); }
+    if (post) { post.setSize(W, H, basePR()); if (post.setResolutionScale) post.setResolutionScale(resScale || 1); }
     camera.aspect = W / H; camera.updateProjectionMatrix();
     hud.width = Math.round(W * dpr); hud.height = Math.round(H * dpr);
     readInsets();
@@ -24606,7 +24623,13 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   function resume() { if (!started) return; paused = false; $('menu').hidden = true; showTouch(); }
   function startGame(kind) {
     initAudio(); started = true; paused = false; $('menu').hidden = true;
-    spawn(kind); showTouch();
+    // co-op: if friends are already flying, join them in the air instead of the runway
+    var mateUp = false;
+    if (kind !== 'air' && net && net.connected && combat && combat.remotePlayers) {
+      combat.remotePlayers().forEach(function (r) { if (r.alive && r.pos && r.pos.y - world.groundY(r.pos.x, -r.pos.z) > 120) mateUp = true; });
+    }
+    if (mateUp) { respawn(); glog('joined friends in the air'); } else spawn(kind);
+    showTouch();
     if (kind === 'air') { setTimeout(function () { if (started && !st.crashed && !(campaign ? campaign.active : combat.active)) { if (campaign) campaign.start(); else combat.startMission(); } }, 1500); }
   }
   $('bRun').addEventListener('click', function () { startGame('runway'); });
@@ -24637,6 +24660,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   $('optSens').addEventListener('input', function (e) { mouseSens = parseFloat(e.target.value) || 1; try { localStorage.setItem('flk_msens', String(mouseSens)); } catch (er) {} });
   if ($('optMouseMode')) { $('optMouseMode').value = mouseMode; $('optMouseMode').addEventListener('change', function (e) { setMouseMode(e.target.value); if (typeof updateSchemeUi === 'function') updateSchemeUi(); }); }
   $('optQuality').addEventListener('change', function (e) { if (booted) setQuality(e.target.value); });
+  if ($('optRes')) { $('optRes').value = resMode; $('optRes').addEventListener('change', function (e) { setResMode(e.target.value); }); }
   $('optShake').addEventListener('input', function (e) { shakeScale = parseFloat(e.target.value) || 0; try { localStorage.setItem('flk_shake', String(shakeScale)); } catch (er) {} });
   try { $('optRadio').value = localStorage.getItem('flk_radio') || 'important'; } catch (e) {}
   $('optRadio').addEventListener('change', function (e) { if (comms && comms.setMode) comms.setMode(e.target.value); else try { localStorage.setItem('flk_radio', e.target.value); } catch (er) {} });
@@ -25221,6 +25245,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     drawHitMarks(u, dt);
     if (!crashed) drawOrdnance(u, ch);
     if (!crashed) drawPullUp(u, dt);
+    if (!crashed) drawTracked(u, ch, dt);
 
     // ---- flight data (dimmed on the crash screen)
     var dimA = crashed ? 0.25 : 1;
@@ -25294,6 +25319,27 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   // test hook: average drawHUD cost over n synchronous calls (ms)
   window.__hudBench = function (n) { var t = performance.now(); for (var i = 0; i < n; i++) drawHUD(0); return (performance.now() - t) / n; };
 
+  // ---- SAM radar track warning (before launch): flashing TRACKED + bearing chevron + slow tone
+  var TRK = { on: 0, beep: 0 }, trkP = {};
+  function drawTracked(u, ch, dt) {
+    var t = ch.tracked;
+    TRK.on += ((t ? 1 : 0) - TRK.on) * Math.min(1, dt * 10);
+    if (t) { TRK.beep -= dt; if (TRK.beep <= 0) { TRK.beep = 1.1 - 0.7 * (t.t01 || 0); try { audio.play('lock'); } catch (e) {} } } else TRK.beep = 0;
+    if (TRK.on < 0.05 || !t) return;
+    var blink = Math.sin(simTime * 10) > -0.3 ? 1 : 0.4, y = H * 0.5 - Math.min(W, H) * 0.24;
+    hx.globalAlpha = TRK.on * blink;
+    spaced('TRACKED' + (t.kind ? ' · ' + tagOf(t.kind) : ''), W / 2, y, 16 * u, AMB, 4 * u, W * 0.4);
+    var w = 120 * u, x = W / 2 - w / 2, sb = hx.shadowBlur; hx.shadowBlur = 0;
+    hx.fillStyle = 'rgba(2,13,9,.6)'; hx.fillRect(x, y + 12 * u, w, 4 * u);
+    hx.fillStyle = AMB; hx.fillRect(x, y + 12 * u, w * Math.min(1, t.t01 || 0), 4 * u); hx.shadowBlur = sb;
+    if (t.pos) {
+      var p = projTo(t.pos, trkP), dx = p.x - W / 2, dy = p.y - H / 2; if (p.behind) { dx = -dx; dy = -dy; }
+      var a = Math.atan2(dy, dx), r = Math.min(W, H) * 0.31, cp = new Path2D();
+      chevron(cp, W / 2 + Math.cos(a) * r, H / 2 + Math.sin(a) * r, a, 11 * u);
+      ln(AMB, 2.6); hx.stroke(cp);
+    }
+    hx.globalAlpha = 1;
+  }
   // ---- ground proximity warning: PULL UP when the flight path hits terrain within ~2.5 s
   var GP = { tti: 99, t: 0, beep: 0, on: 0 }, gpV = new V3();
   function drawPullUp(u, dt) {
@@ -26414,6 +26460,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     requestAnimationFrame(frame);
     var dt = Math.min(0.05, Math.max(0, (now - last) / 1000)); last = now;
     if (!booted) return;
+    PF.t = performance.now(); PF.cur.fill(0);
     poll(dt);
     var live = started && !paused && !(campaign && campaign.hangarOpen);
     // co-op: the shared world and the net link keep running while this player is paused or in the hangar
@@ -26423,12 +26470,13 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       acc += dt; var h = 1 / 240, n = 0;
       while (acc >= h && n < 16) { phys.step(h, inp); acc -= h; n++; }
       if (n >= 16) acc = 0;
+      pfMark(0);
       if (!wasGround && st.onGround && !st.crashed) addTrauma(clamp(-vyBefore / 12, 0.08, 0.5));
       simTime += dt;
       towerCheck();
       if (combat.setLocalVisual) combat.setLocalVisual({ thr: st.thr, ab: st.ab, gearT: st.gearT });
       storesT += dt; if (storesT > 0.25) { storesT = 0; phys.setStoresMass(storesMass()); }
-      combat.update(dt);
+      combat.update(dt); pfMark(1);
       if (campaign) campaign.update(dt);
       var sc = combat.hud().score || 0;
       if (sc > lastPopN) { killFlash = Math.min(0.5, killFlash + 0.3); addTrauma(0.06); }
@@ -26440,18 +26488,22 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     }
     trauma = Math.max(0, trauma - dt * 1.3); rumbleCool -= dt;
     if (live && st.ab > 0.5 && !st.crashed) padRumble(0.06 * st.ab * shakeScale * 2, 0.03, 120);
+    pfMark(2);
     if (!paused) fx.update(dt);
+    pfMark(3);
     if (comms) comms.update(dt, { started: started, st: st, hud: combat.hud() });
     updatePlaneVisual(dt);
-    updateTeammates(dt);
+    updateTeammates(dt); pfMark(4);
     updateCamera(dt);
-    world.update(dt, camera);
+    world.update(dt, camera); pfMark(5);
     world.sun.position.copy(st.pos).addScaledVector(world.sunDir, 400);
     world.sun.target.position.copy(st.pos); world.sun.target.updateMatrixWorld();
+    gpuBegin();
     if (post && post.enabled) post.render(dt, postParams(dt));
     else renderer.render(scene, camera);
-    drawHUD(dt);
-    audioUpdate(dt);
+    gpuEnd(); pfMark(6);
+    drawHUD(dt); pfMark(7);
+    audioUpdate(dt); pfMark(8);
     eventSounds();
     perfTick(now, dt);
     dbgTick(dt);
@@ -26517,7 +26569,52 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   function teleTick(dt) { if (!started) return; teleT += dt; if (teleT >= 60) { teleT = 0; teleSend(false); } }
   addEventListener('pagehide', function () { teleSend(true); });
   document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') teleSend(true); });
+  // ---- profiler: CPU ms per section (sum over 10 s), GPU ms via timer query, hitch attribution
+  // sections: 0 phys, 1 combat, 2 campaign+misc, 3 fx, 4 teammates+visual, 5 camera+world, 6 render submit, 7 hud, 8 audio
+  var PF_NAMES = ['phys', 'combat', 'misc', 'fx', 'mates', 'world', 'render', 'hud', 'audio'];
+  var PF = { t: 0, cur: new Float64Array(9), sum: new Float64Array(9), n: 0, gpuSum: 0, gpuN: 0, gpuMax: 0, q: [], ext: null, gl: null, ok: false };
+  function pfMark(i) { var t = performance.now(); PF.cur[i] += t - PF.t; PF.t = t; }
+  try {
+    PF.gl = renderer.getContext();
+    PF.ext = PF.gl.getExtension && PF.gl.getExtension('EXT_disjoint_timer_query_webgl2');
+    PF.ok = !!(PF.ext && PF.gl.createQuery);
+  } catch (e) { PF.ok = false; }
+  var gpuActive = null;
+  function gpuBegin() {
+    if (!PF.ok || gpuActive || PF.q.length > 4) return;
+    try { gpuActive = PF.gl.createQuery(); PF.gl.beginQuery(PF.ext.TIME_ELAPSED_EXT, gpuActive); } catch (e) { PF.ok = false; gpuActive = null; }
+  }
+  function gpuEnd() {
+    var gl = PF.gl;
+    if (gpuActive) { try { gl.endQuery(PF.ext.TIME_ELAPSED_EXT); PF.q.push(gpuActive); } catch (e) { PF.ok = false; } gpuActive = null; }
+    while (PF.q.length) {
+      var q = PF.q[0];
+      try {
+        if (!gl.getQueryParameter(q, gl.QUERY_RESULT_AVAILABLE)) break;
+        var disjoint = gl.getParameter(PF.ext.GPU_DISJOINT_EXT), ns = gl.getQueryParameter(q, gl.QUERY_RESULT);
+        if (!disjoint) { var ms = ns / 1e6; PF.gpuSum += ms; PF.gpuN++; if (ms > PF.gpuMax) PF.gpuMax = ms; }
+      } catch (e) { PF.ok = false; }
+      gl.deleteQuery(q); PF.q.shift();
+    }
+  }
+  function pfFrame(ms) {
+    var tot = 0, big = 0, bi = 0;
+    for (var i = 0; i < 9; i++) { PF.sum[i] += PF.cur[i]; tot += PF.cur[i]; if (PF.cur[i] > big) { big = PF.cur[i]; bi = i; } }
+    PF.n++;
+    if (ms > 60 && playT > 3) glog('HITCH ' + ms.toFixed(0) + ' ms: ' + PF_NAMES[bi] + ' ' + big.toFixed(0) + ' ms (cpu ' + tot.toFixed(0) + ')' + (bi === 6 ? ' — likely shader compile / upload' : ''));
+  }
+  function pfLine() {
+    var n = PF.n || 1, parts = [], tot = 0;
+    for (var i = 0; i < 9; i++) { var v = PF.sum[i] / n; tot += v; parts.push(PF_NAMES[i] + ' ' + v.toFixed(2)); }
+    var gpu = PF.gpuN ? PF.gpuSum / PF.gpuN : -1;
+    var bound = gpu < 0 ? 'gpu ?' : (gpu > tot ? 'GPU-bound' : 'CPU-bound');
+    var ents = 0; try { ents = ((combat && combat.hud().targets) || []).length; } catch (e) {}
+    var line = 'cpu ms/frame: ' + parts.join(', ') + ' = ' + tot.toFixed(2) + ' | gpu ' + (gpu < 0 ? 'n/a' : gpu.toFixed(2) + ' ms (max ' + PF.gpuMax.toFixed(1) + ')') + ' | ' + bound + ' | px ' + Math.round(W * H * Math.pow(basePR() * (resScale || 1), 2) / 1000) + 'k | enemies ' + ents;
+    PF.sum.fill(0); PF.n = 0; PF.gpuSum = 0; PF.gpuN = 0; PF.gpuMax = 0;
+    return line;
+  }
   function dbgTick(dt) {
+    if (started && !paused) pfFrame(dt * 1000);
     frameTimes.push(dt * 1000); if (frameTimes.length > 240) frameTimes.shift();
     // always-on performance telemetry for the game report
     if (started && !paused) {
@@ -26527,8 +26624,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       if (perfSampleT >= 10) {
         var info = renderer.info.render;
         var line = 'perf 10s: ' + (1000 * perfSampleN / (perfSampleSum || 1)).toFixed(0) + ' fps avg, worst frame ' + perfSampleMax.toFixed(0) + ' ms, res ' + Math.round(resScale * 100) + '%, calls ' + info.calls + ', tris ' + Math.round(info.triangles / 1000) + 'k, targets ' + ((combat && combat.hud().targets) || []).length;
-        perfStats.samples.push(line); if (perfStats.samples.length > 60) perfStats.samples.shift();
-        if (perfSampleMax > 120) glog('HITCH ' + perfSampleMax.toFixed(0) + ' ms frame');
+        perfStats.samples.push(line); perfStats.samples.push(pfLine()); while (perfStats.samples.length > 60) perfStats.samples.shift();
         perfSampleT = 0; perfSampleN = 0; perfSampleSum = 0; perfSampleMax = 0;
       }
     }
@@ -26561,14 +26657,15 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     var med = sorted[Math.floor(sorted.length * 0.5)];
     var target = Math.max(refreshMs, 1000 / 100) * 1.1;              // keep resolution high; ~100 fps is plenty
     var old = resScale;
-    if (med > target * 1.2) resScale = Math.max(0.6, resScale - 0.05);
+    if (resMode !== 'auto') return;
+    if (med > target * 1.2) resScale = Math.max(0.75, resScale - 0.05);
     else if (med < target * 0.9 && resScale < 1) resScale = Math.min(1, resScale + 0.05);
     if (resScale !== old) { applyResScale(); glog('render scale ' + Math.round(resScale * 100) + '% (frame ' + med.toFixed(1) + ' ms)'); }
   }
   function applyResScale() {
     if (fx && fx.setResolutionScale) fx.setResolutionScale(resScale);
     if (post && post.setResolutionScale) post.setResolutionScale(resScale);
-    else { renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.6) * resScale); renderer.setSize(W, H, false); }
+    else { renderer.setPixelRatio(basePR() * resScale); renderer.setSize(W, H, false); }
   }
   function setQuality(q) {
     quality = q;
@@ -26770,7 +26867,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       renderMaps(); syncLever();
       $('loading').hidden = true;
       window.__flanker = {
-        phys: phys, combat: combat, world: function () { return world; }, camera: camera, start: startGame, campaign: function () { return campaign; },
+        phys: phys, combat: combat, world: function () { return world; }, camera: camera, start: startGame, campaign: function () { return campaign; }, setResMode: setResMode, resMode: function () { return resMode; },
         setView: function (v) { view = v; camReset = true; }, changeMap: changeMap, setAircraft: setAircraft, startMission: tryStartMission,
         // test hook: simulate `sec` seconds at 60 Hz with fixed inputs (no rendering)
         sim: function (sec, i) {
