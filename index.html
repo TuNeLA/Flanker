@@ -18001,7 +18001,7 @@ body.flk-cover > .xm-pop, body.flk-cover > .xm-ban, body.flk-cover > .xm-card { 
   // 44.5 m, span 41.8 m (15 deg) / 24.1 m (67.5 deg), height 10.4 m. Blended wing-body, variable-sweep outer wings (pivots 6.4 m out),
   // 4 F101-GE-102 with afterburners in 2 nacelles under the glove, 3 internal bays (fwd / mid / aft) + 6 external stations under the body,
   // SMCS nose vanes. No defensive gun on the real jet: the dorsal 20 mm turret is a GAME ADD-ON.
-  const B1T = [{ name: 'DORSAL', pos: [0, 1.52, -8.6], model: 'dome', n: 1, s: 1.15, yc: 0, yh: 180, p0: -8, p1: 85, gun: 'm61t', mode: 'air', pd: true, game: true }];
+  const B1T = [{ name: 'DORSAL', pos: [0, 1.52, -8.6], model: 'dome', n: 1, s: 1.15, yc: 0, yh: 180, p0: -8, p1: 85, gun: 'c40t', mode: 'air', pd: true, game: true }];
   const B1LE = (x) => -3.2 + (x - 6.4) * Math.tan(15 * DEG), B1TE = (x) => B1LE(x) + 6.1 - (x - 6.4) * (3.9 / 14.5);
   const B1 = {
     b2x: { tipAux: 'sweep', bayAux: ['bay'], idle: 'sweep' },
@@ -18069,7 +18069,7 @@ body.flk-cover > .xm-pop, body.flk-cover > .xm-ban, body.flk-cover > .xm-card { 
     // real: 4 x F101-GE-102 77.4 / 136.9 kN, wing 181 m2 (spread), MTOW 216 t (game 95 t), Mach 1.25, 18,000 m, 34,000 kg internal
     // (3 bays) + 22,700 kg external; no defensive gun (game turret)
     mass: 95000, wingArea: 181, thrustMil: 310000, thrustAB: 548000, arcadeThrust: 1.3,
-    rollRate: 90, pitchRate: 40, yawRate: 22, drift: 0.55, maxG: 3.5, missiles: 0, gun: 'none', gunName: 'None · dorsal 20 mm turret (auto, game)',
+    rollRate: 90, pitchRate: 40, yawRate: 22, drift: 0.55, maxG: 3.5, missiles: 0, gun: 'none', gunName: 'None · dorsal 40 mm cannon turret (auto, game)',
     cd0: 0.02, machMax: 1.35, topSpeedKmh: 1335, ceiling: 18000, climbRate: 60,
     stats: { speed: 3, agility: 2, firepower: 5, toughness: 4 },
     sig: 'tfr', psm: 0, aoaMax: 18, rcs: 0.9, armor: 0.8, hp: 240, maxStoresKg: 34000,
@@ -18225,7 +18225,7 @@ body.flk-cover > .xm-pop, body.flk-cover > .xm-ban, body.flk-cover > .xm-card { 
   // turbofans, twin canted fins, canards. Four automatic turrets: dorsal 30 mm, ventral 30 mm, left and right waist 20 mm. Guns only.
   const BAST_T = [
     { name: 'DORSAL', pos: [0, 2.12, -7.2], model: 'dome', n: 2, s: 1.6, yc: 0, yh: 180, p0: -6, p1: 85, gun: 'akan30t', mode: 'all', pd: true },
-    { name: 'VENTRAL', pos: [0, -1.12, 10.6], model: 'vdome', n: 2, s: 1.45, yc: 0, yh: 180, p0: -85, p1: 6, gun: 'akan30t', mode: 'all', pd: true },
+    { name: 'VENTRAL', pos: [0, -1.12, 10.6], model: 'vdome', n: 2, s: 1.45, yc: 0, yh: 180, p0: -85, p1: 6, gun: 'c40t', mode: 'all', pd: true },
     { name: 'WAIST L', pos: [-2.98, 0.45, 3.2], model: 'blister', n: 1, s: 1.5, yc: -90, yh: 82, p0: -60, p1: 60, gun: 'm61t', mode: 'all', pd: true },
     { name: 'WAIST R', pos: [2.98, 0.45, 3.2], model: 'blister', n: 1, s: 1.5, yc: 90, yh: 82, p0: -60, p1: 60, gun: 'm61t', mode: 'all', pd: true },
   ];
@@ -18304,7 +18304,7 @@ body.flk-cover > .xm-pop, body.flk-cover > .xm-ban, body.flk-cover > .xm-card { 
     heavy: Object.assign({}, AC130.heavy, { turrets: ACE_T }) }), null, { stations: [], muzzle: [-2.1, 1.45, -5.4] });
   const BOSS_T = BAST_T.concat([
     { name: 'DORSAL AFT', pos: [0, 1.95, 7.4], model: 'dome', n: 2, s: 1.6, yc: 180, yh: 180, p0: -6, p1: 85, gun: 'akan30t', mode: 'all', pd: true },
-    { name: 'VENTRAL FWD', pos: [0, -1.12, -8.6], model: 'vdome', n: 2, s: 1.45, yc: 0, yh: 180, p0: -85, p1: 6, gun: 'akan30t', mode: 'all', pd: true }]);
+    { name: 'VENTRAL FWD', pos: [0, -1.12, -8.6], model: 'vdome', n: 2, s: 1.45, yc: 0, yh: 180, p0: -85, p1: 6, gun: 'c40t', mode: 'all', pd: true }]);
   FL.registerAircraft('bastion_e', Object.assign({}, BAST, { seed: 7071, nation: 'RU', nationMark: null,
     liv: { pattern: 'mottle', base: '#25272b', tones: ['#1c1d20', '#3a1114', '#2e3035'], under: '#2b2d31', radome: '#6a1418' },
     marks: { badge: 'guards', star: 'soviet', fin: 'flag' }, code: { text: '01', color: '#c8101c', stroke: '#1a1a1a' },
@@ -34255,9 +34255,12 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"uh60m":{"side":"data:image/webp;base64,UklGRgAn
     W({ id: 'thunder100', type: 'gunpod', cz: 'cannon', podMass: 1400, weight: 280, name: 'Thunder 100 cannon pod', short: 'T-100', targets: AGS, range: 3000, speed: 900, damage: 420, blast: 32,
       rate: 0.8, ammo: 5, resCost: 40, sub: 'thunder100_s', price: 60000, unlockLevel: 24, icon: 'cz_cannon', length: 5.2, diameter: 0.7,
       desc: '100 mm cannon. 5 shells. One shell kills a tank. Big blast, slow fire, hard recoil.' }),
-    W({ id: 'sentry', type: 'gunpod', cz: 'turret', podMass: 480, weight: 1.05, name: 'Sentry auto-turret pod', short: 'SENTRY', targets: AGS, range: 1500, speed: 1100, damage: 5, rate: 9,
-      ammo: 450, cone: 75, spread: 0.006, price: 45000, unlockLevel: 18, icon: 'cz_turret', length: 2.8, diameter: 0.5,
-      desc: 'Auto. A 25 mm turret finds the nearest target in 75° and 1.5 km and fires by itself. Air and ground.' }),
+    W({ id: 'sentry', type: 'gunpod', cz: 'turret', podMass: 480, weight: 1.05, name: 'Sentry auto-turret pod', short: 'SENTRY', targets: AGS, range: 2600, speed: 1250, damage: 5, rate: 9,
+      ammo: 450, cone: 75, spread: 0.0045, price: 45000, unlockLevel: 18, icon: 'cz_turret', length: 2.8, diameter: 0.5,
+      desc: 'Auto. A 25 mm turret finds the nearest target in 75° and 2.6 km and fires by itself. Air and ground.' }),
+    W({ id: 'sentryc', type: 'gunpod', cz: 'turret', podMass: 820, weight: 2.4, name: 'Sentry-C auto-cannon pod', short: 'SENTRY-C', targets: AGS, range: 4000, speed: 1050, damage: 46, blast: 9, rate: 1.8,
+      ammo: 80, cone: 75, spread: 0.0022, groundMul: 1.4, price: 70000, unlockLevel: 26, icon: 'cz_turret', length: 3.4, diameter: 0.6,
+      desc: 'Auto. A 40 mm cannon turret finds the nearest target in 75° and 4 km and fires by itself. Slow, heavy explosive shells. Air and ground.' }),
     W({ id: 'twinmg', type: 'gunpod', podMass: 260, weight: 0.087, name: 'Twin minigun pod', short: 'MINIGUN', targets: AGS, range: 900, speed: 950, damage: 2.6, rate: 110, ammo: 3000,
       spread: 0.011, groundMul: 1.2, price: 12000, unlockLevel: 7, length: 2.6, diameter: 0.45, desc: 'Two miniguns: 6,600 rounds a minute, 3,000 rounds. A wide hose of lead.' }),
     W({ id: 'flak57', type: 'gunpod', cz: 'flak', podMass: 750, weight: 18.75, name: 'Flak 57 proximity pod', short: 'FLAK57', targets: ['air', 'ground'], range: 2600, speed: 1000, damage: 70, blast: 20,
@@ -35090,7 +35093,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"uh60m":{"side":"data:image/webp;base64,UklGRgAn
     }
 
     // ---------------------------------------------------------------- Sentry auto-turret (fires by itself)
-    var hitAgg = {}, hitAggT = 0;
+    var hitAgg = {}, hitW = {}, hitAggT = 0;
     function turretStep(h) {
       var wl = K.wl(), hv = FL.HEAVY_RT;
       if (hv && hv.on && (hv.mode === 'hold' || hv.mode === 'msl')) return;   // turrets.js fire mode (key 5): HOLD FIRE / MISSILES ONLY hold the Sentry too
@@ -35108,16 +35111,16 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"uh60m":{"side":"data:image/webp;base64,UklGRgAn
           var sd = s.spread || 0.006; vB.x += rand(-sd, sd); vB.y += rand(-sd, sd); vB.z += rand(-sd, sd); vB.normalize();
           vC.copy(vB).multiplyScalar(spd);
           vC.addScaledVector(K.pF, noseSpeed());          // rounds keep the jet's speed along the nose (same frame as leadFor)
-          if (K.client()) { K.tracer(vA, vC, 1); if (Math.random() < clamp(0.85 - d / (s.range || 1500) * 0.6, 0.2, 0.75)) hitAgg[t.id] = (hitAgg[t.id] || 0) + 1; }
+          if (K.client()) { K.tracer(vA, vC, 1); if (Math.random() < clamp(0.85 - d / (s.range || 1500) * 0.6, 0.2, 0.75)) { hitAgg[t.id] = (hitAgg[t.id] || 0) + 1; hitW[t.id] = s.id; } }
           else K.bullet(vA, vC, (s.damage || 5) * K.LO.gunDamageMul, s, 1, LP, false);
           w.czSnd = (w.czSnd || 0) + 1;
-          if (w.czSnd % 3 === 1) { K.play('gun', { gun: 'gsh23', pod: true }); if (fx.muzzle) fx.muzzle(vA.clone(), vB); }
+          if (s.rate < 4 || w.czSnd % 3 === 1) { K.play('gun', { gun: s.rate < 4 ? 'gsh30' : 'gsh23', pod: true }); if (fx.muzzle) fx.muzzle(vA.clone(), vB); }
           K.stats.playerRounds++;
         }
       }
       if (K.client()) {
         hitAggT += h;
-        if (hitAggT >= 0.25) { hitAggT = 0; for (var id in hitAgg) { if (hitAgg[id] > 0) net().sendEvent({ t: 'cz', k: 'hit', w: 'sentry', tid: +id, n: hitAgg[id], gm: K.LO.gunDamageMul }); delete hitAgg[id]; } }
+        if (hitAggT >= 0.25) { hitAggT = 0; for (var id in hitAgg) { if (hitAgg[id] > 0) net().sendEvent({ t: 'cz', k: 'hit', w: hitW[id] || 'sentry', tid: +id, n: hitAgg[id], gm: K.LO.gunDamageMul }); delete hitAgg[id]; } }
       }
     }
     function turretPick(s) {
@@ -47414,10 +47417,11 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"uh60m":{"side":"data:image/webp;base64,UklGRgAn
   // rate rounds/s (one tracer each), dmg per round, speed m/s, range m, spread rad, cls 0/1/2 (tracer + hit look), heat per s of fire (1 = overheat),
   // slew deg/s, burst [min, max] s, gap [min, max] s. Damage x Gun upgrade; rounds that hit a missile roll the point-defence chance.
   var G = FL.TURRET_GUNS = {
-    m61t: { name: 'M61A1 20 mm', rate: 22, dmg: 8, speed: 1050, range: 1700, spread: 0.0035, cls: 0, heat: 0.22, slew: 140, burst: [0.9, 1.7], gap: [0.25, 0.5], snd: 'm61' },
-    gsh23t: { name: '2 x GSh-23 23 mm', rate: 24, dmg: 8.5, speed: 980, range: 1600, spread: 0.0045, cls: 1, heat: 0.22, slew: 120, burst: [0.9, 1.6], gap: [0.25, 0.5], snd: 'gsh23' },
-    gau12t: { name: 'GAU-12 25 mm', rate: 18, dmg: 9.5, speed: 1050, range: 1800, spread: 0.003, cls: 1, heat: 0.2, slew: 130, burst: [0.8, 1.5], gap: [0.25, 0.5], snd: 'm61' },
-    akan30t: { name: '2 x 30 mm', rate: 11, dmg: 19, speed: 1000, range: 2100, spread: 0.003, cls: 2, blast: 3, heat: 0.18, slew: 110, burst: [1.0, 2.0], gap: [0.3, 0.6], snd: 'gsh30' },
+    m61t: { name: 'M61A1 20 mm', rate: 22, dmg: 8, speed: 1050, range: 2700, spread: 0.0035, cls: 0, heat: 0.22, slew: 140, burst: [0.9, 1.7], gap: [0.25, 0.5], snd: 'm61' },
+    gsh23t: { name: '2 x GSh-23 23 mm', rate: 24, dmg: 8.5, speed: 980, range: 2600, spread: 0.0045, cls: 1, heat: 0.22, slew: 120, burst: [0.9, 1.6], gap: [0.25, 0.5], snd: 'gsh23' },
+    gau12t: { name: 'GAU-12 25 mm', rate: 18, dmg: 9.5, speed: 1050, range: 2900, spread: 0.003, cls: 1, heat: 0.2, slew: 130, burst: [0.8, 1.5], gap: [0.25, 0.5], snd: 'm61' },
+    akan30t: { name: '2 x 30 mm', rate: 11, dmg: 19, speed: 1000, range: 3300, spread: 0.003, cls: 2, blast: 3, heat: 0.18, slew: 110, burst: [1.0, 2.0], gap: [0.3, 0.6], snd: 'gsh30' },
+    c40t: { name: '40 mm auto-cannon', rate: 2.4, dmg: 46, speed: 1050, range: 4200, spread: 0.0018, cls: 2, blast: 9, groundMul: 1.4, heat: 0.12, slew: 75, burst: [1.2, 2.4], gap: [0.4, 0.8], snd: 'gsh30' },
     m102: { name: 'M102 105 mm', rate: 0.42, dmg: 260, speed: 520, range: 5200, spread: 0.0012, cls: 2, blast: 26, groundMul: 1.6, heat: 0, slew: 45, burst: [99, 99], gap: [0, 0], snd: 'gsh30' },
     // enemy turrets: dmg = player damage per hit (x difficulty in combat.hitPlayer); skill scales spread and reaction
     e_tail: { rate: 14, dmg: 4.5, speed: 950, range: 1500, spread: 0.007, cls: 1, heat: 0.2, slew: 100, burst: [0.8, 1.5], gap: [0.5, 1.2] },
@@ -52968,7 +52972,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"uh60m":{"side":"data:image/webp;base64,UklGRgAn
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793218613', updShown = false;
+  var BUILD = '1793226773', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
