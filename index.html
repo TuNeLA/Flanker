@@ -35468,6 +35468,11 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"uh60m":{"side":"data:image/webp;base64,UklGRgAn
       return geo;
     }
     var Q4 = [0, 0, 0, 0];
+    function radTex(stops) {   // radial alpha texture on the unit disc (alphaMap for flat rings: soft edges)
+      var c = document.createElement('canvas'); c.width = c.height = 256; var g = c.getContext('2d'), gr = g.createRadialGradient(128, 128, 0, 128, 128, 128);
+      for (var i = 0; i < stops.length; i += 2) { var v = Math.round(255 * stops[i + 1]); gr.addColorStop(stops[i], 'rgb(' + v + ',' + v + ',' + v + ')'); }
+      g.fillStyle = gr; g.fillRect(0, 0, 256, 256); return new THREE.CanvasTexture(c);
+    }
     function buildNV() {
       var g = new THREE.Group(); g.visible = false; scene.add(g);
       function mat(o) { return new THREE.MeshBasicMaterial(Object.assign({ vertexColors: true, transparent: true, side: THREE.DoubleSide }, o)); }
@@ -35476,13 +35481,13 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"uh60m":{"side":"data:image/webp;base64,UklGRgAn
         var yy = y * 0.52; if (yy < -0.08) yy = -0.08 + (yy + 0.08) * 0.25;
         var rim = 1 + 0.16 * Math.exp(-Math.pow((y + 0.1) / 0.28, 2));
         Q4[0] = x * rim; Q4[1] = yy; Q4[2] = z * rim; Q4[3] = y * 0.5 + 0.55; return Q4;
-      }, [0.95, 0.92, 0.88], [0.42, 0.36, 0.33], 0.13, 1.7);
+      }, [0.94, 0.9, 0.84], [0.3, 0.25, 0.22], 0.14, 1.7);
       var cap = new THREE.Mesh(capG, mat({ opacity: 0.98 })), cap2 = new THREE.Mesh(capG, mat({ opacity: 0.4, depthWrite: false }));
       cap2.scale.set(1.14, 1.2, 1.14); cap.renderOrder = 3; cap2.renderOrder = 4;
       // stem: open cylinder, wide at the base, noisy
       var stemG = shapeGeo(new THREE.CylinderGeometry(0.42, 1, 1, 28, 14, true).translate(0, 0.5, 0), function (x, y, z) {
         var fl = y < 0.16 ? 1 + (0.16 - y) * 5 : 1; Q4[0] = x * fl; Q4[1] = y; Q4[2] = z * fl; Q4[3] = y; return Q4;
-      }, [0.78, 0.72, 0.66], [0.38, 0.33, 0.3], 0.16, 4.1);
+      }, [0.72, 0.64, 0.56], [0.3, 0.26, 0.23], 0.16, 4.1);
       var stem = new THREE.Mesh(stemG, mat({ opacity: 0.96 })); stem.renderOrder = 2;
       // skirt (condensation ring around the stem) + base surge
       var torG = shapeGeo(new THREE.TorusGeometry(1, 0.3, 10, 48).rotateX(Math.PI / 2), function (x, y, z) { Q4[0] = x; Q4[1] = y; Q4[2] = z; Q4[3] = y * 1.5 + 0.5; return Q4; }, [0.96, 0.96, 0.96], [0.62, 0.6, 0.58], 0.12, 2.3);
@@ -35493,8 +35498,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"uh60m":{"side":"data:image/webp;base64,UklGRgAn
       var ball = new THREE.Mesh(ballG, new THREE.MeshBasicMaterial({ vertexColors: true, color: new THREE.Color(9, 7, 4), transparent: true, fog: false }));
       ball.renderOrder = 5;
       // shock ring on the ground + condensation sphere (Wilson cloud)
-      var ring = new THREE.Mesh(new THREE.RingGeometry(0.975, 1, 160, 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.5, 2.4, 2.2), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
-      var dust = new THREE.Mesh(new THREE.RingGeometry(0.55, 1, 96, 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xb8aa94, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+      var ring = new THREE.Mesh(new THREE.RingGeometry(0.9, 1, 160, 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 1.55, 1.45), alphaMap: radTex([0, 0, 0.9, 0, 0.965, 1, 1, 0]), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+      var dust = new THREE.Mesh(new THREE.CircleGeometry(1, 96).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x8f8170, alphaMap: radTex([0, 0.55, 0.5, 0.75, 0.8, 0.6, 1, 0]), transparent: true, depthWrite: false, side: THREE.DoubleSide }));
       var wil = new THREE.Mesh(new THREE.SphereGeometry(1, 28, 14), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.3, depthWrite: false, side: THREE.DoubleSide }));
       var glow = new THREE.Sprite(glowMat(0xffd6a0)); glow.material = new THREE.SpriteMaterial({ map: glowTexture(), color: new THREE.Color(6, 4.5, 3), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, fog: false });
       [cap, cap2, stem, skirt, surge, ball, ring, dust, wil].forEach(function (o) { o.frustumCulled = false; g.add(o); });
@@ -35507,7 +35512,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"uh60m":{"side":"data:image/webp;base64,UklGRgAn
       if (!NV) NV = buildNV();
       NV.on = true; NV.t = 0; NV.p.copy(p); NV.r = 0; NV.puffT = 0; NV.puffN = 0; NV.shook = false; NV.wet = K.isWater(p.x, p.z);
       NV.g.position.copy(p); NV.g.visible = true;
-      NV.dust.material.color.setHex(NV.wet ? 0xe8eef2 : 0xb8aa94);
+      NV.dust.material.color.setHex(NV.wet ? 0xcfd8dc : 0x8f8170);
       shockLocal = NV;
       // white-out by distance and view direction
       var cam = K.camera, k = 1;
@@ -35548,7 +35553,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"uh60m":{"side":"data:image/webp;base64,UklGRgAn
       V.ball.material.opacity = clamp(1.6 - t / 8, 0, 1); V.ball.visible = V.ball.material.opacity > 0.01;
       V.glow.position.y = V.ball.position.y; var gs = 2600 * clamp(1.2 - t / 6, 0.1, 1.2); V.glow.scale.set(gs, gs, 1); V.glow.material.opacity = clamp(1.3 - t / 5, 0, 1);
       // stem + cap rise
-      var H = 2300 * (1 - Math.exp(-t / 7)), cR = 950 * (1 - Math.exp(-t / 5)) + 60, sR = 120 + 120 * (1 - Math.exp(-t / 6));
+      var H = 2900 * (1 - Math.exp(-t / 7)), cR = 1250 * (1 - Math.exp(-t / 5)) + 60, sR = 150 + 170 * (1 - Math.exp(-t / 6));
       V.stem.scale.set(sR, Math.max(1, H), sR); V.stem.visible = t > 0.6;
       V.cap.position.y = H + cR * 0.12; V.cap.scale.set(cR, cR * 0.95, cR); V.cap.rotation.y += h * 0.05; V.cap.visible = t > 0.4;
       V.cap2.position.y = V.cap.position.y; V.cap2.scale.set(cR * 1.14, cR * 1.15, cR * 1.14); V.cap2.rotation.y -= h * 0.03;
@@ -35559,8 +35564,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"uh60m":{"side":"data:image/webp;base64,UklGRgAn
       cTmp.copy(GREY).lerp(HOT, hot); V.cap.material.color.copy(cTmp); V.stem.material.color.copy(cTmp);
       cTmp.copy(GREY).lerp(HOT, hot * 0.6); V.cap2.material.color.copy(cTmp);
       // shock ring + dust + Wilson cloud
-      V.ring.position.y = 6; V.ring.scale.set(Math.max(1, V.r), 1, Math.max(1, V.r)); V.ring.material.opacity = clamp(1 - V.r / 7000, 0, 1) * 0.9; V.ring.visible = V.r < 7000;
-      V.dust.position.y = 4; var dR = Math.min(V.r * 0.9, 4200); V.dust.scale.set(Math.max(1, dR), 1, Math.max(1, dR)); V.dust.material.opacity = clamp(0.55 - t / 40, 0, 0.55);
+      V.ring.position.y = 6; V.ring.scale.set(Math.max(1, V.r), 1, Math.max(1, V.r)); V.ring.material.opacity = clamp(1 - V.r / 4500, 0, 1) * 0.8; V.ring.visible = V.r < 4500;
+      V.dust.position.y = 4; var dR = Math.min(V.r * 0.8, 3200); V.dust.scale.set(Math.max(1, dR), 1, Math.max(1, dR)); V.dust.material.opacity = clamp(0.5 - t / 30, 0, 0.5); V.dust.visible = V.dust.material.opacity > 0.01;
       var wk = clamp(t / 1.3, 0, 1); V.wil.scale.setScalar(Math.max(1, 1900 * wk)); V.wil.position.y = 200; V.wil.material.opacity = 0.32 * (1 - wk); V.wil.visible = wk < 1;
       // long fade: the cloud stays ~1 min
       var A = clamp(1 - (t - 50) / 20, 0, 1);
@@ -52960,7 +52965,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"uh60m":{"side":"data:image/webp;base64,UklGRgAn
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793216267', updShown = false;
+  var BUILD = '1793216743', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
