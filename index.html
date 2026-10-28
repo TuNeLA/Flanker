@@ -9860,11 +9860,11 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   }
   function canopy(P, st) { P.canSt = st; }
 
-  // decal plane: cell 0 = emblem (left half of atlas), 1 = code text (right half)
+  // decal plane: cells of the decal atlas: 0 = national marking, 1 = code text, 2 = unit badge, 3 = fin marking
   function decal(cell, w, h, orient, x, y, z) {
     const g = new T.PlaneGeometry(w, h);
     const uv = g.attributes.uv;
-    for (let i = 0; i < uv.count; i++) uv.setX(i, cell * 0.5 + uv.getX(i) * 0.5);
+    for (let i = 0; i < uv.count; i++) uv.setX(i, cell * 0.25 + 0.002 + uv.getX(i) * 0.246);
     if (orient === 'top') g.rotateX(-Math.PI / 2);
     else if (orient === 'bottom') g.rotateX(Math.PI / 2);
     else if (orient === 'right') g.rotateY(Math.PI / 2);
@@ -9876,146 +9876,272 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   }
 
   // ------------------------------------------------------------------ textures
-  function valueNoise(R, gx, gy) {
-    const G = []; for (let i = 0; i < (gx + 2) * (gy + 2); i++) G.push(R());
-    return (u, v) => { // u in [0,gx], v in [0,gy]
-      const i = Math.floor(u), j = Math.floor(v), fu = u - i, fv = v - j;
-      const s = (a) => a * a * (3 - 2 * a), a = s(fu), b = s(fv);
-      const at = (ii, jj) => G[Math.min(gy + 1, jj) * (gx + 2) + Math.min(gx + 1, ii)];
-      return (at(i, j) * (1 - a) + at(i + 1, j) * a) * (1 - b) + (at(i, j + 1) * (1 - a) + at(i + 1, j + 1) * a) * b;
+  // unbounded value noise on a hashed lattice (metre space)
+  function hnoise(seed) {
+    const h = (i, j) => { let n = (i * 374761393 + j * 668265263 + seed * 2147483647) | 0; n = Math.imul(n ^ (n >>> 13), 1274126177); return ((n ^ (n >>> 16)) >>> 0) / 4294967296; };
+    return (u, v) => {
+      const i = Math.floor(u), j = Math.floor(v), fu = u - i, fv = v - j, s = (a) => a * a * (3 - 2 * a), a = s(fu), b = s(fv);
+      return (h(i, j) * (1 - a) + h(i + 1, j) * a) * (1 - b) + (h(i, j + 1) * (1 - a) + h(i + 1, j + 1) * a) * b;
     };
   }
-  // body atlas: top half of canvas = upper surfaces, bottom half = under surfaces. u = along the length.
-  function bodyTexture(def, liv) {
-    const L = liv || def.liv, W = 2048, H = 2048, c = mkCanvas(W, H), x = c.getContext('2d');
-    const R = mulberry(def.seed || 7);
-    x.fillStyle = L.base; x.fillRect(0, 0, W, H / 2);
-    x.fillStyle = L.under; x.fillRect(0, H / 2, W, H / 2);
-    if (L.pattern === 'pixel') {
-      const n1 = valueNoise(R, 18, 6), n2 = valueNoise(R, 30, 10), cell = 12;
-      for (let cy = 0; cy < H / 2; cy += cell) for (let cx = 0; cx < W; cx += cell) {
-        const v = 0.65 * n1(cx / W * 18, cy / (H / 2) * 6) + 0.35 * n2(cx / W * 30, cy / (H / 2) * 10) + (R() - 0.5) * 0.12;
-        let t = -1;
-        for (let k = 0; k < L.thr.length; k++) if (v > L.thr[k]) t = k;
-        if (t >= 0) { x.fillStyle = L.tones[t]; x.fillRect(cx, cy, cell, cell); }
+  // ---- body atlas layout ----
+  // v in [0, VF0]: under surfaces, [VF0, VU0]: fins (both faces share texels), [VU0, 1]: upper surfaces + sides; u = along the length.
+  // The lateral coordinate is "unwrapped": it keeps growing down the fuselage sides (upper region) and up the sides (under region),
+  // so camouflage and panel lines on the sides are not stretched. Region is chosen per triangle (no smeared seams).
+  const VF0 = 0.43, VU0 = 0.57, KY = 0.85;
+  function atlasOf(def) {
+    if (def.AT) return def.AT;
+    const z0 = def.len[0], zl = def.len[1] - def.len[0], yr = def.yRef || [1.0, -1.0];
+    const hsU = def.hs + KY * (yr[0] + 0.45), fy = def.finY || [0, 3];
+    const lat = (x, y, under) => x + KY * Math.tanh(x / 0.3) * (under ? y - yr[1] : yr[0] - y);
+    const ks = 0.976 / (2 * hsU);
+    const S = (s) => clamp01(0.5 + ks * s);
+    const U = (z) => clamp01((z - z0) / zl);
+    const fk = 0.94 / (fy[1] - fy[0]);
+    return (def.AT = {
+      z0, zl, hsU, fy, lat, U, S,
+      VT: (x, y) => VU0 + (1 - VU0) * S(lat(x, y === undefined ? 0.1 : y, false)),
+      VB: (x, y) => VF0 * S(lat(x, y === undefined ? -0.1 : y, true)),
+      VF: (y) => VF0 + (VU0 - VF0) * (0.03 + 0.94 * clamp01((y - fy[0]) / (fy[1] - fy[0]))),
+      // canvas transforms metres -> pixels per region: px = a * z + e, py = d * s + f (s = lateral, or height y on the fins)
+      regions(W, H) {
+        const a = W / zl, e = -z0 * a;
+        return [
+          { name: 'up', a, e, d: -H * (1 - VU0) * ks, f: H * (1 - VU0) * 0.5, y0: 0, y1: H * (1 - VU0), s0: -hsU, s1: hsU },
+          { name: 'fin', a, e, d: -H * (VU0 - VF0) * fk, f: H * (1 - VF0 - (VU0 - VF0) * 0.03) + H * (VU0 - VF0) * fk * fy[0], y0: H * (1 - VU0), y1: H * (1 - VF0), s0: fy[0] - 0.1, s1: fy[1] + 0.1 },
+          { name: 'under', a, e, d: -H * VF0 * ks, f: H * (1 - 0.5 * VF0), y0: H * (1 - VF0), y1: H, s0: -hsU, s1: hsU },
+        ];
+      },
+    });
+  }
+  // per-triangle atlas UVs; fin = geometry belongs to a vertical / canted fin
+  function bodyUV(def, g, fin) {
+    const A = atlasOf(def), p = g.attributes.position, nr = g.attributes.normal, n = p.count, uv = new Float32Array(n * 2);
+    for (let t = 0; t + 2 < n; t += 3) {
+      const ny = (nr.getY(t) + nr.getY(t + 1) + nr.getY(t + 2)) / 3;
+      for (let k = t; k < t + 3; k++) {
+        const X = p.getX(k), Y = p.getY(k);
+        uv[k * 2] = A.U(p.getZ(k));
+        uv[k * 2 + 1] = fin ? A.VF(Y) : ny < -0.25 ? A.VB(X, Y) : A.VT(X, Y);
       }
-      // softer underside pixels
-      for (let cy = H / 2; cy < H; cy += cell) for (let cx = 0; cx < W; cx += cell) {
-        const v = n2(cx / W * 30, (cy - H / 2) / (H / 2) * 10) + (R() - 0.5) * 0.1;
-        if (v > 0.68) { x.fillStyle = L.underTone || L.under; x.fillRect(cx, cy, cell, cell); }
-      }
-    } else if (L.pattern === 'splinter') {
-      // Swedish "fyrfargs" splinter: Voronoi cells (straight-edged polygons) in metre space, 4 colours
-      const cw = 1024, ch = 256, img = x.createImageData(cw, ch), d = img.data;
-      const mx = def.len[1] - def.len[0], my = def.hs * 2;
-      const seeds = [], ns = Math.round(mx * my / 2.2);
-      for (let i = 0; i < ns; i++) seeds.push([R() * mx, R() * my, (R() * 4) | 0]);
-      const cols = L.cols.map((h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]);
-      for (let py = 0; py < ch; py++) for (let px = 0; px < cw; px++) {
-        const X = (px / cw) * mx, Y = (py / ch) * my;
-        let best = 1e9, bi = 0;
-        for (let i = 0; i < ns; i++) { const dx = seeds[i][0] - X, dy = (seeds[i][1] - Y) * 1.25, dd = dx * dx + dy * dy; if (dd < best) { best = dd; bi = i; } }
-        const col = cols[seeds[bi][2]], o = (py * cw + px) * 4;
-        d[o] = col[0]; d[o + 1] = col[1]; d[o + 2] = col[2]; d[o + 3] = 255;
-      }
-      const tmp = mkCanvas(cw, ch); tmp.getContext('2d').putImageData(img, 0, 0);
-      x.imageSmoothingEnabled = false;
-      x.drawImage(tmp, 0, 0, W, H / 2);
-    } else if (L.pattern === 'metal') {
-      // natural metal: panels with slightly different shine
-      for (const half of [0, 1]) {
-        for (let k = 0; k < 260; k++) {
-          const v = 0.9 + R() * 0.2, base = 196 * v;
-          x.fillStyle = `rgb(${base | 0},${(base * 1.01) | 0},${(base * 1.03) | 0})`;
-          x.fillRect(((R() * 24) | 0) * (W / 24), half * H / 2 + ((R() * 10) | 0) * (H / 20), W / 24 * (1 + ((R() * 2) | 0)), H / 20);
+    }
+    g.setAttribute('uv', new T.BufferAttribute(uv, 2));
+    return g;
+  }
+  // ---- camouflage patterns, drawn in metres (the region transform maps them into the atlas) ----
+  function blobPath(x, cx, cy, r, ar, R, nv, rot) {
+    const pts = [];
+    for (let i = 0; i < nv; i++) { const a = rot + (i / nv) * Math.PI * 2 + (R() - 0.5) * 0.55, rr = r * (0.5 + R() * 0.65); pts.push([cx + Math.cos(a) * rr * ar, cy + Math.sin(a) * rr]); }
+    const mid = (p, q) => [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2], m0 = mid(pts[nv - 1], pts[0]);
+    x.beginPath(); x.moveTo(m0[0], m0[1]);
+    for (let i = 0; i < nv; i++) { const q = pts[i], m = mid(q, pts[(i + 1) % nv]); x.quadraticCurveTo(q[0], q[1], m[0], m[1]); }
+    x.closePath();
+  }
+  // Voronoi cells as crisp polygons (Swedish splinter, Flanker "shark" splinter); neighbours never share a colour
+  function splinterCells(x, dom, cols, sp, R, opt) {
+    opt = opt || {};
+    const ks = opt.squash || 1, seeds = [];
+    for (let z = dom.z0 - sp; z < dom.z1 + sp; z += sp) for (let s = dom.s0 - sp; s < dom.s1 + sp; s += sp * ks) seeds.push([z + (R() - 0.5) * sp * 0.95, s + (R() - 0.5) * sp * ks * 0.95]);
+    const n = seeds.length, col = new Int8Array(n).fill(-1), d2 = (i, j) => { const dz = seeds[i][0] - seeds[j][0], ds = (seeds[i][1] - seeds[j][1]) / ks; return dz * dz + ds * ds; };
+    const near = (i, lim) => { const o = []; for (let j = 0; j < n; j++) if (j !== i && d2(i, j) < lim * lim * sp * sp) o.push(j); return o; };
+    const wts = opt.weights || cols.map(() => 1);
+    for (let i = 0; i < n; i++) {
+      const used = new Set(); for (const j of near(i, 1.6)) if (col[j] >= 0) used.add(col[j]);
+      let tot = 0; for (let k = 0; k < cols.length; k++) if (!used.has(k)) tot += wts[k];
+      let r = R() * tot, pick = (R() * cols.length) | 0;
+      for (let k = 0; k < cols.length; k++) { if (used.has(k)) continue; r -= wts[k]; if (r <= 0) { pick = k; break; } }
+      col[i] = pick;
+    }
+    for (let i = 0; i < n; i++) {
+      if (cols[col[i]] == null) continue;
+      const [zi, si] = seeds[i];
+      let poly = [[zi - 3 * sp, si - 3 * sp * ks], [zi + 3 * sp, si - 3 * sp * ks], [zi + 3 * sp, si + 3 * sp * ks], [zi - 3 * sp, si + 3 * sp * ks]];
+      for (const j of near(i, 3.2)) { // keep the half plane nearer to seed i (metric with s / ks)
+        const [zj, sj] = seeds[j], nz = zj - zi, ns = (sj - si) / (ks * ks), mz = (zi + zj) / 2, ms = (si + sj) / 2, out = [];
+        const f = (q) => (q[0] - mz) * nz + (q[1] - ms) * ns;
+        for (let k = 0; k < poly.length; k++) {
+          const A = poly[k], B = poly[(k + 1) % poly.length], fa = f(A), fb = f(B);
+          if (fa <= 0) out.push(A);
+          if ((fa < 0) !== (fb < 0)) { const t = fa / (fa - fb); out.push([A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t]); }
         }
+        poly = out; if (poly.length < 3) break;
       }
-    } else if (L.pattern === 'mottle') {
-      for (let k = 0; k < 900; k++) {
-        x.fillStyle = L.tones[(R() * L.tones.length) | 0];
-        x.globalAlpha = 0.25 + R() * 0.3;
-        x.beginPath(); x.ellipse(R() * W, R() * H / 2, 20 + R() * 60, 10 + R() * 30, R() * 3, 0, 6.3); x.fill();
+      if (poly.length < 3) continue;
+      x.fillStyle = cols[col[i]]; x.beginPath(); x.moveTo(poly[0][0], poly[0][1]);
+      for (let k = 1; k < poly.length; k++) x.lineTo(poly[k][0], poly[k][1]);
+      x.closePath(); x.fill();
+    }
+  }
+  function camo(x, L, dom, R, def) {
+    const under = dom.kind === 'under', fin = dom.kind === 'fin', P = L.pattern, w = dom.z1 - dom.z0, h = dom.s1 - dom.s0, area = w * h;
+    x.fillStyle = under ? L.under : L.base; x.fillRect(dom.z0 - 1, dom.s0 - 1, w + 2, h + 2);
+    if (P === 'metal') { // natural metal: panels with slightly different shine
+      const b = (under ? L.under : L.base).slice(1), c0 = [0, 2, 4].map((k) => parseInt(b.slice(k, k + 2), 16));
+      for (let z = dom.z0; z < dom.z1; z += 0.6 + R() * 0.9) for (let s = dom.s0; s < dom.s1; s += 0.35 + R() * 0.6) {
+        const v = 0.93 + R() * 0.13;
+        x.fillStyle = `rgb(${(c0[0] * v) | 0},${(c0[1] * v * 1.005) | 0},${(c0[2] * v * 1.01) | 0})`; x.fillRect(z, s, 0.6 + R() * 1.2, 0.35 + R() * 0.7);
+      }
+      return;
+    }
+    if (under && !L.underTones) { // counter-shaded underside: very soft low-contrast cloudiness
+      for (let k = 0; k < area * 0.6; k++) { x.globalAlpha = 0.05 + R() * 0.05; x.fillStyle = R() < 0.5 ? '#ffffff' : '#000000'; blobPath(x, dom.z0 + R() * w, dom.s0 + R() * h, 0.4 + R() * 1.2, 1.6, R, 6, R() * 6); x.fill(); }
+      x.globalAlpha = 1; return;
+    }
+    const tones = under ? L.underTones : L.tones || [];
+    if (P === 'blotch') { // Soviet/Russian soft-edged blotches; L.blot = [[density per 10 m2, rMin, rMax], ...] per tone
+      const bl = L.blot || tones.map(() => [1.2, 0.6, 1.6]);
+      tones.forEach((c, t) => {
+        const q = bl[t] || bl[bl.length - 1]; x.fillStyle = c;
+        for (let k = 0; k < (area / 10) * q[0]; k++) { blobPath(x, dom.z0 + R() * w, dom.s0 + R() * h, q[1] + R() * (q[2] - q[1]), L.aspect || 1.5, R, 7 + ((R() * 3) | 0), R() * 6.28); x.fill(); }
+      });
+    } else if (P === 'splinter') {
+      const cols = under ? L.underTones : L.cols;
+      splinterCells(x, dom, cols, (L.cell || 1.5) * (fin ? 0.8 : 1), R, { squash: L.squash || 1.15, weights: L.weights });
+    } else if (P === 'pixel') { // digital: square cells by layered noise (Su-57 style)
+      const n1 = hnoise((def.seed || 7) * 3 + (under ? 5 : 0)), n2 = hnoise((def.seed || 7) * 5 + 11), cell = L.cellM || 0.13, thr = L.thr;
+      for (let z = dom.z0; z < dom.z1; z += cell) for (let s = dom.s0; s < dom.s1; s += cell) {
+        const v = 0.62 * n1(z / 2.6, s / 1.7) + 0.38 * n2(z / 0.9, s / 0.7) + (R() - 0.5) * 0.08;
+        let t = -1; for (let k = 0; k < thr.length; k++) if (v > thr[k]) t = k;
+        if (t >= 0 && tones[t]) { x.fillStyle = tones[t]; x.fillRect(z, s, cell * 1.02, cell * 1.02); }
+      }
+    } else if (P === 'snake') { // aggressor desert "snake": sinuous diagonal bands
+      const bw = L.band || 1.1; let k = 0;
+      for (let z = dom.z0 - 6; z < dom.z1 + 6; z += bw * (1.6 + R() * 0.8), k++) {
+        const c = tones[k % tones.length]; if (!c) continue;
+        const ph = R() * 6, amp = 0.6 + R() * 0.5, f = 0.55 + R() * 0.3, sk = 0.9, ww = bw * (0.7 + R() * 0.5), pts = [];
+        for (let s = dom.s0; s <= dom.s1 + 0.01; s += 0.25) pts.push([z + sk * s + amp * Math.sin(s * f + ph), s]);
+        x.fillStyle = c; x.beginPath(); x.moveTo(pts[0][0], pts[0][1]);
+        for (const q of pts) x.lineTo(q[0], q[1]);
+        for (let i = pts.length - 1; i >= 0; i--) x.lineTo(pts[i][0] + ww * (0.8 + 0.3 * Math.sin(i * 0.4 + ph)), pts[i][1]);
+        x.closePath(); x.fill();
+      }
+    } else if (P === 'patches') { // fixed scheme (F-16 two-tone grey): polygons [[z, s], ...] mirrored, upper surfaces + fins
+      for (const pa of L.patches || []) {
+        if (fin && !pa.fin) continue;
+        x.fillStyle = pa.c;
+        for (const sg of fin ? [1] : [1, -1]) { x.beginPath(); pa.p.forEach((q, i) => (i ? x.lineTo(q[0], sg * q[1]) : x.moveTo(q[0], sg * q[1]))); x.closePath(); x.fill(); }
+      }
+      for (let k = 0; k < area * 0.5; k++) { x.globalAlpha = 0.04 + R() * 0.04; x.fillStyle = R() < 0.5 ? '#ffffff' : '#000000'; blobPath(x, dom.z0 + R() * w, dom.s0 + R() * h, 0.4 + R() * 1.0, 1.6, R, 6, R() * 6); x.fill(); }
+      x.globalAlpha = 1;
+    } else if (P === 'mottle') { // soft overlapping spots (paint-shop variants)
+      for (let k = 0; k < area * 2.2; k++) {
+        x.fillStyle = tones[(R() * tones.length) | 0]; x.globalAlpha = 0.25 + R() * 0.3;
+        x.beginPath(); x.ellipse(dom.z0 + R() * w, dom.s0 + R() * h, 0.25 + R() * 0.7, 0.12 + R() * 0.35, R() * 3, 0, 6.3); x.fill();
       }
       x.globalAlpha = 1;
     }
-    // grime
-    for (let k = 0; k < 5000; k++) {
-      x.fillStyle = R() < 0.5 ? 'rgba(0,0,0,0.045)' : 'rgba(255,255,255,0.035)';
-      x.fillRect(R() * W, R() * H, 2 + R() * 8, 2 + R() * 4);
-    }
+  }
+  function bodyTexture(def, liv) {
+    const L = liv || def.liv, W = 2048, H = 2048, c = mkCanvas(W, H), x = c.getContext('2d'), A = atlasOf(def);
+    A.regions(W, H).forEach((rg, i) => {
+      x.save(); x.beginPath(); x.rect(0, rg.y0, W, rg.y1 - rg.y0); x.clip();
+      x.setTransform(rg.a, 0, 0, rg.d, rg.e, rg.f);
+      camo(x, L, { z0: A.z0, z1: A.z0 + A.zl, s0: rg.s0, s1: rg.s1, kind: rg.name }, mulberry((def.seed || 7) * 31 + i * 7 + (L.pattern || '').length), def);
+      x.restore();
+    });
+    const R = mulberry(def.seed || 7);
+    // grime: small streaks along the airflow
+    for (let k = 0; k < 7000; k++) { x.fillStyle = R() < 0.55 ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.03)'; x.fillRect(R() * W, R() * H, 3 + R() * 14, 1 + R() * 3); }
     const uOf = (z) => (z - def.len[0]) / (def.len[1] - def.len[0]);
-    if (L.radome || def.liv.radome) { x.fillStyle = L.radome || def.liv.radome; x.fillRect(0, 0, uOf(def.radomeZ) * W, H); }
-    // panel lines, rivets, access panels, soot, wear
+    const rad = L.radome || def.liv.radome;
+    if (rad && def.radomeZ > def.len[0] + 0.05) {
+      x.fillStyle = rad; x.fillRect(0, 0, uOf(def.radomeZ) * W, H);
+      x.fillStyle = 'rgba(0,0,0,0.25)'; x.fillRect(uOf(def.radomeZ) * W - 2, 0, 3, H); // radome joint
+    }
     if (def.ops) K.renderOps(def.ops.ops, x, W, H, 'color');
+    // weathering in metres: oil / hydraulic streaks running aft on the belly and rear fuselage, exhaust soot tongues
+    const rgs = A.regions(W, H), fw = def.fusW || 1;
+    for (const rg of rgs) {
+      if (rg.name === 'fin') continue;
+      x.save(); x.beginPath(); x.rect(0, rg.y0, W, rg.y1 - rg.y0); x.clip(); x.setTransform(rg.a, 0, 0, rg.d, rg.e, rg.f);
+      const nS = rg.name === 'under' ? 70 : 26;
+      for (let k = 0; k < nS; k++) {
+        const z = A.z0 + A.zl * (0.25 + R() * 0.6), s = (R() - 0.5) * 2 * (fw + 0.8), len = 0.4 + R() * 2.2, wd = 0.02 + R() * 0.06;
+        const g = x.createLinearGradient(z, 0, z + len, 0); g.addColorStop(0, 'rgba(40,32,22,0.0)'); g.addColorStop(0.15, `rgba(40,32,22,${0.1 + R() * 0.16})`); g.addColorStop(1, 'rgba(40,32,22,0)');
+        x.fillStyle = g; x.fillRect(z, s, len, wd);
+      }
+      for (const e of def.engines) for (const sg of [-1, 1]) { // soot tongues behind the nozzles' edges on the rear fuselage
+        const s = e.x + sg * e.r * 0.8, g = x.createLinearGradient(e.z - 2.6, 0, e.z + 0.3, 0);
+        g.addColorStop(0, 'rgba(22,18,14,0)'); g.addColorStop(1, `rgba(22,18,14,${def.metalBody ? 0.4 : 0.32})`);
+        x.fillStyle = g; x.beginPath(); x.moveTo(e.z - 2.6, s); x.lineTo(e.z + 0.3, s - 0.35); x.lineTo(e.z + 0.3, s + 0.35); x.closePath(); x.fill();
+      }
+      x.restore();
+    }
     const tex = new T.CanvasTexture(c);
     tex.encoding = T.sRGBEncoding; tex.anisotropy = 8;
     return tex;
   }
   // panel lines / rivets / access panels / control surfaces / wear in body-atlas UV space
-  function bodyOps(def, wings, cs) {
-    const R = mulberry((def.seed || 7) * 7 + 3), ops = [];
-    const z0 = def.len[0], zl = def.len[1] - def.len[0], hs = def.hs;
-    const U = (z) => clamp01((z - z0) / zl);
-    const S = (x) => 0.03 + 0.94 * clamp01(0.5 + x / (2 * hs));
-    const VT = (x) => 0.5 + 0.5 * S(x), VB = (x) => 0.5 * S(x);
+  function bodyOps(def, wings, cs, fins) {
+    const R = mulberry((def.seed || 7) * 7 + 3), ops = [], A = atlasOf(def);
+    const z0 = def.len[0], zl = def.len[1] - def.len[0], U = A.U, VT = A.VT, VB = A.VB, VF = A.VF, fw = def.fusW || 1;
     const both = (f) => { f(VT); f(VB); };
-    const L = (za, xa, zb, xb, V, w) => ops.push({ t: 'line', u0: U(za), v0: V(xa), u1: U(zb), v1: V(xb), w });
-    const RV = (za, xa, zb, xb, V) => ops.push({ t: 'rivet', u0: U(za), v0: V(xa) + 0.003, u1: U(zb), v1: V(xb) + 0.003 });
-    for (const z of def.frames || []) { ops.push({ t: 'line', u0: U(z), v0: 0.02, u1: U(z), v1: 0.98 }); ops.push({ t: 'rivet', u0: U(z) + 0.004, v0: 0.04, u1: U(z) + 0.004, v1: 0.96 }); }
-    for (const x of [-0.35, 0.35]) { L(z0 + 2, x, z0 + 0.45 * zl, x, VT); RV(z0 + 2.5, x, z0 + 0.45 * zl, x, VT); }
-    for (const st of wings || []) for (const sg of [-1, 1]) both((V) => {
+    const L = (za, xa, zb, xb, V, w, y) => ops.push({ t: 'line', u0: U(za), v0: V(xa, y), u1: U(zb), v1: V(xb, y), w });
+    const RV = (za, xa, zb, xb, V, y) => ops.push({ t: 'rivet', u0: U(za), v0: V(xa, y) + 0.002, u1: U(zb), v1: V(xb, y) + 0.002 });
+    const sF = A.lat(fw, -0.6, false), sB = A.lat(fw, 0.6, true);
+    const vUp = [VU0 + (1 - VU0) * A.S(-sF), VU0 + (1 - VU0) * A.S(sF)], vUn = [VF0 * A.S(-sB), VF0 * A.S(sB)];
+    for (const z of def.frames || []) for (const vr of [vUp, vUn]) { ops.push({ t: 'line', u0: U(z), v0: vr[0], u1: U(z), v1: vr[1] }); ops.push({ t: 'rivet', u0: U(z) + 0.003, v0: vr[0], u1: U(z) + 0.003, v1: vr[1] }); }
+    const yTop = def.yTop || 0.55;
+    for (const x of [-0.35, 0.35]) { L(z0 + 2, x, z0 + 0.45 * zl, x, VT, 1, yTop); RV(z0 + 2.5, x, z0 + 0.45 * zl, x, VT, yTop); }
+    for (const x of [-fw * 0.9, fw * 0.9]) { L(z0 + 1.5, x, z0 + 0.9 * zl, x, VT, 1, 0); L(z0 + 1.5, x, z0 + 0.9 * zl, x, VB, 1, 0); } // side longerons
+    for (const st of wings || []) for (const sg of [-1, 1]) for (const V of [VT, VB]) {
       const n = st.length, a0 = st[Math.min(n - 1, Math.floor(n * 0.3))], a1 = st[n - 1], m = st[Math.floor(n * 0.65)];
-      const te = (q, f) => q[2] - f * (q[2] - q[1]), le = (q, f) => q[1] + f * (q[2] - q[1]);
-      L(te(a0, 0.24), sg * a0[0], te(a1, 0.26), sg * a1[0], V, 1.5); // flaps / ailerons / elevons
-      L(te(m, 0.25), sg * m[0], m[2], sg * m[0], V, 1.3); // split between inner and outer surface
-      L(le(st[1], 0.1), sg * st[1][0], le(a1, 0.12), sg * a1[0], V, 1.2); // leading-edge line
-      L(le(st[0], 0.45), sg * st[0][0], le(a1, 0.45), sg * a1[0], V, 1); // main spar
-      for (let i = 1; i < n - 1; i += Math.max(1, (n / 5) | 0)) RV(le(st[i], 0.15), sg * st[i][0], te(st[i], 0.3), sg * st[i][0], V);
+      const te = (q, f) => q[2] - f * (q[2] - q[1]), le = (q, f) => q[1] + f * (q[2] - q[1]), wy = (q) => q[4] + (V === VT ? 0.05 : -0.05);
+      const LW = (za, qa, zb, qb, w) => ops.push({ t: 'line', u0: U(za), v0: V(sg * qa[0], wy(qa)), u1: U(zb), v1: V(sg * qb[0], wy(qb)), w });
+      LW(te(a0, 0.24), a0, te(a1, 0.26), a1, 1.5); // flaps / ailerons / elevons
+      LW(te(m, 0.25), m, m[2], m, 1.3);
+      LW(le(st[1], 0.1), st[1], le(a1, 0.12), a1, 1.2); // leading-edge slat / flap line
+      LW(le(st[0], 0.45), st[0], le(a1, 0.45), a1, 1); // main spar
+      for (let i = 1; i < n - 1; i += Math.max(1, (n / 5) | 0)) ops.push({ t: 'rivet', u0: U(le(st[i], 0.15)), v0: V(sg * st[i][0], wy(st[i])) + 0.002, u1: U(te(st[i], 0.3)), v1: V(sg * st[i][0], wy(st[i])) + 0.002 });
       const pz = le(st[1], 0.5), px = st[1][0] + 0.3;
-      ops.push({ t: 'panel', u0: U(pz), v0: V(sg * px), u1: U(pz + 0.6), v1: V(sg * (px + 0.5)), c: (R() - 0.5) * 0.08, screws: true });
-    });
-    for (let k = 0; k < 22; k++) { // fuselage access panels
-      const z = z0 + 1.5 + R() * (zl - 3), x = (R() - 0.5) * 1.6, w = 0.3 + R() * 0.6, h = 0.2 + R() * 0.4, V = R() < 0.6 ? VT : VB;
-      const va = V(x), vb = V(x + h);
+      ops.push({ t: 'panel', u0: U(pz), v0: Math.min(V(sg * px, wy(st[1])), V(sg * (px + 0.5), wy(st[1]))), u1: U(pz + 0.6), v1: Math.max(V(sg * px, wy(st[1])), V(sg * (px + 0.5), wy(st[1]))), c: (R() - 0.5) * 0.08, screws: true });
+      if (V === VT) for (let k = 0; k < 40; k++) { // leading-edge paint wear
+        const q = st[1 + ((R() * (n - 1)) | 0)], f = R() * 0.06;
+        ops.push({ t: 'dot', u: U(le(q, f)), v: V(sg * (q[0] - R() * 0.4), wy(q)), s: 0.0015 + R() * 0.002, a: 0.25 + R() * 0.25, light: true });
+      }
+    }
+    for (const F of fins || []) { // fins: root line, rudder hinge, rivet rows, darker dielectric tip cap
+      const st = F.st, n = st.length; if (n < 2) continue;
+      const y0 = st[0][0], y1 = st[n - 1][0], at = (f) => st[Math.min(n - 1, Math.round(f * (n - 1)))];
+      ops.push({ t: 'line', u0: U(st[0][1]), v0: VF(y0 + 0.08), u1: U(st[0][2]), v1: VF(y0 + 0.08), w: 1.2 });
+      const a = at(0.1), b = at(0.9);
+      ops.push({ t: 'line', u0: U(a[2] - 0.28 * (a[2] - a[1])), v0: VF(a[0]), u1: U(b[2] - 0.28 * (b[2] - b[1])), v1: VF(b[0]), w: 1.4 });
+      for (const f of [0.3, 0.55, 0.8]) { const q = at(f); ops.push({ t: 'rivet', u0: U(q[1] + 0.15), v0: VF(q[0]), u1: U(q[2] - 0.3 * (q[2] - q[1])), v1: VF(q[0]) }); }
+      const tq = at(0.92);
+      ops.push({ t: 'panel', u0: U(tq[1] - 0.05), v0: VF(tq[0]), u1: U(st[n - 1][2] + 0.05), v1: VF(y1 + 0.05), c: -0.22, r: -0.2 });
+    }
+    for (let k = 0; k < 24; k++) { // fuselage access panels
+      const z = z0 + 1.5 + R() * (zl - 3), x = (R() - 0.5) * 1.8 * fw, w = 0.3 + R() * 0.6, h = 0.2 + R() * 0.4, V = R() < 0.6 ? VT : VB;
+      const yy = V === VT ? yTop * (1 - Math.abs(x) / (fw + 0.2)) : -0.3;
+      const va = V(x, yy), vb = V(x + h, yy);
       ops.push({ t: 'panel', u0: U(z), v0: Math.min(va, vb), u1: U(z + w), v1: Math.max(va, vb), c: (R() - 0.5) * 0.08, screws: true, r: (R() - 0.5) * 0.12 });
     }
-    for (const e of def.engines) ops.push({ t: 'soot', u0: U(e.z - 2.4), v0: 0.02, u1: U(e.z + 0.1), v1: 0.98, a: def.metalBody ? 0.35 : 0.28 });
+    for (const e of def.engines) for (const vr of [[VU0 + (1 - VU0) * A.S(A.lat(e.x - e.r - 1.2, 0, false)), VU0 + (1 - VU0) * A.S(A.lat(e.x + e.r + 1.2, 0, false))], [VF0 * A.S(A.lat(e.x - e.r - 1.2, 0, true)), VF0 * A.S(A.lat(e.x + e.r + 1.2, 0, true))]])
+      ops.push({ t: 'soot', u0: U(e.z - 2.4), v0: Math.min(vr[0], vr[1]), u1: U(e.z + 0.1), v1: Math.max(vr[0], vr[1]), a: def.metalBody ? 0.35 : 0.26 });
     // stencils: NO STEP on the wing roots, rescue arrows + ejection triangles at the canopy, small panel numbers
     {
       const NS = def.nation === 'RU' ? 'НЕ СТУПАТЬ' : def.nation === 'SE' ? 'TRAMPA EJ' : 'NO STEP', RS = def.nation === 'RU' ? 'СПАСЕНИЕ' : def.nation === 'SE' ? 'RÄDDNING' : 'RESCUE';
       const dark = def.liv.base && parseInt(def.liv.base.slice(1, 3), 16) < 70, ink = dark ? 'rgba(230,230,225,0.8)' : 'rgba(20,22,24,0.8)';
       const st = wings && wings[0];
       if (st && st.length > 2) for (const sg of [-1, 1]) {
-        const q = st[Math.min(2, st.length - 1)], zm = (q[1] + q[2]) / 2;
-        ops.push({ t: 'text', u: U(zm), v: VT(sg * (q[0] + 0.3)), s: 15, txt: NS, col: ink });
-        ops.push({ t: 'line', u0: U(zm - 0.5), v0: VT(sg * (q[0] - 0.05)), u1: U(zm + 0.5), v1: VT(sg * (q[0] - 0.05)), w: 1.2, col: dark ? 'rgba(230,230,225,0.6)' : 'rgba(20,20,20,0.5)' });
+        const q = st[Math.min(2, st.length - 1)], zm = (q[1] + q[2]) / 2, y = q[4] + 0.05;
+        ops.push({ t: 'text', u: U(zm), v: VT(sg * (q[0] + 0.3), y), s: 15, txt: NS, col: ink });
+        ops.push({ t: 'line', u0: U(zm - 0.5), v0: VT(sg * (q[0] - 0.05), y), u1: U(zm + 0.5), v1: VT(sg * (q[0] - 0.05), y), w: 1.2, col: dark ? 'rgba(230,230,225,0.6)' : 'rgba(20,20,20,0.5)' });
       }
       if (cs && cs.length > 2) {
-        const zf = cs[1][0], zr = cs[cs.length - 1][0];
+        const zf = cs[1][0], zr = cs[cs.length - 1][0], yr = cs[1][1];
         for (const sg of [-1, 1]) {
-          ops.push({ t: 'tri', u: U(zf + 0.35), v: VT(sg * 0.55), s: 13, col: '#d81e1e', edge: '#f2d020' });
-          ops.push({ t: 'text', u: U(zr + 0.5), v: VT(sg * 0.42), s: 10, txt: '◄ ' + RS, col: '#d81e1e' });
+          ops.push({ t: 'tri', u: U(zf + 0.35), v: VT(sg * 0.62, yr - 0.1), s: 13, col: '#d81e1e', edge: '#f2d020' });
+          ops.push({ t: 'text', u: U(zr + 0.5), v: VT(sg * 0.5, yr - 0.05), s: 10, txt: '◄ ' + RS, col: '#d81e1e' });
         }
       }
-      for (let k = 0; k < 26; k++) { const z = z0 + 1.5 + R() * (zl - 3), x = (R() - 0.5) * 2.2; ops.push({ t: 'text', u: U(z), v: (R() < 0.6 ? VT : VB)(x), s: 7 + R() * 3, txt: String(1 + ((R() * 40) | 0)) + (R() < 0.3 ? 'A' : ''), col: dark ? 'rgba(220,220,215,0.45)' : 'rgba(20,20,20,0.45)' }); }
+      for (let k = 0; k < 30; k++) { const z = z0 + 1.5 + R() * (zl - 3), x = (R() - 0.5) * 2 * fw; ops.push({ t: 'text', u: U(z), v: (R() < 0.6 ? VT : VB)(x, 0), s: 7 + R() * 3, txt: String(1 + ((R() * 40) | 0)) + (R() < 0.3 ? 'A' : ''), col: dark ? 'rgba(220,220,215,0.45)' : 'rgba(20,20,20,0.45)' }); }
     }
-    const base = def.metalBody ? { r: 0.3, m: 0.78 } : { r: 0.52, m: 0.25 };
-    if (def.radomeZ > z0 + 0.1) ops.push({ t: 'orm', u0: 0, v0: 0, u1: U(def.radomeZ), v1: 1, rough: 0.34, metal: 0.0 });
-    for (const e of def.engines) ops.push({ t: 'orm', u0: U(e.z - 1.2), v0: 0.0, u1: U(e.z + 0.1), v1: 1, rough: 0.38, metal: 0.7 });
-    for (let k = 0; k < 1400; k++) { const x = (R() - 0.5) * 2.4; ops.push({ t: 'dot', u: U(z0 + 2 + R() * (zl - 3)), v: R() < 0.7 ? VT(x) : VB(x), s: 0.0012 + R() * 0.0025, a: 0.05 + R() * 0.08, light: R() < 0.4 }); }
+    const base = def.metalBody ? { r: 0.3, m: 0.78 } : { r: def.liv.rough || 0.55, m: 0.22 };
+    if (def.radomeZ > z0 + 0.1) ops.push({ t: 'orm', u0: 0, v0: 0, u1: U(def.radomeZ), v1: 1, rough: 0.36, metal: 0.0 });
+    for (const e of def.engines) ops.push({ t: 'orm', u0: U(e.z - 1.2), v0: 0.0, u1: U(e.z + 0.1), v1: VU0 + (1 - VU0) * A.S(A.lat(Math.abs(e.x) + e.r + 0.5, 0, false)), rough: 0.38, metal: 0.7 });
+    for (let k = 0; k < 1400; k++) { const x = (R() - 0.5) * 2.4 * fw; ops.push({ t: 'dot', u: U(z0 + 2 + R() * (zl - 3)), v: R() < 0.7 ? VT(x, yTop * 0.8) : VB(x, -0.3), s: 0.0012 + R() * 0.0025, a: 0.05 + R() * 0.08, light: R() < 0.4 }); }
     return { ops, base };
-  }
-  function bodyUV(def, g) {
-    const p = g.attributes.position, nr = g.attributes.normal, uv = new Float32Array(p.count * 2);
-    const z0 = def.len[0], zl = def.len[1] - def.len[0], hs = def.hs;
-    for (let i = 0; i < p.count; i++) {
-      const X = p.getX(i), Y = p.getY(i), Z = p.getZ(i), ny = nr.getY(i);
-      const s = 0.03 + 0.94 * clamp01(0.5 + (X + 0.45 * Y * (X >= 0 ? 1 : -1) + 0.25 * Y) / (2 * hs));
-      uv[i * 2] = clamp01((Z - z0) / zl);
-      uv[i * 2 + 1] = ny < -0.25 ? 0.5 * s : 0.5 + 0.5 * s;
-    }
-    g.setAttribute('uv', new T.BufferAttribute(uv, 2));
-    return g;
   }
   function crownPath(x, cx, cy, s) { // small heraldic crown, s = width
     const h = s * 0.8;
@@ -10040,9 +10166,18 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     }
     x.closePath();
   }
+  function fitText(x, txt, cx, cy, maxW, px, stroke, sw, fill) {
+    x.font = `bold ${px}px "Arial Black", Impact, "DejaVu Sans", Arial, sans-serif`;
+    const w = x.measureText(txt).width, k = w > maxW ? maxW / w : 1;
+    x.save(); x.translate(cx, cy); x.scale(k, 1);
+    x.textAlign = 'center'; x.textBaseline = 'middle'; x.lineJoin = 'round';
+    if (stroke) { x.lineWidth = sw; x.strokeStyle = stroke; x.strokeText(txt, 0, 0); }
+    x.fillStyle = fill; x.fillText(txt, 0, 0); x.restore();
+  }
+  // decal atlas: 4 cells of 512 x 512 -> 0 national marking, 1 tactical (bort) number, 2 unit badge, 3 fin marking (flag / tail code / wing number)
   function decalTexture(def) {
-    const c = mkCanvas(1024, 512), x = c.getContext('2d');
-    x.clearRect(0, 0, 1024, 512);
+    const c = mkCanvas(2048, 512), x = c.getContext('2d'), M = def.marks || {};
+    x.clearRect(0, 0, 2048, 512);
     if (def.nation === 'SE') {
       x.fillStyle = '#ffffff'; x.beginPath(); x.arc(256, 256, 246, 0, 6.3); x.fill();
       x.fillStyle = '#005b99'; x.beginPath(); x.arc(256, 256, 238, 0, 6.3); x.fill();
@@ -10056,14 +10191,45 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       x.fillStyle = lc[1]; starPath(x, 256, 262, 140); x.fill();
     } else {
       x.lineJoin = 'miter';
-      starPath(x, 256, 270, 250); x.fillStyle = '#1b3f8f'; x.fill();
+      if (M.sovietStar !== false) { starPath(x, 256, 270, 250); x.fillStyle = '#1b3f8f'; x.fill(); }
       starPath(x, 256, 270, 222); x.fillStyle = '#ffffff'; x.fill();
       starPath(x, 256, 270, 192); x.fillStyle = '#d0141f'; x.fill();
     }
-    x.font = 'bold 300px "Arial Black", Impact, "DejaVu Sans", Arial, sans-serif';
-    x.textAlign = 'center'; x.textBaseline = 'middle'; x.lineJoin = 'round';
-    if (def.code.stroke) { x.lineWidth = 26; x.strokeStyle = def.code.stroke; x.strokeText(def.code.text, 768, 270); }
-    x.fillStyle = def.code.color; x.fillText(def.code.text, 768, 270);
+    fitText(x, def.code.text, 768, 270, 470, 300, def.code.stroke, 26, def.code.color);
+    // unit badge (cell 2)
+    const bx = 1280, by = 256;
+    if (M.badge === 'guards') { // Soviet "Guards" badge: red banner over a laurel ring with a red star
+      x.fillStyle = '#c9a227'; x.beginPath(); x.arc(bx, by + 40, 170, 0, 6.3); x.fill();
+      x.fillStyle = '#ffffff'; x.beginPath(); x.arc(bx, by + 40, 150, 0, 6.3); x.fill();
+      x.lineJoin = 'miter'; starPath(x, bx, by + 50, 120); x.fillStyle = '#c8101c'; x.fill();
+      x.fillStyle = '#c8101c'; x.beginPath(); x.moveTo(bx - 200, by - 200); x.lineTo(bx + 200, by - 200); x.lineTo(bx + 170, by - 130); x.lineTo(bx + 200, by - 60); x.lineTo(bx - 200, by - 60); x.lineTo(bx - 170, by - 130); x.closePath(); x.fill();
+      x.strokeStyle = '#c9a227'; x.lineWidth = 10; x.stroke();
+      fitText(x, 'ГВАРДИЯ', bx, by - 130, 330, 80, null, 0, '#f2d34a');
+    } else if (M.badge === 'se') { // Swedish wing (flottilj) badge: shield with a gold winged emblem
+      x.fillStyle = '#f2d020'; x.beginPath(); x.moveTo(bx - 170, by - 210); x.lineTo(bx + 170, by - 210); x.lineTo(bx + 170, by + 40); x.quadraticCurveTo(bx + 170, by + 190, bx, by + 240); x.quadraticCurveTo(bx - 170, by + 190, bx - 170, by + 40); x.closePath(); x.fill();
+      x.fillStyle = M.badgeCol || '#0b4f8a'; x.beginPath(); x.moveTo(bx - 150, by - 190); x.lineTo(bx + 150, by - 190); x.lineTo(bx + 150, by + 35); x.quadraticCurveTo(bx + 150, by + 170, bx, by + 215); x.quadraticCurveTo(bx - 150, by + 170, bx - 150, by + 35); x.closePath(); x.fill();
+      x.fillStyle = '#f2d020';
+      for (const sg of [-1, 1]) { x.beginPath(); x.moveTo(bx + sg * 15, by - 20); x.quadraticCurveTo(bx + sg * 90, by - 140, bx + sg * 135, by - 120); x.quadraticCurveTo(bx + sg * 110, by - 70, bx + sg * 125, by - 40); x.quadraticCurveTo(bx + sg * 80, by - 30, bx + sg * 15, by + 10); x.closePath(); x.fill(); }
+      x.beginPath(); x.arc(bx, by - 5, 32, 0, 6.3); x.fill();
+      fitText(x, M.wing || 'F 21', bx, by + 110, 230, 90, null, 0, '#f2d020');
+    } else if (M.badge === 'us') { // squadron patch: disc, lightning bolt, scroll
+      x.fillStyle = '#1a1a1a'; x.beginPath(); x.arc(bx, by, 230, 0, 6.3); x.fill();
+      x.fillStyle = M.badgeCol || '#c8a02a'; x.beginPath(); x.arc(bx, by, 212, 0, 6.3); x.fill();
+      x.fillStyle = '#1b2f63'; x.beginPath(); x.arc(bx, by, 180, 0, 6.3); x.fill();
+      x.fillStyle = '#f0d040'; x.beginPath(); x.moveTo(bx + 40, by - 150); x.lineTo(bx - 70, by + 20); x.lineTo(bx - 5, by + 20); x.lineTo(bx - 50, by + 150); x.lineTo(bx + 80, by - 30); x.lineTo(bx + 15, by - 30); x.closePath(); x.fill();
+      fitText(x, M.sq || '64 AGRS', bx, by + 120, 260, 54, null, 0, '#ffffff');
+    }
+    // fin marking (cell 3)
+    const fx = 1792, fy = 256;
+    if (M.fin === 'flag') { // Russian tricolour
+      x.fillStyle = '#ffffff'; x.fillRect(fx - 230, fy - 150, 460, 100); x.fillStyle = '#0039a6'; x.fillRect(fx - 230, fy - 50, 460, 100); x.fillStyle = '#d52b1e'; x.fillRect(fx - 230, fy + 50, 460, 100);
+      x.strokeStyle = 'rgba(0,0,0,0.35)'; x.lineWidth = 6; x.strokeRect(fx - 230, fy - 150, 460, 300);
+    } else if (M.fin === 'tail') { // USAF tail code + serial
+      fitText(x, M.tail || 'WA', fx, fy - 40, 420, 260, null, 0, M.tailCol || '#3e444a');
+      fitText(x, M.serial || 'AF 86-272', fx, fy + 150, 440, 70, null, 0, M.tailCol || '#3e444a');
+    } else if (M.fin === 'num') { // Swedish wing / squadron number
+      fitText(x, M.num || '21', fx, fy, 440, 300, M.numStroke || null, 18, M.numCol || '#f2d020');
+    }
     const t = new T.CanvasTexture(c); t.encoding = T.sRGBEncoding; t.anisotropy = 4;
     return t;
   }
@@ -34421,11 +34587,12 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRvYi
     function baseZone() {   // defended base for SAM missions: airbase / port / enemy zones in range
       var zs = (W().zones || []).filter(function (z) {
         if (!z || C.water(z.e, z.n)) return false; var d = C.dist(z.e, z.n);
-        return d >= 4500 && d <= 17000 && (z.enemy || /airbase|port|base|depot|industr/.test((z.type || '') + ' ' + (z.name || '').toLowerCase()));
+        return d >= 4500 && d <= 17000 && (z.enemy || z.site || /airbase|port|base|depot|industr|sam|fuel|ammo|radar|compound/.test((z.type || '') + ' ' + (z.name || '').toLowerCase()));
       });
       if (!zs.length) return null;
-      var z = pick(zs), p = C.landNear(z.e, z.n, (z.r || 2500) * 0.5);
-      return { id: z.id, name: z.name, e: p.e, n: p.n, r: Math.min(3000, z.r || 2500), type: z.type, base: true };
+      var site = zs.filter(function (q) { return q.site || /^(sam|fuel|ammo|radar|compound)$/.test(q.type || ''); });   // world.js enemy compounds
+      var z = site.length && Math.random() < 0.8 ? pick(site) : pick(zs), p = z.site ? { e: z.e, n: z.n } : C.landNear(z.e, z.n, (z.r || 2500) * 0.5);
+      return { id: z.id, name: z.name, e: p.e, n: p.n, r: clamp(z.r || 2500, 1400, 3000), type: z.type, base: true };
     }
 
     // ---------------------------------------------------------------- hooks: type / zone / decorate / brief
@@ -34452,7 +34619,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRvYi
     };
     X.zoneFor = function (type, m) {
       if (type === 'xboss' && X.pending) return bossZone(X.pending.boss, m);
-      if ((type === 'sead' || type === 'samsite' || type === 'compound') && m && m.no >= 4 && Math.random() < 0.65) return baseZone();
+      if ((type === 'sead' || type === 'samsite' || type === 'compound' || (type === 'strike' && Math.random() < 0.4)) && m && m.no >= 3 && Math.random() < 0.75) return baseZone();
       return null;
     };
     X.decorate = function (m) {
@@ -38722,7 +38889,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRvYi
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793156666', updShown = false;
+  var BUILD = '1793157160', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
