@@ -1354,7 +1354,10 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
     { id: 'canyon', name: 'Desert Canyon', region: 'Colorado Plateau, USA', blurb: 'A 40 km winding red-rock canyon at sunset: pop up, shoot, drop back in.', timeOfDay: 'sunset' },
     { id: 'volcano', name: 'Virgin Islands', region: 'British Virgin Islands, Caribbean', blurb: 'Dozens of steep jungle islands, turquoise reefs, sea arches to fly through, a pirate cove and an erupting volcano.', timeOfDay: 'afternoon' },
     { id: 'halong', name: 'Ha Long Bay', region: 'Quang Ninh, Vietnam', blurb: 'Over 1500 sheer jungle-capped karst towers in a jade bay: slalom between them, find the hidden lagoons, raid Cat Ba.', timeOfDay: 'afternoon' },
-    { id: 'alps', name: 'Swiss Alps', region: 'Bernese Oberland, Switzerland', blurb: 'Thread the 800 m deep Lauterbrunnen slot past its waterfalls, skim the Eiger north face and the Aletsch glacier, dodge the Schilthorn cables.', timeOfDay: 'midday' }];
+    { id: 'alps', name: 'Swiss Alps', region: 'Bernese Oberland, Switzerland', blurb: 'Thread the 800 m deep Lauterbrunnen slot past its waterfalls, skim the Eiger north face and the Aletsch glacier, dodge the Schilthorn cables.', timeOfDay: 'midday' },
+    { id: 'patagonia', name: 'Patagonia', region: 'Torres del Paine & Fitz Roy, Chile/Argentina', blurb: 'Granite spires over turquoise glacial lakes: weave between the Torres, race down the Valle del Francés, hit the El Chaltén strip under Fitz Roy.', timeOfDay: 'morning' },
+    { id: 'karakoram', name: 'Karakoram', region: 'Baltoro glacier, Pakistan', blurb: 'Fly the 60 km Baltoro ice highway between 3 km granite walls, past the Trango towers to Concordia and the pyramid of K2.', timeOfDay: 'midday' },
+    { id: 'rio', name: 'Rio de Janeiro', region: 'Rio de Janeiro, Brazil', blurb: 'Granite domes rising out of the city and the sea: loop Sugarloaf, buzz Christ the Redeemer, dive under the Rio-Niterói bridge span.', timeOfDay: 'afternoon' }];
 
   // ================================================================ grid helpers
   // Height on a regular grid exactly as THREE.PlaneGeometry triangulates it: cell (ix,iy) = triangles (a,b,d) + (b,c,d),
@@ -1691,6 +1694,15 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
     ctx.putImageData(img, 0, 0);
     const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = renderer.capabilities.getMaxAnisotropy(); return t;
   });
+  // alpine macro noise (opt-in via def.ground.alpine): R smooth fbm, G ridged (thin lines), B second fbm; ~4 features per tile
+  const alpineNoiseTex = memoTex('alpineNoiseTex', function alpineNoiseTex_(renderer) {
+    const S = 256, c = canvas(S, S), ctx = c.getContext('2d'), img = ctx.createImageData(S, S), D = img.data;
+    const a = upNoise(S, 128, 4, 5, 41), b = upNoise(S, 128, 6, 4, 43), d = upNoise(S, 128, 4, 4, 47);
+    const st = (v) => clamp((v - 0.5) * 2.3 + 0.5, 0, 1);
+    for (let q = 0; q < S * S; q++) { const i = q * 4, r = 1 - Math.abs(2 * b[q] - 1); D[i] = st(a[q]) * 255; D[i + 1] = clamp(Math.pow(r, 3) * 1.15, 0, 1) * 255; D[i + 2] = st(d[q]) * 255; D[i + 3] = 255; }
+    ctx.putImageData(img, 0, 0);
+    const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = renderer.capabilities.getMaxAnisotropy(); return t;
+  });
   function strataTex(colors, seed) { // 1 x 256 vertical colour bands
     const c = canvas(4, 256), ctx = c.getContext('2d'), R = makeRng(seed);
     let y = 0;
@@ -1721,6 +1733,9 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
       uRockA: { value: P.rockA || 0.28 }, uRockB: { value: P.rockB || 0.5 },
       uSnowH: { value: P.snowH === undefined ? 1e6 : P.snowH }, uSnowF: { value: P.snowF || 60 }, uSnowCol: { value: v3(P.snow || 0xeef3f8) }, uSnowSlope: { value: P.snowSlope || 0.62 },
       uSandH: { value: P.sandH || 0 }, uSandCol: { value: v3(P.sand || 0xcdbb94) },
+      uAlpTex: { value: P.alpine ? ctx.track(alpineNoiseTex(ctx.renderer)) : null }, uAlpL: { value: v3((P.alpine || {}).light || 0x7a7b7d) }, uAlpM: { value: v3((P.alpine || {}).mid || 0x55575a) },
+      uAlpD: { value: v3((P.alpine || {}).dark || 0x2c2e31) }, uAlpR: { value: v3((P.alpine || {}).rust || 0x6e5a48) }, uAlpV: { value: v3((P.alpine || {}).veg || 0x4a4f33) },
+      uAlpP: { value: new THREE.Vector4((P.alpine || {}).vegTop || 600, (P.alpine || {}).wet === undefined ? 1 : P.alpine.wet, (P.alpine || {}).rustK === undefined ? 0.6 : P.alpine.rustK, (P.alpine || {}).gullySnow === undefined ? 0.8 : P.alpine.gullySnow) },
       uFaceN: { value: P.faceN === undefined ? 1 : P.faceN }, uAux: { value: ctx.def.urban ? 0 : 1 }, uIce: { value: v3(P.ice || 0xa9bccb) }, uRockTint: { value: P.rockTint || 0 }, uBump: { value: P.bump === undefined ? 0.5 : P.bump }
     };
     ctx.terrainU = TU;
@@ -1732,8 +1747,10 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
       sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float urban;\nvarying float vUrban;\nvarying vec3 vWN;')
         .replace('#include <uv_vertex>', '#include <uv_vertex>\n#ifdef USE_UV\n vUv = (vec2(position.x, -position.z) + 48000.0) * (230.0 / 96000.0);\n#endif')
         .replace('#include <begin_vertex>', '#include <begin_vertex>\nvUrban = urban;\nvWN = normalize(mat3(modelMatrix) * objectNormal);');
+      if (P.alpine) sh.fragmentShader = '#define FL_ALPINE\n' + sh.fragmentShader;
       sh.fragmentShader = sh.fragmentShader.replace('#include <common>', [
         '#include <common>', 'varying float vUrban; varying vec3 vWN;',
+        '#ifdef FL_ALPINE', 'uniform sampler2D uAlpTex; uniform vec3 uAlpL; uniform vec3 uAlpM; uniform vec3 uAlpD; uniform vec3 uAlpR; uniform vec3 uAlpV; uniform vec4 uAlpP;', '#endif',
         'uniform sampler2D uRockMap; uniform sampler2D uStrataMap; uniform float uStrataOn; uniform float uStrataSpan; uniform float uStrataOff;',
         'uniform float uRockOn; uniform vec3 uRock1; uniform vec3 uRock2; uniform float uRockA; uniform float uRockB;',
         'uniform float uSnowH; uniform float uSnowF; uniform vec3 uSnowCol; uniform float uSnowSlope; uniform float uSandH; uniform vec3 uSandCol; uniform float uFaceN; uniform float uAux; uniform vec3 uIce; uniform float uRockTint; uniform float uBump;',
@@ -1766,12 +1783,39 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
           '  vec3 rock = mix(uRock1, uRock2, rkA) * (0.72 + 0.56 * rkB);',
           '  rock = mix(rock, col * (0.62 + 0.55 * rkA) * (0.8 + 0.4 * rkB), uRockTint);',
           '  if (uStrataOn > 0.5) { vec3 stc = pow(texture2D(uStrataMap, vec2(0.5, (vFW.y + uStrataOff + (rkA - 0.5) * 14.0 + (dt2.r - 0.5) * 30.0) / uStrataSpan)).rgb, vec3(2.2)); rock = stc * (0.8 + 0.25 * rkA + 0.2 * (rkB - 0.5)); }',
+          '#ifdef FL_ALPINE',
+          '  // alpine rock: km-scale colour variation, vertical wet streaks + rust stains on walls, two rock-texture scales (no tiling)',
+          '  vec2 aq_ = vFW.xz, aqr_ = vec2(aq_.x * 0.8 - aq_.y * 0.6, aq_.x * 0.6 + aq_.y * 0.8);',
+          '  vec3 an1_ = texture2D(uAlpTex, aq_ * (1.0 / 5200.0) + vec2(0.17, 0.41)).rgb;',
+          '  vec3 an2_ = texture2D(uAlpTex, aqr_ * (1.0 / 1500.0) + vec2(0.61, 0.07)).rgb;',
+          '  vec3 an3_ = texture2D(uAlpTex, aq_ * (1.0 / 360.0) + vec2(0.29, 0.83)).rgb;',
+          '  vec3 aw_ = pow(abs(vWN), vec3(4.0)); float sw_ = max(aw_.x + aw_.z, 1e-3);',
+          '  vec3 ast_ = (texture2D(uAlpTex, vec2(vFW.z * (1.0 / 150.0), vFW.y * (1.0 / 2600.0)) + vec2(0.5, 0.13)).rgb * aw_.x + texture2D(uAlpTex, vec2(vFW.x * (1.0 / 150.0), vFW.y * (1.0 / 2600.0)) + vec2(0.07, 0.5)).rgb * aw_.z) / sw_;',
+          '  vec3 ast2_ = (texture2D(uAlpTex, vec2(vFW.z * (1.0 / 410.0), vFW.y * (1.0 / 5200.0)) + vec2(0.21, 0.77)).rgb * aw_.x + texture2D(uAlpTex, vec2(vFW.x * (1.0 / 410.0), vFW.y * (1.0 / 5200.0)) + vec2(0.83, 0.29)).rgb * aw_.z) / sw_;',
+          '  float avf_ = smoothstep(0.32, 0.62, 1.0 - abs(vWN.y));',
+          '  ast_ = mix(vec3(0.5, 0.0, 0.5), ast_ * 0.6 + ast2_ * 0.4, avf_);',
+          '  float rS2_ = 1.0 / 163.0;',
+          '  float rkC_ = texture2D(uRockMap, vec2(vFW.z * rS2_ + 0.31, vFW.y * rS2_ * 1.3)).r * an.x + texture2D(uRockMap, aqr_ * rS2_).r * an.y + texture2D(uRockMap, vec2(vFW.x * rS2_ + 0.57, vFW.y * rS2_ * 1.3)).r * an.z;',
+          '  float amac_ = an1_.r * 0.5 + an2_.r * 0.32 + an3_.r * 0.18;',
+          '  vec3 ark_ = mix(uAlpM, uAlpL, smoothstep(0.3, 0.75, amac_));',
+          '  ark_ = mix(ark_, uAlpD, smoothstep(0.5, 0.8, an2_.b * 0.7 + an1_.b * 0.3) * 0.75);',
+          '  ark_ = mix(ark_, uAlpR, smoothstep(0.6, 0.85, ast_.b * 0.6 + an3_.b * 0.4) * uAlpP.z);',
+          '  ark_ *= 1.0 - 0.5 * smoothstep(0.3, 0.75, ast_.g) * uAlpP.y * avf_;',
+          '  float ard_ = mix(rkA, rkC_, smoothstep(0.3, 0.7, an3_.g + an2_.r * 0.5));',
+          '  rock = ark_ * (0.8 + 0.36 * ard_) * (0.94 + 0.12 * rkB);',
+          '#endif',
           '  float steep = 1.0 - upF + (rkA - 0.5) * 0.12;',
           '  float rockK = smoothstep(uRockA, uRockB, steep) * uRockOn;',
           '  float sandK = (1.0 - smoothstep(uSandH * 0.45, uSandH, vFW.y)) * smoothstep(0.75, 0.9, upF) * step(0.01, uSandH) * step(-0.5, vFW.y);',
           '  col = mix(col, uSandCol * (0.9 + 0.2 * dt.r), sandK);',
           '  float sh_ = vFW.y + (dt2.r - 0.5) * uSnowF * 2.2 + (rkA - 0.5) * uSnowF * 0.8;',
           '  float snowK = smoothstep(uSnowH - uSnowF, uSnowH + uSnowF, sh_) * smoothstep(uSnowSlope - 0.12, uSnowSlope + 0.06, upF + (dt.r - 0.5) * 0.12);',
+          '#ifdef FL_ALPINE',
+          '  // moss / birch scrub on ledges and moderate slopes below the tree line; snow caught in gullies above the snow line',
+          '  float avg_ = (1.0 - smoothstep(uAlpP.x - 140.0, uAlpP.x + 90.0, vFW.y + (an2_.r - 0.5) * 260.0)) * smoothstep(0.6, 0.8, upF + (an3_.r - 0.5) * 0.25);',
+          '  rock = mix(rock, uAlpV * (0.65 + 0.7 * an3_.b) * (0.85 + 0.3 * rkA), avg_ * 0.9);',
+          '  snowK = max(snowK, smoothstep(uSnowH - uSnowF, uSnowH + 2.5 * uSnowF, sh_) * smoothstep(0.42, 0.62, upF + (an3_.r - 0.5) * 0.3) * smoothstep(0.55, 0.8, ast_.r * 0.55 + an3_.r * 0.45) * uAlpP.w);',
+          '#endif',
           '  float ice_ = vUrban * uAux; snowK *= 1.0 - ice_; rockK *= 1.0 - ice_;',
           '  col = mix(col, rock, rockK);',
           '  col = mix(col, uSnowCol * (0.9 + 0.1 * dt.r) * (0.93 + 0.07 * rkB), snowK);',
@@ -1785,13 +1829,16 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
           '  normal = normalize(mix(normal, fNv_, (1.0 - smoothstep(0.5, 0.82, gFN.y)) * uFaceN));',
           '  // bump from the triplanar rock texture on rock faces (ledges, slabs, cracks)',
           '  float bh_ = (rkA * 9.0 + rkB * 3.0) * rockK * uBump;',
+          '#ifdef FL_ALPINE',
+          '  bh_ *= 1.0 - smoothstep(250.0, 1400.0, camD);',
+          '#endif',
           '  vec3 dpx_ = dFdx(vFW), dpy_ = dFdy(vFW); float dbx_ = dFdx(bh_), dby_ = dFdy(bh_);',
           '  vec3 Nw_ = normalize(vWN), r1_ = cross(dpy_, Nw_), r2_ = cross(Nw_, dpx_); float det_ = dot(dpx_, r1_);',
           '  vec3 Nb_ = normalize(abs(det_) * Nw_ - sign(det_) * (dbx_ * r1_ + dby_ * r2_) + 1e-6);',
           '  normal = normalize(normal + (viewMatrix * vec4(Nb_ - Nw_, 0.0)).xyz);',
           '#endif'].join('\n'));
     };
-    mat.customProgramCacheKey = function () { return 'fl-terrain2'; };
+    mat.customProgramCacheKey = function () { return 'fl-terrain2' + (P.alpine ? '-alp' : ''); };
     mat.userData.flFog = true;
     return mat;
   }
@@ -3376,6 +3423,50 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
   }
 
   let _lastD = 0, _lastSea = false, _lastM = 0, _lastHill = 0;
+  // ------------------------------------------------------------- Harbor District (San Pedro Bay-like port)
+  // landfill terminals [e0, e1, nSouth, nNorth, kind]; the north end runs onto the shore. Top of quay = LAX_QUAY m.
+  const LAX_QUAY = 3.4;
+  const HARBOUR = [
+    [14500, 15500, -25100, -22900, 'bulk'], [16200, 17500, -24900, -22200, 'cont'], [18300, 19700, -24600, -21500, 'cont'],
+    [20500, 22600, -23900, -20900, 'cont'], [23300, 24500, -24100, -21200, 'tank'], [25300, 28900, -24900, -22700, 'cont'], [26500, 26800, -22800, -21300, 'road']];
+  const BREAKWATER = [[[11800, -27300], [13600, -27900], [16000, -28000]], [[16700, -28000], [21000, -27900], [26600, -27600]], [[27400, -27500], [30000, -27000], [32500, -26200]]];
+  function harbourK(e, n) {
+    if (e < 14300 || e > 29100 || n < -25200 || n > -20600) return 0;
+    let k = 0;
+    for (let i = 0; i < HARBOUR.length; i++) {
+      const P = HARBOUR[i]; if (e < P[0] || e > P[1] || n < P[2] || n > P[3] + 160) continue;
+      const kk = sstep(P[0] + 25, P[0] + 55, e) * (1 - sstep(P[1] - 55, P[1] - 25, e)) * sstep(P[2] + 25, P[2] + 55, n) * (1 - sstep(P[3], P[3] + 160, n));
+      if (kk > k) k = kk;
+    }
+    return k;
+  }
+  // gradient noise (-0.7..0.7) for the canyon network of the Pacific ranges
+  const LA_G = new Float64Array(32); for (let k = 0; k < 16; k++) { LA_G[k * 2] = Math.cos(k * Math.PI / 8 + 0.2); LA_G[k * 2 + 1] = Math.sin(k * Math.PI / 8 + 0.2); }
+  function laGrad(x, y, sd) {
+    const xi = Math.floor(x), yi = Math.floor(y), fx = x - xi, fy = y - yi, G = LA_G;
+    const u = fx * fx * fx * (fx * (fx * 6 - 15) + 10), v = fy * fy * fy * (fy * (fy * 6 - 15) + 10);
+    const i0 = (hash2(xi, yi, sd) * 16 | 0) * 2, i1 = (hash2(xi + 1, yi, sd) * 16 | 0) * 2, i2 = (hash2(xi, yi + 1, sd) * 16 | 0) * 2, i3 = (hash2(xi + 1, yi + 1, sd) * 16 | 0) * 2;
+    const a = G[i0] * fx + G[i0 + 1] * fy, b = G[i1] * (fx - 1) + G[i1 + 1] * fy, c = G[i2] * fx + G[i2 + 1] * (fy - 1), d = G[i3] * (fx - 1) + G[i3 + 1] * (fy - 1);
+    return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+  }
+  // ridged multifractal on gradient noise, rotated octaves: dendritic ridge + gully networks (~0..1)
+  const LA_RC = Math.cos(0.65), LA_RS = Math.sin(0.65);
+  function laRmf(x, y, oct, sd) {
+    let sum = 0, w = 1, amp = 1, norm = 0;
+    for (let o = 0; o < oct; o++) {
+      let q = 1 - Math.abs(laGrad(x, y, sd + o * 31) * 1.5); q = q < 0 ? 0 : q; q *= q;
+      sum += q * amp * w; norm += amp; w = q * 1.8 > 1 ? 1 : q * 1.8;
+      const nx = (x * LA_RC - y * LA_RS) * 2.07 + 3.1, ny = (x * LA_RS + y * LA_RC) * 2.07 - 1.7; x = nx; y = ny; amp *= 0.5;
+    }
+    return sum / norm;
+  }
+  // 0 at a canyon floor -> 1 on the spurs. Canyons run across the range (here roughly N-S), meander and branch.
+  function laCanyon(e, n, sx, sy, sd) {
+    const w = 0.55 * laGrad(e / 5000 + 1.3, n / 5000, sd + 5);
+    const c1 = Math.abs(laGrad(e / sx + w, n / sy, sd)), c2 = Math.abs(laGrad(e / (sx * 0.45) + w * 2, n / (sy * 0.5), sd + 9));
+    const dk = 0.35 + 0.65 * sstep(0.35, 0.65, 0.5 + laGrad(e / 6000 + 2.7, n / 6000, sd + 13));   // canyon depth varies along the range
+    return 1 - dk * (1 - sstep(0.0, 0.3, c1) * (0.55 + 0.45 * sstep(0.0, 0.25, c2)));
+  }
   function rawHeight(e, n) {
     const d = segDist(S_COAST, e, n);
     _lastD = d; _lastM = 0;
@@ -3387,28 +3478,33 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
         const k = Math.max(0, 1 - q), isl = -60 + 760 * Math.pow(k, 0.8) * (0.55 + 0.6 * ridged(e / 1500 + 2, n / 1500 - 4, 4, 81)) + 120 * sstep(0.0, 0.15, k);
         if (isl > sea) { _lastSea = isl < 0.3; _lastD = 1000; _lastHill = 100; _lastM = 0; return Math.max(isl, sea); }
       }
+      const hk = harbourK(e, n);
+      if (hk > 0) { const v = sea + (LAX_QUAY - 0.4 - sea) * hk; _lastSea = v < 0.3; _lastD = 0; return v; }
       _lastSea = true; return sea;
     }
     _lastSea = false;
     let h = 1.5 + Math.min(d, 20000) * 0.0018;
     h += (fbm(e / 2700 + 11.3, n / 2700 - 7.1, 3, 1) - 0.5) * 20 * sstep(0, 2500, d);
     const h0 = h;
-    // Santa Monica Mountains
+    // Seaward Range (Santa Monica-like): steep coastal range, ridge ~1100-1600 m, cut by canyons that run down to the sea
     let dd = segDist(S_SM, e, n);
-    if (dd < 13000) {
-      const g = Math.exp(-(dd * dd) / (3300 * 3300));
-      const r = ridged(e / 2100 + 3.1, n / 2900 + 1.7, 4, 5), f = fbm(e / 6000 + 2, n / 6000 + 8, 2, 9);
-      h += g * 780 * (0.3 + 0.62 * r + 0.35 * (f - 0.5));
+    if (dd < 15000) {
+      const g = Math.exp(-(dd * dd) / (3700 * 3700)), gs = Math.exp(-(dd * dd) / (1900 * 1900));
+      const r = laRmf(e / 3200 + 3.1, n / 4200 + 1.7, 5, 5), f = fbm(e / 6000 + 2, n / 6000 + 8, 2, 9);
+      const cn = laCanyon(e, n, 1300, 5200, 71);
+      const big = 0.65 + 0.7 * sstep(0.3, 0.7, 0.5 + laGrad(e / 11000 - 1.9, n / 11000, 73));   // dominant massifs vs saddles
+      h += (g * 1100 * (0.22 + 0.75 * r + 0.3 * (f - 0.5)) + gs * 380 * (0.3 + r)) * (0.42 + 0.58 * cn) * big;
     }
-    // San Gabriel Mountains
+    // High Sierra (San Gabriel-like): big fault-block range, ridges ~2000-2600 m, deep canyons on the basin side
     dd = segDist(S_SG, e, n);
-    if (dd < 24000) {
-      const g = Math.exp(-(dd * dd) / (5600 * 5600));
-      const r = ridged(e / 3300 + 7.7, n / 2600 - 2.2, 5, 13), f = fbm(e / 9000, n / 9000, 2, 21);
-      h += g * (1700 + 950 * f) * (0.3 + 0.9 * r);
+    if (dd < 26000) {
+      const g = Math.exp(-(dd * dd) / (6200 * 6200));
+      const r = laRmf(e / 4600 + 7.7, n / 4000 - 2.2, 6, 13), f = fbm(e / 9000, n / 9000, 2, 21);
+      const cn = laCanyon(e, n, 1900, 6500, 83);
+      h += g * (2000 + 850 * f) * (0.22 + 0.95 * r) * (0.48 + 0.52 * cn);
     }
     dd = segDist(S_VE, e, n);
-    if (dd < 7000) h += Math.exp(-(dd * dd) / (1700 * 1700)) * 650 * (0.55 + 0.55 * ridged(e / 1400, n / 1400, 3, 31));
+    if (dd < 8000) h += Math.exp(-(dd * dd) / (2100 * 2100)) * 950 * (0.3 + 0.75 * laRmf(e / 2600 + 0.4, n / 2200, 5, 31)) * (0.55 + 0.45 * laCanyon(e, n, 1400, 2600, 33)) * (0.55 + 0.6 * sstep(8000, 13000, e) * (1 - sstep(13500, 17000, e)));
     dd = segDist(S_PU, e, n);
     if (dd < 7000) h += Math.exp(-(dd * dd) / (1900 * 1900)) * 300 * (0.55 + 0.55 * ridged(e / 1600, n / 1600, 3, 37));
     let q2 = ((e - 2200) * (e - 2200) + (n + 19000) * (n + 19000)) / (6500 * 6500);
@@ -3430,6 +3526,8 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
     if (m > 0) h += (AIRPORT_H - h) * m;
     const t = sstep(0, 380, d);
     h = 1.0 + (h - 1.0) * t;
+    const hk = harbourK(e, n);
+    if (hk > 0) h += (LAX_QUAY - 0.4 - h) * hk;
     return h;
   }
 
@@ -3442,6 +3540,162 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
     }
     return h;
   }
+
+  // ------------------------------------------------------------- harbour meshes: quays, container yards, cranes, breakwater, ships
+  const laxContainerTex = memoTex('laxContainerTex', function laxContainerTex_(renderer) { // 16 containers x 4 tiers per repeat
+    const W = 256, H = 64, c = canvas(W, H), x = c.getContext('2d'), R = makeRng(515);
+    const pal = ['#2f5f8f', '#a8322a', '#8a4a2a', '#2f6b3a', '#8a8d90', '#d8d6cc', '#d4752a', '#22406a', '#c9a227', '#2a7a7a', '#6b2d2d', '#3c3f44', '#b8b2a2', '#4f86b8', '#7d1f1f'];
+    for (let r = 0; r < 4; r++) for (let k = 0; k < 16; k++) {
+      x.fillStyle = pal[Math.floor(R() * pal.length)]; x.fillRect(k * 16, r * 16, 16, 16);
+      x.fillStyle = 'rgba(0,0,0,0.13)'; for (let q = 2; q < 16; q += 3) x.fillRect(k * 16 + q, r * 16, 1, 16);
+      x.fillStyle = 'rgba(255,255,255,0.10)'; x.fillRect(k * 16, r * 16 + 1, 16, 1);
+      x.fillStyle = 'rgba(0,0,0,0.5)'; x.fillRect(k * 16, r * 16, 16, 1); x.fillRect(k * 16, r * 16, 1, 16);
+    }
+    const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = renderer.capabilities.getMaxAnisotropy(); return t;
+  });
+  function laxHarbour(ctx) {
+    const R = makeRng(4711), towers = [], Q = LAX_QUAY;
+    const bQ = new Builder(), bC = new Builder(), bS = new Builder(), bK = new Builder();   // quay concrete, containers, steel/ships, breakwater rock
+    const W1 = [1, 1, 1], WS = [0.62, 0.62, 0.62];
+    // container stack: local x = container length axis; uv from the container texture (16 x 12.2 m along, 4 tiers of 2.6 m)
+    function stack(cx, cz, hx, hz, yaw, y0, tiers) {
+      const c = Math.cos(yaw), sn = Math.sin(yaw), y1 = y0 + tiers * 2.6, P = (lx, y, lz) => [cx + lx * c + lz * sn, y, cz - lx * sn + lz * c];
+      const uL = 2 * hx / (12.2 * 16), uE = 2 * hz / (2.44 * 16), vH = tiers / 4, u0 = Math.floor(R() * 16) / 16, v0 = Math.floor(R() * 4) / 4;
+      const wall = (a, b, cc, d, u) => bC.face([a, b, cc, d], [WS, WS, W1, W1], [[u0, v0], [u0 + u, v0], [u0 + u, v0 + vH], [u0, v0 + vH]]);
+      wall(P(hx, y0, hz), P(hx, y0, -hz), P(hx, y1, -hz), P(hx, y1, hz), uE);
+      wall(P(-hx, y0, -hz), P(-hx, y0, hz), P(-hx, y1, hz), P(-hx, y1, -hz), uE);
+      wall(P(-hx, y0, hz), P(hx, y0, hz), P(hx, y1, hz), P(-hx, y1, hz), uL);
+      wall(P(hx, y0, -hz), P(-hx, y0, -hz), P(-hx, y1, -hz), P(hx, y1, -hz), uL);
+      const vT = 2 * hz / (2.44 * 4);
+      bC.face([P(-hx, y1, hz), P(hx, y1, hz), P(hx, y1, -hz), P(-hx, y1, -hz)], [0.9, 0.9, 0.9], [[u0, v0], [u0 + uL, v0], [u0 + uL, v0 + vT], [u0, v0 + vT]]);
+    }
+    const box = (b, x, y, z, w, h, d, col, yaw, roll, pitch) => geoTmp(new THREE.BoxGeometry(w, h, d), mat4(x, y, z, yaw || 0, 1, 1, 1, pitch || 0, roll || 0), b, lin(col));
+    // ---- ship-to-shore gantry crane template (local: quay edge at x = 0, water toward +x, rail along z)
+    function craneT(colHex, up) {
+      const b = new Builder(), col = colHex, wh = 0xdedcd4;
+      for (const x of [-3, -33]) for (const z of [-9, 9]) box(b, x, 24, z, 2.2, 48, 2.2, col);
+      for (const z of [-9, 9]) { box(b, -18, 46, z, 34, 4, 2.4, col); box(b, -18, 14, z, 32, 1.2, 1.2, col); }
+      for (const x of [-3, -33]) box(b, x, 46, 0, 2.6, 4, 20, col);
+      box(b, -31, 50, 0, 62, 4, 9, col);                                               // back girder (landside)
+      if (up) box(b, -1 + Math.cos(1.25) * 31, 50 + Math.sin(1.25) * 31, 0, 62, 3.4, 8, col, 0, 1.25);   // boom raised
+      else box(b, 31, 50, 0, 62, 3.4, 8, col);                                         // boom over the water
+      for (const z of [-4, 4]) { box(b, -18 - 7, 64, z, 1.4, 30, 1.4, col, 0, 0.45); box(b, -18 + 7, 64, z, 1.4, 30, 1.4, col, 0, -0.45); }
+      box(b, -18, 78, 0, 3, 2, 10, col);                                               // A-frame apex
+      if (!up) for (const z of [-3.5, 3.5]) { const L = Math.hypot(80, 26); box(b, 22, 65, z, L, 0.5, 0.5, wh, 0, -Math.atan2(26, 80)); }
+      box(b, -52, 56, 0, 14, 8, 10, wh);                                               // machinery house
+      box(b, -8, 55, 6, 5, 4, 3, wh);                                                  // cab
+      if (!up) { box(b, 24, 47.4, 0, 6, 2, 7, 0x555555); box(b, 24, 30, 0, 0.3, 34, 0.3, 0x333333); box(b, 24, 13, 0, 12.5, 1, 2.6, 0xc9a227); }
+      return b;
+    }
+    const CR = [craneT(0x2f5f8f, false), craneT(0xb8402e, false), craneT(0x2f5f8f, true), craneT(0xdedcd4, false)];
+    function crane(e, n, yaw, k) { // yaw: direction of the water side (radians, three yaw)
+      const m = mat4(e, Q, -n, yaw); bS.append(CR[k % CR.length], m);
+      const c = Math.cos(yaw), sn = Math.sin(yaw); let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
+      for (const [lx, lz] of [[-60, -12], [-60, 12], [62, -12], [62, 12]]) { const x = e + lx * c + lz * sn, z = -n - lx * sn + lz * c; x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
+      towers.push({ x: (x0 + x1) / 2, z: (z0 + z1) / 2, hx: (x1 - x0) / 2, hz: (z1 - z0) / 2, h: Q + 80 });
+    }
+    // ---- rubber-tyred yard gantry (spans one stack block)
+    const RTG = (function () { const b = new Builder(), y = 0xd9d6cc, bl = 0x2f5f8f; for (const x of [-11, 11]) for (const z of [-6, 6]) box(b, x, 10, z, 1.2, 20, 1.2, y); for (const z of [-6, 6]) box(b, 0, 20.5, z, 24, 1.6, 1.4, y); for (const x of [-11, 11]) box(b, x, 1, 0, 1.4, 2, 13, bl); box(b, 4, 19.5, 0, 4, 2.4, 11, bl); return b; })();
+    // ---- quays
+    const cConc = lin(0xb4b0a6), cWall = lin(0x6f6c66), cLine = lin(0xd9b23a), cAsph = lin(0x55585a);
+    for (const P of HARBOUR) {
+      const [e0, e1, s0, s1, kind] = P, x0 = e0, x1 = e1, z0 = -s1, z1 = -s0;
+      bQ.box((x0 + x1) / 2, (z0 + z1) / 2, (x1 - x0) / 2, (z1 - z0) / 2, -14, Q - 0.02, cWall, 16, 12, 0, 0.02, 0.02);
+      bQ.flat(x0, x1, z0, z1, Q, kind === 'road' ? cAsph : cConc, 40);
+      // fenders / quay edge stripe
+      bQ.flat(x0, x0 + 1.2, z0, z1, Q + 0.03, cLine, 40); bQ.flat(x1 - 1.2, x1, z0, z1, Q + 0.03, cLine, 40); bQ.flat(x0, x1, z1 - 1.2, z1, Q + 0.03, cLine, 40);
+      if (kind === 'cont') {
+        const wide = x1 - x0 > 3000, ax = wide ? 70 : 75, az = wide ? 90 : 60;
+        // crane rails
+        if (!wide) for (const xr of [x0 + 3, x0 + 33, x1 - 3, x1 - 33]) bQ.flat(xr - 0.4, xr + 0.4, z0 + 40, z1 - 20, Q + 0.04, cWall, 40);
+        // stack blocks: containers along n (local x of the stack = world z axis -> yaw = pi/2)
+        const bx0 = x0 + ax + 20, bx1 = x1 - ax - 20, bz0 = z0 + 160, bz1 = z1 - az - 20;
+        let nb = 0;
+        for (let x = bx0; x + 15 < bx1; x += 38) for (let z = bz0; z + 130 < bz1; z += 152) {
+          if (R() < 0.12) continue;
+          const half = R() < 0.5;
+          const t1 = 1 + Math.floor(R() * 4), t2 = Math.max(1, t1 + Math.floor(R() * 3) - 1);
+          if (half) { stack(x + 7.3, z + 31, 30.5, 7.3, Math.PI / 2, Q, t1); stack(x + 7.3, z + 96, 30.5, 7.3, Math.PI / 2, Q, t2); }
+          else stack(x + 7.3, z + 63.5, 61, 7.3, Math.PI / 2, Q, t1);
+          if (R() < 0.13) bS.append(RTG, mat4(x + 7.3, Q, z + 40 + R() * 50, 0));
+          nb++;
+        }
+        // STS cranes along the quays (side quays for long piers, south quay for the wide island)
+        if (wide) { let k = 0; for (let x = x0 + 260; x < x1 - 200; x += 120) { if (R() < 0.25) continue; crane(x, s0 + 3, -Math.PI / 2, k++); } }
+        else {
+          let k = Math.floor(R() * 4);
+          for (const [xq, yaw] of [[x0, Math.PI], [x1, 0]]) { const n0 = s0 + 250 + R() * 300, cnt = 3 + Math.floor(R() * 3); for (let i = 0; i < cnt; i++) crane(xq + (yaw ? -0 : 0), n0 + i * (105 + R() * 30), yaw, k++); }
+        }
+      } else if (kind === 'tank') {
+        for (let i = 0; i < 3; i++) for (let j = 0; j < 5; j++) {
+          const x = x0 + 200 + i * 360, z = z0 + 260 + j * 480; if (x > x1 - 150) continue;
+          geoTmp(new THREE.CylinderGeometry(42, 42, 16, 28), mat4(x, Q + 8, z), bS, lin(j % 2 ? 0xd8d8d2 : 0xc9c7bf));
+          geoTmp(new THREE.CylinderGeometry(42.5, 42.5, 0.8, 28), mat4(x, Q + 16.2, z), bS, lin(0xa6a49e));
+          bQ.flat(x - 52, x + 52, z - 52, z - 50, Q + 0.6, cWall, 40); bQ.flat(x - 52, x + 52, z + 50, z + 52, Q + 0.6, cWall, 40);
+        }
+        for (let j = 0; j < 6; j++) box(bS, (x0 + x1) / 2, Q + 1.2, z0 + 200 + j * 330, 4, 1.2, 1.2, 0x9a9a92, Math.PI / 2);
+      } else if (kind === 'bulk') {
+        for (let j = 0; j < 4; j++) { const z = z0 + 300 + j * 420; geoTmp(new THREE.ConeGeometry(70, 26, 14), mat4((x0 + x1) / 2 - 120, Q + 13, z, 0, 1, 1, 2.2), bS, lin(j % 2 ? 0x2b2a28 : 0x8e7f62)); }
+        box(bS, x1 - 40, Q + 14, (z0 + z1) / 2, 6, 3, z1 - z0 - 300, 0x8a8c88);                          // conveyor
+        for (let j = 0; j < 3; j++) box(bS, (x0 + x1) / 2 + 160, Q + 9, z0 + 500 + j * 600, 120, 18, 260, 0x9aa4ad);   // sheds
+      }
+      // warehouses / gate buildings at the shore end
+      if (kind !== 'road') for (let i = 0; i < 3; i++) { const w = 60 + R() * 70; box(bS, x0 + 120 + i * ((x1 - x0 - 240) / 3), Q + 7, z0 + 60, w, 14, 45, [0xc9c3b4, 0x8f9aa3, 0xb7b0a0][i]); }
+    }
+    // ---- breakwater: rubble mound with a concrete crest, lighthouse at the east end of the middle arm
+    const cRk = lin(0x8b857a), cRk2 = lin(0x6d6962), cTop = lin(0xaaa69b), sec = [[-40, -14], [-23, 0.2], [-9, 5.4], [-4, 5.6], [4, 5.6], [9, 5.4], [23, 0.2], [40, -14]];
+    for (const L of BREAKWATER) {
+      const pts = resample(L, 22), np = pts.length;
+      let tot = 0; const acc = [0]; for (let i = 1; i < np; i++) { tot += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); acc.push(tot); }
+      const base = bK.nv;
+      for (let i = 0; i < np; i++) {
+        const a = pts[Math.max(i - 1, 0)], c = pts[Math.min(i + 1, np - 1)], dx = c[0] - a[0], dy = c[1] - a[1], l = Math.hypot(dx, dy) || 1, nx = -dy / l, ny = dx / l;
+        const tp = sstep(0, 70, acc[i]) * sstep(0, 70, tot - acc[i]);
+        for (let j = 0; j < sec.length; j++) {
+          const jit = j > 0 && j < sec.length - 1 && (j < 3 || j > 4) ? (hash2(i, j, 7) - 0.5) * 3 : 0, off = sec[j][0] + jit, y = sec[j][1] * (0.35 + 0.65 * tp) - 4 * (1 - tp) + (j === 1 || j === 6 ? (hash2(i, j, 9) - 0.5) * 1.6 : 0);
+          const col = j >= 3 && j <= 4 ? cTop : hash2(i, j, 11) < 0.5 ? cRk : cRk2;
+          bK.vert(pts[i][0] + nx * off, y, -(pts[i][1] + ny * off), 0, 1, 0, 0, 0, col[0], col[1], col[2]);
+        }
+        if (i) for (let j = 0; j < sec.length - 1; j++) { const p0 = base + (i - 1) * sec.length + j, p1 = base + i * sec.length + j; bK.ix.push(p0, p1, p0 + 1, p1, p1 + 1, p0 + 1); }
+      }
+    }
+    { const lx = 26600, lz = 27600; geoTmp(new THREE.CylinderGeometry(3.2, 4.2, 20, 14), mat4(lx, 15, lz), bS, lin(0xe8e6de)); geoTmp(new THREE.CylinderGeometry(4.3, 4.3, 4, 14), mat4(lx, 12, lz), bS, lin(0x2a2a2a)); geoTmp(new THREE.CylinderGeometry(2.4, 2.4, 3.5, 10), mat4(lx, 26.6, lz), bS, lin(0x3d5266)); geoTmp(new THREE.ConeGeometry(3, 2.5, 10), mat4(lx, 29.6, lz), bS, lin(0xa8342a)); }
+    // ---- ships (local: bow toward +x, waterline y = 0)
+    function hullGeo(L, B, D, bowK) {
+      const sh = new THREE.Shape(), hb = B / 2, xb = L / 2 - L * bowK;
+      sh.moveTo(-L / 2 + 4, -hb); sh.lineTo(xb, -hb); sh.quadraticCurveTo(L / 2 - L * bowK * 0.3, -hb * 0.9, L / 2, 0); sh.quadraticCurveTo(L / 2 - L * bowK * 0.3, hb * 0.9, xb, hb);
+      sh.lineTo(-L / 2 + 4, hb); sh.quadraticCurveTo(-L / 2, hb, -L / 2, hb - 4); sh.lineTo(-L / 2, -hb + 4); sh.quadraticCurveTo(-L / 2, -hb, -L / 2 + 4, -hb);
+      const g = new THREE.ExtrudeGeometry(sh, { depth: D, bevelEnabled: false, curveSegments: 6 }); g.rotateX(-Math.PI / 2); g.translate(0, -3, 0); return g;
+    }
+    function ship(e, n, yaw, kind) {
+      const b = new Builder(), L = kind === 'cont' ? 290 : kind === 'tank' ? 245 : 200, B = kind === 'cont' ? 42 : kind === 'tank' ? 44 : 32, D = kind === 'cont' ? 22 : kind === 'tank' ? 19 : 17, fb = D - 3;
+      const hc = kind === 'cont' ? [0x1f2a33, 0x2f4f6f, 0x8a2f25][Math.floor(R() * 3)] : kind === 'tank' ? 0x2a2a2c : 0x2f4a6a;
+      geoTmp(hullGeo(L, B, D, 0.16), mat4(0, 0, 0), b, lin(hc));
+      geoTmp(hullGeo(L + 0.6, B + 0.6, 3.6, 0.16), mat4(0, 0, 0), b, lin(0x7a2a22));                     // boot-top above the waterline
+      const deck = new THREE.ShapeGeometry(new THREE.Shape([new THREE.Vector2(-L / 2 + 2, -B / 2 + 1), new THREE.Vector2(L / 2 - L * 0.16, -B / 2 + 1), new THREE.Vector2(L / 2 - 3, 0), new THREE.Vector2(L / 2 - L * 0.16, B / 2 - 1), new THREE.Vector2(-L / 2 + 2, B / 2 - 1)]));
+      deck.rotateX(-Math.PI / 2); geoTmp(deck, mat4(0, fb + 0.05, 0), b, lin(kind === 'tank' ? 0x6a3a2c : kind === 'bulk' ? 0x7a3a2a : 0x4d4e4a));
+      const ax = -L / 2 + (kind === 'cont' ? 46 : 22), wh = 0xe9e7e0;
+      box(b, ax, fb + 13, 0, 16, 26, B - 8, wh); box(b, ax + 3, fb + 27.5, 0, 9, 3, B + 2, wh); box(b, ax + 7.6, fb + 27.5, 0, 0.4, 2, B - 2, 0x2a3540);
+      box(b, ax - 13, fb + 15, 0, 8, 30, 7, kind === 'cont' ? 0xc8102e : 0x2a2a2a);
+      const m = mat4(e, 0, -n, yaw), c = Math.cos(yaw), sn = Math.sin(yaw);
+      if (kind === 'cont') { for (let x = ax + 20; x < L / 2 - 30; x += 13.4) { const t = 3 + Math.floor(R() * 6); const wx = e + x * c, wz = -n - x * sn; stack(wx, wz, 6.1, B / 2 - 3, yaw, fb, t); } }
+      else if (kind === 'tank') { box(b, 20, fb + 1.2, 0, L - 70, 1.2, 1.4, 0x9a9a92); box(b, 10, fb + 2.5, 0, 6, 3, B - 10, 0x9a9a92); box(b, -40, fb + 1.2, 6, L - 120, 0.8, 0.8, 0x9a9a92); }
+      else { for (let k = 0; k < 6; k++) box(b, ax + 30 + k * 23, fb + 1.2, 0, 15, 2.4, B - 9, 0x7a3a2a); for (let k = 0; k < 4; k++) { box(b, ax + 41 + k * 23, fb + 9, B / 2 - 6, 1.4, 18, 1.4, 0xc9a227); box(b, ax + 47 + k * 23, fb + 15, B / 2 - 9, 14, 0.8, 0.8, 0xc9a227, 0.3, -0.5); } }
+      bS.append(b, m);
+    }
+    // ships alongside the quays
+    ship(18300 - 30, -23300, Math.PI / 2, 'cont'); ship(22600 + 30, -22500, -Math.PI / 2, 'cont'); ship(23300 - 29, -22900, Math.PI / 2, 'tank'); ship(27000, -24900 - 28, 0, 'cont'); ship(14500 - 24, -24100, Math.PI / 2, 'bulk');
+    // ships at anchor outside the breakwater (all swung to the same wind)
+    const anch = [[10500, -31500, 'cont'], [15500, -33200, 'tank'], [20800, -31000, 'cont'], [25200, -33800, 'bulk'], [30800, -31200, 'tank'], [35500, -33600, 'cont'], [13000, -36800, 'bulk']];
+    for (const A of anch) ship(A[0], A[1], 0.35 + (R() - 0.5) * 0.25, A[2]);
+    // ---- meshes
+    const add = (b, mat, nm, cast) => { if (!b.nv) return; const g = b.build(); if (b === bK) g.computeVertexNormals(); const me = new THREE.Mesh(g, mat); me.name = nm; me.castShadow = !!cast; me.receiveShadow = true; ctx.add(me); };
+    add(bQ, new THREE.MeshStandardMaterial({ map: concreteTex(ctx.renderer), vertexColors: true, roughness: 0.92, metalness: 0 }), 'harbour-quays');
+    add(bC, new THREE.MeshStandardMaterial({ map: laxContainerTex(ctx.renderer), vertexColors: true, roughness: 0.72, metalness: 0.1 }), 'harbour-containers', true);
+    add(bS, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.2 }), 'harbour-steel', true);
+    add(bK, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0, flatShading: true }), 'harbour-breakwater');
+    return { towers: towers };
+  }
   MAPDEFS.lax = function () {
     const N = 400, NV = N + 1, CELL = 240, HALF = 48000, SIZE = 96000;
     const HL = new Float32Array(NV * NV), DC = new Float32Array(NV * NV), MK = new Float32Array(NV * NV), SEA = new Uint8Array(NV * NV), URB = new Float32Array(NV * NV);
@@ -3452,17 +3706,37 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
       return a + (b - a) * tx + (c - a) * ty + (a - b - c + d) * tx * ty;
     }
     const cSand = lin(0xcdbb94), cUrban = lin(0x958b7c), cUrban2 = lin(0x7e786f), cPark = lin(0x5a6436), cOlive = lin(0x6a6a3c), cBrown = lin(0x86704c),
-      cValley = lin(0x3e4b25), cRock = lin(0x857a68), cRock2 = lin(0x6b6152), cGrass = lin(0x7a7a4a), cSeabed = lin(0x6e6650), cWet = lin(0xb8a888), cDesert = lin(0xa89a74);
+      cValley = lin(0x3e4b25), cRock = lin(0x857a68), cRock2 = lin(0x6b6152), cGrass = lin(0x7a7a4a), cSeabed = lin(0x6e6650), cWet = lin(0xb8a888), cDesert = lin(0xa89a74),
+      cChapD = lin(0x222c18), cChapM = lin(0x3a4426), cSage = lin(0x595b3e), cDry = lin(0x7a6b47), cBurn = lin(0x55493c), cRipar = lin(0x2f4424), cConif = lin(0x2c3a28), cGranite = lin(0x6b665c);
+    const t2 = [0, 0, 0];
+    // slope aspect from the base grid (northward component of the unit normal; >0 = north-facing)
+    function northK(e, n) {
+      const H = def.baseH; if (!H) return 0;
+      const gx = (gridLerp(H, e + 120, n) - gridLerp(H, e - 120, n)) / 240, gy = (gridLerp(H, e, n + 120) - gridLerp(H, e, n - 120)) / 240;
+      return -gy / Math.sqrt(gx * gx + gy * gy + 1);
+    }
     const t1 = [0, 0, 0];
     const BASE = { name: 'Sierra Mesa AFB', e: -40500, n: 42200, hdg: 258, len: 3200, w: 50, seed: 31, blend: 900 };
     const def = {
       name: 'Pacific Coast', region: 'Coastal city, Pacific', urban: true, N: N,
       sky: { sunAz: 225, sunEl: 28, fog: 0xc3cad0, fogD: 0.0000105, hfogA: 0.000010, hfogB: 1 / 650, zenith: [0.035, 0.11, 0.36], glow: [1.0, 0.70, 0.42] },
-      ground: { rockOn: 0.0, faceN: 0, snowH: 1e6 },
+      ground: { rockOn: 0.9, rock1: 0x4a4236, rock2: 0x786d5c, rockA: 0.17, rockB: 0.38, faceN: 0.2, bump: 0.5, snowH: 2350, snowF: 120, snowSlope: 0.74, snow: 0xf0f3f6 },
       water: { color: 0x062433, shallow: 0x23545e, foam: 0.7, shallowK: 0.45 },
       bases: [BASE, { name: 'Bayside Intl compound', e: 600, n: -2950, hdg: 83, len: 1800, w: 40, seed: 39, mini: true, enemy: true, compoundOnly: true, blend: 250, minH: 6, q: 0.5 }],
       coast: COAST,
       farHeight: laFar,
+      lodK: 0.05,
+      levels: [{ tile: 1920, cell: 64, max: 240, dilate: 90, score: function (e0, n0, e1, n1) {
+        const i0 = Math.round((e0 + HALF) / CELL), i1 = Math.round((e1 + HALF) / CELL), j0 = Math.round((HALF - n1) / CELL), j1 = Math.round((HALF - n0) / CELL);
+        let lo = 1e9, hi = -1e9, hl = 0;
+        for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+          const k = j * NV + i, h = def.baseH[k]; if (h < lo) lo = h; if (h > hi) hi = h; if (HL[k] > hl) hl = HL[k];
+          if (!SEA[k] && h < 110 && HL[k] < 40 && DC[k] > 220) return 0;   // city ground in this tile
+          if (MK[k] > 0) return 0;
+        }
+        return hi > 260 && hl > 120 ? hi - lo + hi * 0.2 : 0;
+      } }],
+      vegBlock: function (e, n) { if (e < 14200 || e > 29200 || n < -25300 || n > -20700) return false; for (const P of HARBOUR) if (e > P[0] - 10 && e < P[1] + 10 && n > P[2] - 10 && n < P[3] + 170) return true; return false; },
       prepare: function (ctx) {
         let lastFM = 0;
         const hf = withBaseFlats(rawHeight, def.bases, [], (m) => { lastFM = m; });
@@ -3480,8 +3754,8 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
       color: function (e, n, h, il, curv, o, cell, k) {
         let hill, d, m, sea;
         if (k >= 0) { hill = HL[k]; d = DC[k]; m = MK[k]; sea = SEA[k]; }
-        else { d = segDist(S_COAST, e, n); sea = inPoly(OCEAN_EXT, e, n) ? 1 : 0; hill = 0; m = 0; }
-        const sl = Math.sqrt(Math.max(1 / (il * il) - 1, 0)), lap = curv * (cell >= 1000 ? 0.3 : 4);
+        else { d = segDist(S_COAST, e, n); sea = inPoly(OCEAN_EXT, e, n) ? 1 : 0; hill = gridLerp(HL, e, n); m = 0; }
+        const sl = Math.sqrt(Math.max(1 / (il * il) - 1, 0)), lap = curv * (cell >= 1000 ? 0.3 : 4 * 240 / Math.max(cell, 60));
         let u = 0;
         if (sea) { mix3(o, cSeabed, cWet, sstep(-30, -4, h)); }
         else {
@@ -3490,7 +3764,22 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
           mix3(o, o, cDesert, sstep(36000, 44000, n) * (1 - sstep(80, 300, h)) * 0.8);
           mix3(o, o, cValley, sstep(3, 30, lap) * 0.85 * sstep(40, 140, h));
           mix3(t1, cRock2, cRock, nz);
-          mix3(o, o, t1, Math.max(sstep(900, 1600, h) * 0.8, sstep(0.45, 0.8, sl)));
+          mix3(o, o, t1, Math.max(sstep(900, 1600, h) * 0.8, sstep(0.45, 0.8, sl)) * (1 - sstep(60, 200, h)));
+          // mountains: chaparral (dense + dark on north-facing slopes, sage / dry grass on south-facing), burn scars,
+          // riparian green in the canyon bottoms, conifers + granite on the high Sierra
+          const mt = Math.max(sstep(60, 220, h), sstep(25, 90, hill));
+          if (mt > 0) {
+            const nk = northK(e, n), nz2 = fbm(e / 380 + 7, n / 380 - 3, 2, 75), nz3 = fbm(e / 2600 - 4, n / 2600 + 9, 2, 77);
+            mix3(t1, cChapM, cChapD, sstep(0.35, 0.7, nz2));
+            mix3(t2, cSage, cDry, sstep(0.4, 0.7, nz3));
+            mix3(t1, t2, t1, sstep(-0.3, 0.12, nk + (nz2 - 0.5) * 0.35) * (0.6 + 0.4 * sstep(0.05, 0.3, sl)));
+            mix3(t1, t1, cBurn, sstep(0.66, 0.74, nz3) * 0.75);
+            mix3(t1, t1, cRipar, sstep(2, 14, lap) * 0.8);
+            mix3(t2, cRock2, cGranite, nz2); mix3(t1, t1, t2, sstep(4, 16, -lap) * sstep(0.15, 0.35, sl) * 0.5);   // rock on the convex crests
+            mix3(t1, t1, cConif, sstep(1500, 1900, h + 300 * (nz2 - 0.5)) * (1 - sstep(2250, 2500, h)) * 0.85);
+            mix3(t1, t1, cGranite, sstep(2150, 2450, h) * 0.8);
+            mix3(o, o, t1, mt);
+          }
           if (k >= 0) {
             const park = sstep(0.67, 0.73, fbm(e / 1300 + 40, n / 1300 + 17, 3, 73));
             u = (1 - sstep(60, 100, h)) * (1 - sstep(12, 35, hill)) * sstep(250, 450, d) * (1 - m) * (1 - sstep(0.05, 0.11, sl));
@@ -3512,7 +3801,7 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
         { id: 'sfv', name: 'Northvale', e: -15000, n: 28500, r: 7000, type: 'valley' },
         { id: 'anf', name: 'High Sierra Forest', e: 5000, n: 39500, r: 8000, type: 'forest' },
         { id: 'pv', name: 'Point Rocas Hills', e: 2200, n: -19000, r: 4500, type: 'hills' },
-        { id: 'polb', name: 'Harbor District', e: 21500, n: -18500, r: 3500, type: 'port' },
+        { id: 'polb', name: 'Harbor District', e: 21500, n: -22300, r: 3500, type: 'port' },
         { id: 'dtla', name: 'Downtown', e: 15170, n: 12170, r: 2500, type: 'city' },
         { id: 'malibu', name: 'Cove Coast', e: -30000, n: 13600, r: 4000, type: 'coast' },
         { id: 'verdugo', name: 'Cedar Hills', e: 12000, n: 28800, r: 3500, type: 'hills' },
@@ -3540,6 +3829,7 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
         { kind: 'scrub', per: 260, scale: [0.9, 1.8], shadow: false, cap: 7000, test: (e, n, h, sl) => (h > 45 && gridLerp(URB, e, n) < 0.2 && sl < 0.9) ? 0.75 : (h > 2 && gridLerp(URB, e, n) < 0.1 ? 0.2 : 0) },
         { kind: 'pine', per: 260, farThin: 2, scale: [0.8, 1.3], cap: 6000, test: (e, n, h, sl) => h > 900 && sl < 0.8 ? forestK(e, n, 21, 0.6) : 0 },
         { kind: 'juniper', per: 120, farThin: 2, scale: [0.7, 1.2], cap: 3000, test: (e, n, h, sl) => h > 150 && h < 900 && sl < 0.6 && gridLerp(URB, e, n) < 0.1 ? 0.6 * forestK(e + 300, n, 23, 0.4) : 0 },
+        { kind: 'boulder', per: 70, scale: [1.2, 4.2], cap: 3000, shadow: false, test: (e, n, h, sl) => h > 120 && sl > 0.25 && gridLerp(URB, e, n) < 0.05 ? 0.45 + 0.4 * sstep(0.5, 1.0, sl) : 0 },
         { kind: 'broad', per: 50, scale: [0.6, 1.0], cap: 3000, test: (e, n, h, sl) => { const u = gridLerp(URB, e, n); return u > 0.3 && h > 2 ? 0.5 : (h > 60 && h < 700 && sl < 0.5 ? 0.25 : 0); } }],
       extras: function (ctx) {
         const scene = { add: ctx.add }, renderer = ctx.renderer, mark = ctx.mark;
@@ -3860,6 +4150,9 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
       }
     }
     mark('city');
+    const HB = laxHarbour(ctx);
+    for (const t of HB.towers) towers.push(t);
+    mark('harbour');
 
         return { towers: towers, runways: runways };
       }
@@ -4846,16 +5139,19 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
     { const R = makeRng(921), TG = new Map(); let t = 0;
       while (TW.length < 1500 && t++ < 90000) {
         const e = -12000 + R() * 40000, n = -13000 + R() * 28000;
-        const cl = fbm(e / 4000 + 1, n / 4000 - 2, 3, 923) + 0.25 * (fbm(e / 900, n / 900, 2, 925) - 0.5); if (R() > sstep(0.45, 0.6, cl)) continue;
+        const cl = fbm(e / 3200 + 1, n / 3200 - 2, 3, 923) + 0.25 * (fbm(e / 900, n / 900, 2, 925) - 0.5), ch = ridged(e / 2200 + 4, n / 2200, 2, 927), dens = Math.max(sstep(0.5, 0.58, cl), sstep(0.72, 0.85, ch) * 0.85); if (R() > Math.max(dens, 0.03)) continue;
         if (n > coastN(e) - 700 || Math.hypot((e - CB.e) / 1.25, n - CB.n) < 7300) continue;
         if (Math.hypot(e - BASE.e, n - BASE.n) < 4500 || (e > 17000 && n < -3000)) continue;
         if (Math.abs(n - (-1500 + e * 0.12)) < 450 && e < 14000) continue;   // a clear channel through the bay (east-west)
-        const kind = R(), r = kind < 0.15 ? 12 + R() * 18 : 30 + Math.pow(R(), 1.7) * 210, H = kind < 0.15 ? 18 + R() * 40 : Math.min(460, 50 + r * (0.9 + R() * 1.6) + R() * 80);
+        const kind = R(), r = kind < 0.06 ? 12 + R() * 18 : (60 + Math.pow(R(), 1.3) * 170) * (0.75 + 0.35 * dens), H = kind < 0.06 ? 18 + R() * 40 : Math.min(400, 80 + r * (0.45 + R() * 0.7) + R() * 50 + 70 * dens);
         if (raw(e, n) > -2) continue;
         let ok = true; const gx = Math.floor(e / 500), gy = Math.floor(n / 500);
-        for (let dx = -1; dx <= 1 && ok; dx++) for (let dy = -1; dy <= 1 && ok; dy++) for (const o of (TG.get((gx + dx) + ',' + (gy + dy)) || [])) if (Math.hypot(o[0] - e, o[1] - n) < (o[2] + r) * 0.7 + 12) { ok = false; break; }
+        for (let dx = -1; dx <= 1 && ok; dx++) for (let dy = -1; dy <= 1 && ok; dy++) for (const o of (TG.get((gx + dx) + ',' + (gy + dy)) || [])) if (Math.hypot(o[0] - e, o[1] - n) < (o[2] + r) * (0.7 - 0.32 * dens) + 12) { ok = false; break; }
         if (!ok) continue;
         const tw = [e, n, r, H, TW.length, R()]; TW.push(tw); const kk = gx + ',' + gy; if (!TG.has(kk)) TG.set(kk, []); TG.get(kk).push(tw);
+        if (dens > 0.45 && kind >= 0.06) { const ns = 1 + Math.floor(R() * 2.6); // satellites fused onto the tower: multi-summit massifs
+          for (let q = 0; q < ns; q++) { const a = R() * 6.283, dd = r * (0.55 + 0.35 * R()), e2 = e + Math.cos(a) * dd, n2 = n + Math.sin(a) * dd; if (raw(e2, n2) > -2 || n2 > coastN(e2) - 600) continue;
+            const t2 = [e2, n2, r * (0.45 + 0.35 * R()), H * (0.5 + 0.4 * R()), TW.length, 0.45 + 0.55 * R()]; TW.push(t2); TG.get(kk).push(t2); } }
       }
     }
     // lagoon rings (hong): towers around a hidden lagoon, one gap bridged by a rock arch
@@ -4917,14 +5213,15 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
     def.extras = function (ctx) {
       const sampleH = ctx.sampleH, F = [], CELL = 2000, cells = new Map();
       const cellOf = (e, n) => { const k = Math.floor(e / CELL) + ',' + Math.floor(n / CELL); let c = cells.get(k); if (!c) cells.set(k, c = { hi: new Builder(), lo: new Builder(), e: (Math.floor(e / CELL) + 0.5) * CELL, n: (Math.floor(n / CELL) + 0.5) * CELL }); return c; };
-      const HC = { lime: lin(0x9e988a), dark: lin(0x34312c), wet: lin(0x2c2a26), green: lin(0x1e3a16), green2: lin(0x2e4e1e), streaks: 1, tufts: 1 };
+      const HC = { lime: lin(0x76705f), dark: lin(0x2a2722), jungle: 1, wet: lin(0x26241f), green: lin(0x1a3413), green2: lin(0x2a4a1b), streaks: 1, tufts: 1, vines: 1 };
       for (const T of TW) { const c = cellOf(T[0], T[1]); const sh = T[5] === undefined ? 0.5 : T[5], H = T[3], r = T[2];
         // silhouettes: needles, flat-topped blocks, leaning towers, overhanging tops, plain domes
-        const o = { angNoise: 0.42, crown: 1.4, K: r > 120 ? 14 : 9, maxRings: 10 };
-        if (sh < 0.18 && r > 30) { o.taper = 0.55; o.dome = 0.25; o.crown = 2.2; }                 // needle
-        else if (sh < 0.36) { o.taper = 0.05; o.dome = 0.12; o.crown = 0.6; }                      // flat-topped block
-        else if (sh < 0.5) { const a = sh * 40; o.lean = [Math.cos(a) * 0.18, Math.sin(a) * 0.18]; } // leaning
-        else if (sh < 0.68) { o.overhang = 0.18; o.taper = 0.1; }                                  // overhanging top
+        const o = { angNoise: 0.42, crown: 1.4, K: r > 120 ? 12 : 8, maxRings: 8, notch: 0.28 };
+        if (sh < 0.1 && r > 30) { o.taper = 0.55; o.dome = 0.25; o.crown = 2.2; }                  // needle
+        else if (sh < 0.2) { o.taper = 0.05; o.dome = 0.12; o.crown = 0.6; }                       // flat-topped block
+        else if (sh < 0.32) { const a = sh * 40; o.lean = [Math.cos(a) * 0.16, Math.sin(a) * 0.16]; o.dome = 0.7; o.domeMax = 0.3; } // leaning
+        else if (sh < 0.45) { o.overhang = 0.16; o.taper = 0.08; o.dome = 0.6; o.domeMax = 0.28; } // overhanging top
+        else { o.taper = 0.1; o.dome = 0.9; o.domeMax = 0.38; o.crown = 2.0; }                    // rounded jungle dome (most common)
         buildKarst(c.hi, c.lo, F, T[0], T[1], r, H, T[4] % 997 + 1, HC, o); }
       // rock bridges over the lagoon entrances
       const rb = new Builder(), cR = lin(0x9a9384), cG = lin(0x2f5a24);
@@ -4973,12 +5270,12 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
       return {
         solids: makeSolidsGrid(F, 500), seaLanes: lanes,
         update: function (dt, cam) {
-          const ce = cam.position.x, cn = -cam.position.z, hiR = cam.position.y > 2500 ? 0 : 2500;
+          const ce = cam.position.x, cn = -cam.position.z, hiR = cam.position.y > 2500 ? 0 : 2200;
           for (const m of meshes) { const d = Math.max(Math.abs(m.e - ce), Math.abs(m.n - cn)) - CELL / 2; const near = d < (m.near ? hiR + 400 : hiR); if (near !== m.near) { m.near = near; m.hi.visible = near; } }
         },
         debug: { towers: TW.length, cells: meshes.length, junks: nj, arches: arches.map((a) => ({ name: a.name, e: Math.round(a.e), n: Math.round(a.n), under: Math.round(a.under) })),
           views: { overview: [-6000, -16000, 900, 6000, 2000, 100], low: [-3000, -2100, 40, 6000, -1500 + 6000 * 0.12, 40], lagoon: [a0.e - Math.sin(ax) * 700, a0.n - Math.cos(ax) * 700, 60, a0.e, a0.n, 55],
-            towers: [9000, -9000, 260, 4000, 0, 80], catba: [-6000, -14000, 600, CB.e, CB.n, 150], city: [-4000, 12500, 300, -4000, 18300, 20], village: [VIL[0][0] - 900, VIL[0][1] - 700, 80, VIL[0][0], VIL[0][1], 0] } }
+            towers: [9500, -9500, 420, 4000, 0, 80], catba: [-6000, -14000, 600, CB.e, CB.n, 150], city: [-4000, 12500, 300, -4000, 18300, 20], village: [VIL[0][0] - 900, VIL[0][1] - 700, 80, VIL[0][0], VIL[0][1], 0] } }
       };
     };
     return def;
@@ -5002,9 +5299,10 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
     // pyramid peaks: [e, n, H, baseR, faces, rot, northSteep, name]
     const PK = [[8000, -4600, 3967, 3200, 3, 0.4, 2.2, 'Eiger'], [10400, -7300, 4107, 2900, 4, 0.2, 1.2, 'Mönch'], [5800, -9800, 4158, 3400, 3, 1.0, 1.3, 'Jungfrau'],
       [-6400, -2600, 2970, 2600, 3, 0.7, 1.0, 'Schilthorn'], [4200, 1700, 2343, 2400, 3, 0.2, 1.0, 'Männlichen'], [14800, -3600, 3692, 2600, 3, 1.4, 1.4, 'Wetterhorn'],
-      [-2800, -11800, 3436, 2600, 4, 0.5, 1.0, 'Gspaltenhorn'], [-15500, 9800, 2362, 3300, 4, 0.785, 1.0, 'Niesen'], [-1500, -17500, 3800, 3000, 3, 0.3, 1.0, 'Bietschhorn'], [13500, -17000, 3900, 3200, 3, 1.2, 1.0, 'Finsteraarhorn']];
+      [-2800, -11800, 3436, 2600, 4, 0.5, 1.0, 'Gspaltenhorn'], [-15500, 9800, 2362, 3300, 4, 0.785, 1.0, 'Niesen'], [-1500, -17500, 3800, 3000, 3, 0.3, 1.0, 'Bietschhorn'], [13500, -17000, 3900, 3200, 3, 1.2, 1.0, 'Finsteraarhorn'],
+      [17200, 9800, 2780, 2200, 3, 0.9, 1.3, 'Engelhörner'], [24800, 20200, 2481, 2300, 3, 0.3, 1.0, 'Hochstollen'], [27500, 8200, 3263, 2600, 4, 0.6, 1.2, 'Ritzlihorn'], [33500, 16500, 3238, 2900, 3, 1.1, 1.3, 'Titlis'], [19500, 2500, 3200, 2500, 3, 0.2, 1.2, 'Schreckhorn']];
     for (const P of PK) { P.f = []; for (let i = 0; i < P[4]; i++) { const a = P[5] + i * 2 * Math.PI / P[4]; P.f.push([Math.cos(a), Math.sin(a), Math.sin(a) > 0.6 ? P[6] : 1]); } }
-    const PKO = PK.map((P) => ({ e: P[0], n: P[1], H: P[2], R: P[3], faces: P[4], rot: P[5], steep: P[6], base: 1700, facet: 0.55, warp: 0.18, rough: 130, name: P[7] }));
+    const PKO = PK.map((P) => ({ e: P[0], n: P[1], H: P[2], R: P[3], faces: P[4], rot: P[5], steep: P[6], base: 1700, facet: 0.55, warp: 0.18, rough: 200, name: P[7] }));
     function peaks(e, n) { let h = -1e9; for (const P of PKO) { const v = kPyramid(P, e, n); if (v > h) h = v; } return h; }
     const smin = (a, b, k) => { const h = clamp(0.5 + 0.5 * (b - a) / k, 0, 1); return b + (a - b) * h - k * h * (1 - h); };
     const smax = (a, b, k) => -smin(-a, -b, k);
@@ -5013,13 +5311,13 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
       return Math.abs(2 * fbm(wx, wy, 3, seed + 4) - 1) * sc * 0.9;
     }
     function mountains(e, n) {
-      const crest = sstep(-25000, -12000, n) * (1 - sstep(-3000, 9000, n));          // Bernese crest belt
-      const pre = sstep(3000, 13000, n);                                              // Prealps (lower) north of the crest
+      const crest = Math.max(sstep(-27000, -14000, n) * (1 - sstep(5000, 15000, n)), sstep(14000, 22000, e) * (1 - sstep(20000, 27000, n)) * 0.85); // Bernese crest belt + Hasli/Grimsel block
+      const pre = sstep(3000, 13000, n) * (1 - 0.7 * sstep(14000, 21000, e));          // Prealps (lower) north of the crest
       const x = e * 0.83 + n * 0.56, y = -e * 0.56 + n * 0.83;
       const wx = 0.8 * fbm(x / 9000 + 3, y / 9000, 3, 1007), wy = 0.8 * fbm(x / 9000 - 5, y / 9000 + 2, 3, 1009);
       const r = ridged(x / 6800 + wx, y / 6800 + wy, 5, 1001), f = fbm(e / 18000, n / 18000, 2, 1003);
-      let m = 1500 + (1200 + 900 * crest) * Math.pow(r, 1.25) * (0.6 + 0.7 * f) - 500 * pre;
-      m += 160 * (ridged(y / 1600 + wx, x / 1600 + wy, 3, 1005) - 0.45) * sstep(1700, 2600, m);
+      let m = 1250 + (1750 + 1500 * crest) * Math.pow(r, 1.7) * (0.7 + 0.6 * f) - 250 * pre;
+      m += 500 * (ridged(y / 1400 + wx, x / 1400 + wy, 3, 1005) - 0.45) * sstep(1100, 2200, m) + 130 * (ridged(x / 450, y / 450, 2, 1006) - 0.45) * sstep(1500, 2600, m);
       // natural glacial valleys (dendritic channels, U-shaped)
       const c1 = chan(e, n, 9000, 1061), c2 = chan(e + 4000, n - 7000, 4200, 1071);
       const fl1 = 900 + 500 * crest - 200 * pre, fl2 = fl1 + 450;
@@ -5040,10 +5338,11 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
       if (SQ.p >= 0 && d < 2600) {
         const f = SQ.s / SQ.len, fl = 930 - 140 * f, west = SQ.side > 0;
         const T = west ? 1600 + 60 * sstep(0.25, 0.45, f) * (1 - sstep(0.7, 0.85, f)) : 1180 + 120 * sstep(0.4, 0.6, f);
-        const jw = 250 + 40 * Math.sin(SQ.s / 700) + 25 * (fbm(e / 300, n / 300, 2, 1013) - 0.5);
+        const gul = Math.pow(Math.abs(Math.sin(SQ.s / 210 + 3 * fbm(SQ.s / 900, west ? 1 : 5, 2, 1019))), 6), jw = 250 + 40 * Math.sin(SQ.s / 700) + 25 * (fbm(e / 300, n / 300, 2, 1013) - 0.5) + 70 * gul - 35 * Math.pow(Math.abs(Math.cos(SQ.s / 330 + 1.7)), 8);
         let V;
-        if (d < jw) V = fl + 4 * Math.pow(d / jw, 2);
-        else if (d < jw + 95) V = fl + (T - fl) * sstep(jw - 5, jw + 95, d);
+        const Tb = T + 90 * (fbm(e / 260, n / 260, 2, 1021) - 0.4);
+        if (d < jw) V = fl + 4 * Math.pow(d / jw, 2) + 45 * sstep(jw - 70, jw, d);
+        else if (d < jw + 95) { const t = sstep(jw - 5, jw + 95, d); V = fl + 45 + (Tb - fl - 45) * (t + 0.07 * Math.sin(t * Math.PI * 4 + SQ.s / 150)); }
         else { const tw = 420 + 260 * fbm(e / 1500, n / 1500, 2, 1017); V = d < jw + 95 + tw ? T + (d - jw - 95) * 0.12 + 15 * (fbm(e / 400, n / 400, 2, 1015) - 0.5) : T + tw * 0.12 + (d - jw - 95 - tw) * 1.1; }
         h = smin(h, V, 40);
       }
@@ -5055,7 +5354,7 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
       if (SQ.p >= 0 && d < 4500) { const f = SQ.s / SQ.len, fl = 700 + 380 * f, V = fl + (d < 550 ? 6 * Math.pow(d / 550, 2) : 6 + (d - 550) * 0.55 * (0.7 + 0.6 * sstep(1200, 3000, d))); h = smin(h, V, 90); }
       // Haslital (Meiringen)
       d = iHS.query(e, n) + nz;
-      if (SQ.p >= 0 && d < 4500) { const f = SQ.s / SQ.len, fl = 595 + 500 * f, V = fl + (d < 900 ? 3 * d / 900 : 3 + (d - 900) * 0.62); h = smin(h, V, 90); }
+      if (SQ.p >= 0 && d < 4500) { const f = SQ.s / SQ.len, fl = 595 + 500 * f, V = fl + (d < 900 ? 3 * d / 900 : 3 + (d - 900) * (0.95 + 0.5 * sstep(1300, 1700, d))) + 140 * (ridged(e / 520 + 1, n / 520, 2, 1097) - 0.45) * sstep(950, 1400, d); h = smin(h, V, 70); }
       // lakes Thun + Brienz basin (lake bottom below the water level), Interlaken flat between them
       d = iLK.query(e, n) + nz * 0.8;
       if (SQ.p >= 0 && d < 7000) {
@@ -5078,6 +5377,11 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
       }
       // névé above Konkordia: the ice field between Mönch and Jungfrau
       { const dj = Math.hypot((e - 8200) / 1.3, n + 8300); if (dj < 1800) { const V = 3420 + dj * 0.05; if (V < h && h - V < 900) { h = V; lastIce = 1; } } }
+      if (lastIce < 0.05) { // limestone strata: benches + cliff bands on every slope between valley and snow (dipping layers)
+        const sb = 115 + 95 * fbm(e / 2600, n / 2600, 2, 1093), s = (h + 0.025 * (e * 0.6 + n * 0.4)) / sb + 0.9 * fbm(e / 1700, n / 1700, 2, 1099), fl = Math.floor(s), fr = s - fl;
+        const w = 0.5 * sstep(960, 1250, h) * (1 - sstep(2700, 3200, h)) * sstep(0.2, 0.45, fbm(e / 3500, n / 3500, 2, 1095));
+        h += w * sb * (sstep(0.45, 0.85, fr) - fr);
+      }
       return h;
     }
     const BASE = { name: 'Meiringen Air Base', e: 21500, n: 15600, hdg: 105, len: 2600, w: 45, seed: 101, blend: 650, minH: 590, q: 0.4 };
@@ -5106,7 +5410,7 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
       name: 'Swiss Alps', region: 'Bernese Oberland, Switzerland', N: 400, noWater: true, lodK: 0.045,
       sky: { sunAz: 200, sunEl: 34, fog: 0xbcd0e2, fogD: 0.0000072, hfogA: 0.000008, hfogB: 1 / 1500, zenith: [0.02, 0.09, 0.36], glow: [0.95, 0.85, 0.7], glowW: 0.18, sunCol: [1.0, 0.95, 0.88], disk: 32,
         sunHex: 0xfff4e6, sunI: 2.8, hemiSky: 0xadc8e8, hemiGround: 0x5a6a48, hemiI: 0.5, white: 0xeef2f6, envGround: [0.1, 0.12, 0.09] },
-      ground: { rockOn: 1, rock1: 0x403d39, rock2: 0x86827a, rockA: 0.3, rockB: 0.48, snowH: 2750, snowF: 160, snow: 0xf4f7fa, snowSlope: 0.6, faceN: 0.7, ice: 0xb6cad8 },
+      ground: { rockOn: 1, rock1: 0x34312d, rock2: 0x5e5a54, rockA: 0.22, rockB: 0.38, snowH: 2750, snowF: 160, snow: 0xf4f7fa, snowSlope: 0.6, faceN: 0.7, ice: 0xb6cad8 },
       bases: [BASE, EBASE], raw: raw, aux: () => lastIce,
       levels: [{ tile: 1920, cell: 64, max: 150, dilate: 40, score: (e0, n0, e1, n1, g) => {
         let lo = 1e9, hi = -1e9;
@@ -5114,15 +5418,15 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
         const e = (e0 + e1) / 2, n = (n0 + n1) / 2;
         if (iLB.query(e, n) < 2400) return 1e6;
         if (Math.hypot(e - BASE.e, n - BASE.n) < 2500) return 2e5;
-        return (hi - lo) * (Math.hypot(e - 4000, n + 4000) < 16000 ? 2 : 1); } },
+        return (hi - lo) * (Math.hypot(e - 4000, n + 4000) < 16000 || iHS.query(e, n) < 4000 ? 2 : 1); } },
       { tile: 384, cell: 16, select: (e0, n0, e1, n1) => { const d = iLB.query((e0 + e1) / 2, (n0 + n1) / 2); return d < 420; } }],
       color: function (e, n, h, il, curv, o, cell, k, aux) {
         mix3(o, cMeadow, cMeadow2, sstep(0.4, 0.7, fbm(e / 700, n / 700, 3, 1041)));
         const forest = sstep(0.45, 0.6, fbm(e / 1100 + 3, n / 1100, 3, 1043)) * sstep(650, 900, h) * (1 - sstep(1700, 1950, h)) * sstep(0.55, 0.8, il);
         mix3(o, o, cForest, forest);
-        mix3(o, o, cAlp, sstep(1700, 2100, h) * 0.8);
+        mix3(o, o, cAlp, sstep(1600, 2000, h) * 0.8);
         { const d2 = 0.82 + 0.36 * vnoise(e / 90, n / 90, 1047); o[0] *= d2; o[1] *= d2; o[2] *= d2; }
-        mix3(o, o, cScree, sstep(2250, 2600, h));
+        mix3(o, o, cScree, sstep(2050, 2400, h));
         if (h < LAKE - 2) mix3(o, o, cLakeBed, 1);
         if (aux > 0) mix3(o, o, cIceU, aux * 0.4);
         return aux || 0;
@@ -5219,31 +5523,64 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
       { id: 'laerdalen', P: [[6200, -32800], [11000, -31200], [16000, -33600], [21500, -32200], [27500, -33800], [33500, -32000], [40000, -33500], [46000, -32000]], w: 480, f: [4, 480], k: 1.6 },
       { id: 'innfjorddalen', P: [[-14200, 400], [-15000, -4000], [-15800, -8500]], w: 260, f: [8, 260], k: 2.2 },
       { id: 'aurlandsdalen', P: [[-4000, -41500], [-1500, -45000], [2000, -48000]], w: 300, f: [5, 300], k: 2.0 }];
+    const T3 = [0, 0, 0];
     const fIdx = makeSegIndex(FJ.map((f) => f.P), 2000, 3600), vIdx = makeSegIndex(VA.map((v) => v.P), 2000, 3200);
     const fFar = makeSegIndex(FJ.map((f) => f.P), 3000, 9000), vFar = makeSegIndex(VA.map((v) => v.P), 3000, 9000);
     // flat basin at the top of Romsdalen (Lesja / Bjorli plateau) for the enemy airfield, and small lakes
     const BASIN = [26500, -38500, 2600, 430];
     const LAKES = [[16000, 13000, 900], [36000, -32500, 1000], [-15500, -8000, 600]];
-    let lastIce = 0, DELTAS = [];
+    let lastIce = 0, lastScree = 0, DELTAS = [];
     function strandK(e, n) { return sstep(-39000, -37000, e) * (1 - sstep(-30000, -28300, e)) * sstep(-24000, -21500, n) * (1 - sstep(-13000, -10500, n)); }
+    // gradient noise + rotated ridged multifractal (sharper, less grid-aligned than the value-noise helpers)
+    const GN_G = new Float64Array(32); for (let k = 0; k < 16; k++) { GN_G[k * 2] = Math.cos(k * Math.PI / 8 + 0.2); GN_G[k * 2 + 1] = Math.sin(k * Math.PI / 8 + 0.2); }
+    function gn(x, y, sd) {
+      const xi = Math.floor(x), yi = Math.floor(y), fx = x - xi, fy = y - yi, G = GN_G;
+      const u = fx * fx * fx * (fx * (fx * 6 - 15) + 10), v = fy * fy * fy * (fy * (fy * 6 - 15) + 10);
+      const i0 = (hash2(xi, yi, sd) * 16 | 0) * 2, i1 = (hash2(xi + 1, yi, sd) * 16 | 0) * 2, i2 = (hash2(xi, yi + 1, sd) * 16 | 0) * 2, i3 = (hash2(xi + 1, yi + 1, sd) * 16 | 0) * 2;
+      const a = G[i0] * fx + G[i0 + 1] * fy, b = G[i1] * (fx - 1) + G[i1 + 1] * fy, c = G[i2] * fx + G[i2 + 1] * (fy - 1), d = G[i3] * (fx - 1) + G[i3 + 1] * (fy - 1);
+      return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+    }
+    const RC = Math.cos(0.65), RS = Math.sin(0.65);
+    function rmf(x, y, oct, sd) {
+      let sum = 0, w = 1, amp = 1, norm = 0;
+      for (let o = 0; o < oct; o++) {
+        let q = 1 - Math.abs(gn(x, y, sd + o * 31) * 1.5); q = q < 0 ? 0 : q; q *= q;
+        sum += q * amp * w; norm += amp; w = q * 1.8 > 1 ? 1 : q * 1.8;
+        const nx = (x * RC - y * RS) * 2.07 + 3.1, ny = (x * RS + y * RC) * 2.07 - 1.7; x = nx; y = ny; amp *= 0.5;
+      }
+      return sum / norm;
+    }
+    function fbmg(x, y, oct, sd) { let sum = 0, amp = 0.5; for (let o = 0; o < oct; o++) { sum += amp * gn(x, y, sd + o * 17); const nx = (x * RC - y * RS) * 2.03 + 1.3, ny = (x * RS + y * RC) * 2.03 - 2.9; x = nx; y = ny; amp *= 0.5; } return sum; }
     function mountains(e, n) {
       const r = ridged(e / 5600 + 3.3, n / 5600 - 1.7, 4, 201), f = fbm(e / 15000 + 1, n / 15000 + 5, 3, 203);
-      const r2 = ridged(e / 1700 + 1.1, n / 1700 + 2.3, 3, 205);
       const r3 = ridged(e / 2600 + 4.4, n / 2600 - 0.7, 3, 209);
-      let m = 380 + 1250 * Math.pow(r, 1.8) * (0.6 + 0.6 * f) + 520 * Math.pow(r3, 2.2) * sstep(0.25, 0.6, r);
-      m += 230 * (r2 - 0.42) * sstep(450, 1100, m) + 35 * (fbm(e / 600, n / 600, 2, 207) - 0.5);
+      let m = 330 + 1150 * Math.pow(r, 1.8) * (0.6 + 0.6 * f) + 420 * Math.pow(r3, 2.2) * sstep(0.25, 0.6, r);
+      // alpine relief: warped ridged multifractal -> aretes, horns, cirques and gullies on the high ground
+      const wx = e + 650 * fbmg(e / 4200 + 3, n / 4200, 2, 231), wy = n + 650 * fbmg(e / 4200, n / 4200 - 5, 2, 233);
+      const A = rmf(wx / 2300 + 0.3, wy / 2300 - 0.7, 5, 241), hi = sstep(450, 1150, m);
+      m += (A - 0.42) * (360 + 800 * hi);
+      m += 35 * (fbm(e / 600, n / 600, 2, 207) - 0.5);
       return m;
     }
-    function uProfile(m, floor, d, hw, k, rough) {
+    // wall relief along a valley side: sharp buttress ribs + V gullies running down the wall (s = along valley, d = out)
+    function ribs(s, d, sd) {
+      const g1 = gn(s / 230 + sd * 7.31, d / 850 + sd, 261), g2 = gn(s / 105 - sd * 3.7, d / 420 - sd, 263);
+      return 0.42 - 1.9 * Math.abs(g1) + 0.5 * (1.7 * Math.abs(g2) - 0.4);
+    }
+    function uProfile(m, floor, d, hw, k, rough, bph) {
       // flat floor, near-vertical lower walls (steepness k), rounded shoulders
       const p = sstep(hw * 0.6, hw + 260 / k + 0.25 * Math.max(m - floor, 0) / k, d);
       let sh = 1 - Math.pow(1 - p, 1.6 + 0.4 * k);
+      if (bph !== undefined) { // slanting ledges / benches (hold snow and birch scrub)
+        const q = sh * 3.4 + bph, fq = q - Math.floor(q), tq = (Math.floor(q) + sstep(0.35, 1, fq) - bph) / 3.4;
+        sh += (tq - sh) * 0.5 * sstep(0.04, 0.2, sh);
+      }
       sh += 0.03 * Math.sin(sh * 38 + rough * 0.2) * sh * (1 - sh) * 4; // ledges / bands where snow can lie
       // slope envelope (max ~55-70 deg): no knife fins between neighbouring valleys
       return Math.min(floor + (m - floor) * sh + rough * 4 * sh * (1 - sh), floor + Math.max(0, d - hw * 0.5) * (0.7 + 0.5 * k) + rough);
     }
     function raw(e, n) {
-      lastIce = 0;
+      lastIce = 0; lastScree = 0;
       const dx = e - coastE(n);
       let m = mountains(e, n);
       m *= sstep(-2500, 5000, dx) * 0.8 + 0.2;
@@ -5258,13 +5595,23 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
       if (SQ.p >= 0) {
         const F = FJ[SQ.p], fr = SQ.s / SQ.len, hw = (F.w[0] + (F.w[1] - F.w[0]) * fr) * (0.9 + 0.2 * vnoise(SQ.s / 2600, SQ.p, 241));
         const floor = -(F.d[0] + (F.d[1] - F.d[0]) * fr) * (1 - Math.min(d / hw, 1) * 0.5);
-        if (h > floor) h = Math.min(h, uProfile(h, floor, d + gul * sstep(hw * 0.45, hw * 1.1, d), hw, F.k, rough));
+        if (h > floor) {
+          const sd = SQ.p * 2 + (SQ.side > 0 ? 1 : 0), rb = ribs(SQ.s, d, sd), amp = Math.min(240, 80 + 0.11 * (h - floor));
+          h = Math.min(h, uProfile(h, floor, d + (0.55 * gul + amp * rb) * sstep(hw * 0.45, hw * 1.1, d), hw, F.k, rough, 0.5 + 0.5 * gn(SQ.s / 1700, sd, 265)));
+        }
       }
       d = vIdx.query(e, n);
       if (SQ.p >= 0) {
         const V = VA[SQ.p], fr = SQ.s / SQ.len, hw = V.w * (0.85 + 0.3 * vnoise(SQ.s / 2200, SQ.p, 251));
         const floor = V.f[0] + (V.f[1] - V.f[0]) * Math.pow(fr, 1.3) + 10 * Math.pow(Math.min(d / hw, 1), 2);
-        if (h > floor) h = Math.min(h, uProfile(h, floor, d + gul * sstep(hw * 0.45, hw * 1.1, d), hw, V.k, rough));
+        if (h > floor) {
+          const h0 = h, sd = 20 + SQ.p * 2 + (SQ.side > 0 ? 1 : 0), rb = ribs(SQ.s, d, sd), amp = Math.min(240, 80 + 0.11 * (h - floor));
+          const off = (0.55 * gul + amp * rb) * sstep(hw * 0.45, hw * 1.1, d);
+          h = Math.min(h, uProfile(h, floor, d + off, hw, V.k, rough, 0.5 + 0.5 * gn(SQ.s / 1700, sd, 265)));
+          // scree cones / talus aprons at the wall foot, biggest below the gullies
+          const W = 45 + 190 * clamp(0.1 - rb, 0, 1) * sstep(150, 600, h0 - floor), x0 = hw * 0.6 - off - W;
+          if (d > x0) { lastScree = 1; h = Math.max(h, Math.min(floor + 0.62 * (d - x0) + 0.0016 * (d - x0) * (d - x0) * 0, floor + 0.62 * W + 25, h0)); }
+        }
       }
       for (let i = 0; i < DELTAS.length; i++) { // lowland deltas / shore flats where the villages sit
         const D = DELTAS[i], dd = Math.hypot(e - D[0], n - D[1]); if (dd > D[2] * 3.2) continue;
@@ -5298,28 +5645,43 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
     const BASE = { name: 'Romsdal Air Station', e: -33600, n: -17200, hdg: 2, len: 2900, w: 45, seed: 41, blend: 600, minH: 8, q: 0.5 };
     const EBASE = { name: 'Lesja airfield', e: BASIN[0], n: BASIN[1], hdg: 40, len: 1900, w: 40, seed: 42, blend: 450, mini: true, enemy: true, minH: 300, q: 0.4 };
     const flats = TOWNS.map((t) => ({ e: t.e, n: t.n, hdg: 0, x0: -t.r * 0.6, x1: t.r * 0.6, z0: -t.r * 0.6, z1: t.r * 0.6, blend: t.r * 0.6, minH: 4, q: 0.3 }));
-    const cHeath = lin(0x2c2f23), cGrass = lin(0x454c31), cField = lin(0x66673f), cLow = lin(0x4a4a3c), cLowSnow = lin(0xd3d9df), cMid = lin(0x6a6a62), cSea = lin(0x2a3a3a), cShore = lin(0x5a564c), cSnowUnder = lin(0xa9b2ba);
+    const cHeath = lin(0x343726), cGrass = lin(0x4b5631), cField = lin(0x66713c), cLowSnow = lin(0xd3d9df), cSea = lin(0x2a3a3a), cShore = lin(0x5a564c),
+      cForest = lin(0x1d2a1c), cAlp = lin(0x57543f), cScree = lin(0x77746c), cScree2 = lin(0x5d5c58);
     const def = {
       name: 'Norway Winter Fjords', region: 'Møre og Romsdal / Sogn, Norway', N: 400, lodK: 0.055, vegFar: 10,
       sky: { sunAz: 205, sunEl: 7, fog: 0xaab6c2, fogD: 0.0000115, hfogA: 0.00003, hfogB: 1 / 520, zenith: [0.10, 0.14, 0.22], glow: [0.9, 0.55, 0.35], glowW: 0.3, sunCol: [1.0, 0.8, 0.6], disk: 18,
         sunHex: 0xffd9b0, sunI: 1.6, hemiSky: 0xb9c8da, hemiGround: 0x5a6068, hemiI: 0.55, white: 0xdfe4ea, envGround: [0.18, 0.2, 0.23] },
-      ground: { rockOn: 1, rock1: 0x27292c, rock2: 0x55585b, rockA: 0.2, rockB: 0.4, snowH: 1000, snowF: 160, snow: 0xeef3f8, snowSlope: 0.62, faceN: 0.1, bump: 1.0, ice: 0xa7bfcf },
+      ground: { rockOn: 1, rock1: 0x27292c, rock2: 0x55585b, rockA: 0.13, rockB: 0.3, snowH: 900, snowF: 150, snow: 0xeef3f8, snowSlope: 0.8, faceN: 0.15, bump: 0.7, ice: 0xa7bfcf,
+        alpine: { light: 0x606163, mid: 0x434548, dark: 0x222427, rust: 0x5e4a3a, veg: 0x434a2e, vegTop: 620, wet: 1, rustK: 0.55, gullySnow: 0.85 } },
       water: { color: 0x0a1a22, shallow: 0x1f3a40, foam: 0.35, shallowK: 0.35, roughness: 0.18 },
       bases: [BASE, EBASE], flats: flats,
       raw: raw,
       aux: () => lastIce,
       levels: [
-        { tile: 1920, cell: 64, max: 320, dilate: 160, score: (e0, n0, e1, n1, g) => { const e = (e0 + e1) / 2, n = (n0 + n1) / 2; if (Math.abs(e - BASE.e) < 3500 && Math.abs(n - BASE.n) < 3500) return 1e6; const dd = Math.min(fIdx.query(e, n), vIdx.query(e, n)); return dd < 2600 ? 3000 - dd : 0; } },
+        { tile: 1920, cell: 64, max: 400, dilate: 160, score: (e0, n0, e1, n1, g) => { const e = (e0 + e1) / 2, n = (n0 + n1) / 2; if (Math.abs(e - BASE.e) < 3500 && Math.abs(n - BASE.n) < 3500) return 1e6; const dd = Math.min(fIdx.query(e, n), vIdx.query(e, n)); return dd < 3100 ? 3500 - dd : 0; } },
         { tile: 384, cell: 32, select: (e0, n0, e1, n1) => { const e = (e0 + e1) / 2, n = (n0 + n1) / 2; const d = vIdx.query(e, n); return SQ.p === 0 && SQ.s > 4000 && SQ.s < 9500 && d > 300 && d < 800; } }],
       color: function (e, n, h, il, curv, o, cell, k, aux) {
         if (h < 0) { mix3(o, cSea, cShore, sstep(-25, -1, h)); return 0; }
-        // low ground: dark heath / bog / pasture with patchy snow; fields near the villages; snow cover thickens with height
-        mix3(o, cHeath, cGrass, sstep(0.4, 0.62, fbm(e / 700, n / 700, 3, 261)));
+        // vertex colour = ground cover on the flatter ground; the shader puts rock on steep faces and snow on flat high ground
+        const nz = fbm(e / 700, n / 700, 3, 261), nz2 = fbm(e / 260, n / 260, 2, 263), coarse = cell > 120 ? 1 : 0;
+        const flatK = sstep(coarse ? 0.72 : 0.8, coarse ? 0.88 : 0.93, il);
+        mix3(o, cHeath, cGrass, sstep(0.38, 0.6, nz) * (1 - sstep(250, 450, h)));
         let fieldK = 0; for (const T of TOWNS) { const d = Math.hypot(e - T.e, n - T.n); if (d < T.r * 3) fieldK = Math.max(fieldK, 1 - sstep(T.r * 1.2, T.r * 3, d)); }
-        mix3(o, o, cField, fieldK * (1 - sstep(80, 200, h)) * 0.8);
-        mix3(o, o, cMid, sstep(300, 700, h) * 0.6);
-        mix3(o, o, cLowSnow, 0.04 + 0.3 * sstep(0.6, 0.72, fbm(e / 260, n / 260, 2, 263)) * (1 - fieldK * 0.8) + 0.6 * sstep(650, 1150, h));
-        mix3(o, o, cSnowUnder, sstep(900, 1300, h));
+        // valley floors: green pasture on the flat ground
+        const floorK = (1 - sstep(60, 260, h)) * flatK;
+        mix3(o, o, cField, Math.max(fieldK * 0.85, floorK * 0.55 * sstep(0.35, 0.55, nz2)) * (1 - sstep(120, 260, h)));
+        // forest below the tree line (same stand masks as the instanced trees, so the forest reads from the air)
+        const tl = 560 + 160 * (nz - 0.5);
+        const fk = Math.max(forestK(e + 2000, n, 7, 0.7) * (1 - sstep(260, 340, h)), forestK(e + 900, n, 5, 0.6) * (1 - sstep(380, 460, h)), forestK(e, n, 3, 0.7) * sstep(230, 280, h)) * (1 - sstep(tl - 90, tl, h)) * sstep(0.6, 0.8, il) * (1 - fieldK);
+        mix3(o, o, cForest, fk * 0.9);
+        // alpine heath above the tree line
+        mix3(o, o, cAlp, sstep(tl - 40, tl + 140, h) * (1 - fk));
+        // scree aprons / talus at the foot of the valley walls (lighter, slightly brown grey)
+        if (!coarse) { const dv = vIdx.query(e, n); if (SQ.p >= 0 && dv < VA[SQ.p].w * 1.6) { const V = VA[SQ.p], fl = V.f[0] + (V.f[1] - V.f[0]) * Math.pow(SQ.s / SQ.len, 1.3), ha = h - fl;
+          const sk = sstep(4, 14, ha) * (1 - sstep(170, 230, ha)) * (1 - sstep(0.97, 0.995, il)); if (sk > 0) { mix3(T3, cScree2, cScree, nz2); mix3(o, o, T3, sk * 0.9); } } }
+        // patchy snow in the valleys and on the plateaus, thickening with height (steep faces stay rock in the shader)
+        const sn = (0.06 + 0.3 * sstep(0.6, 0.72, nz2) * (1 - floorK * 0.7) + 0.85 * sstep(620, 980, h + 140 * (nz - 0.5))) * flatK * (1 - fieldK * 0.8) * (1 - fk * 0.5);
+        mix3(o, o, cLowSnow, Math.min(sn, 1));
         mix3(o, o, cShore, (1 - sstep(1, 5, h)) * 0.8);
         return aux || 0;
       },
@@ -5353,7 +5715,7 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
         { kind: 'pine', per: 300, farThin: 3, scale: [0.7, 1.2], cap: 7000, test: (e, n, h, sl) => h > 4 && h < 320 && sl < 0.9 ? forestK(e + 2000, n, 7, 0.7) : 0 },
         { kind: 'spruce', per: 300, farThin: 3, scale: [0.7, 1.1], cap: 7000, test: (e, n, h, sl) => h > 4 && h < 450 && sl < 0.8 ? forestK(e + 900, n, 5, 0.6) : 0 },
         { kind: 'birch', per: 160, farThin: 3, scale: [0.7, 1.1], cap: 4000, test: (e, n, h, sl) => h > 3 && h < 400 && sl < 0.7 ? 0.6 * forestK(e - 700, n + 300, 9, 0.45) : 0 },
-        { kind: 'boulder', per: 90, scale: [0.6, 2.6], cap: 5000, shadow: false, test: (e, n, h, sl) => h > 2 && sl > 0.25 && sl < 0.8 ? 0.7 : 0.05 }],
+        { kind: 'boulder', per: 90, scale: [0.6, 2.2], cap: 5000, shadow: false, test: (e, n, h, sl) => h > 2 && sl > 0.25 && sl < 0.8 ? 0.2 : 0.03 }],
       clouds: {
         seed: 811, cumulus: 40, cuBase: [2400, 3000], cuSize: 1.5, cling: true, lit: [0.92, 0.9, 0.9], shadow: [0.42, 0.45, 0.5], opacity: 0.94,
         banks: [[-12000, 1000, 9000, 5000, 600, 1150], [12000, -20000, 9000, 5000, 600, 1500], [26000, 10000, 10000, 6000, 700, 1400], [-2000, 30000, 9000, 5000, 600, 1250],
@@ -5385,6 +5747,33 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
           falls.push([Math.round(c[0]), Math.round(c[1])]);
         }
         if (wb.nv) { const wm = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, transparent: true, opacity: 0.55, depthWrite: false }); const m = new THREE.Mesh(wb.build(), wm); m.name = 'waterfalls'; m.renderOrder = 2; ctx.add(m); }
+        // ---- rivers on the dry valley floors (meander inside the flat floor, braided gravel banks beside them)
+        {
+          const rb = new Builder(), cW = lin(0x1d2f36), cG = lin(0x5f5a4e); let lastY = 0;
+          for (const vi of [0, 1, 2, 3, 4, 5]) {
+            const V = VA[vi], P = resample(V.P, 30), np = P.length;
+            let prev = -1, prevG = -1;
+            for (let i = 0; i < np; i++) {
+              const a = P[Math.max(i - 1, 0)], c = P[Math.min(i + 1, np - 1)], dx = c[0] - a[0], dy = c[1] - a[1], l = Math.hypot(dx, dy) || 1, nx = -dy / l, ny = dx / l;
+              const s = i * 30, off = V.w * 0.32 * (0.7 * Math.sin(s / 520 + vi) + 0.3 * Math.sin(s / 190 + 2 * vi)), w = 4.5 + 3.5 * Math.min(1, s / 4000), gw = w + 4 + 5 * hash2(i, vi, 3);
+              const x = P[i][0] + nx * off, y = P[i][1] + ny * off;
+              const hc = Math.max(sampleH(x + nx * gw, y + ny * gw), sampleH(x - nx * gw, y - ny * gw), sampleH(x, y));
+              const yy = hc + 0.35, fade = sstep(0, 3, i) * sstep(0, 3, np - 1 - i);
+              const ig = rb.vert(x + nx * gw, yy - 0.12, -(y + ny * gw), 0, 1, 0, 0, 0, cG[0], cG[1], cG[2]);
+              rb.vert(x - nx * gw, yy - 0.12, -(y - ny * gw), 0, 1, 0, 0, 0, cG[0], cG[1], cG[2]);
+              const iw = rb.vert(x + nx * w * fade, yy, -(y + ny * w * fade), 0, 1, 0, 0, 0, cW[0], cW[1], cW[2]);
+              rb.vert(x - nx * w * fade, yy, -(y - ny * w * fade), 0, 1, 0, 0, 0, cW[0], cW[1], cW[2]);
+              if (prev >= 0 && Math.abs(yy - lastY) < 25) { rb.ix.push(prevG, ig, prevG + 1, prevG + 1, ig, ig + 1, prev, iw, prev + 1, prev + 1, iw, iw + 1); }
+              prev = iw; prevG = ig; lastY = yy;
+            }
+          }
+          if (rb.nv) {
+            const rm = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.65, metalness: 0.0, side: THREE.DoubleSide });
+            rm.onBeforeCompile = function (sh) { sh.vertexShader = sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n  mvPosition.xyz *= 0.9985; gl_Position = projectionMatrix * mvPosition;'); };
+            rm.customProgramCacheKey = function () { return 'fl-river'; };
+            const m = new THREE.Mesh(rb.build(), rm); m.name = 'rivers'; m.receiveShadow = true; ctx.add(m);
+          }
+        }
         // ---- sea lanes: coast + the two big fjords
         const cl = []; for (let n = -44000; n <= 44000; n += 3000) cl.push([Math.round(coastE(n) - 2400), n]);
         const lanes = [cl, FJ[0].P.slice(0, 6), FJ[5].P.slice(0, 6), FJ[1].P.slice(0, 4)];
@@ -5410,8 +5799,8 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
     // massif blocks: [e, n, rx, ry, ang, crest]
     const MASS = [[0, 600, 6800, 3300, 0.1, 1900], [-500, 30000, 6000, 2800, 0.25, 2100]];
     // lakes: [e, n, rx, ry, angle, level, colour, name]
-    const LAKES = [[-3600, -6600, 2600, 1500, 0.2, 70, 0x2fb2b6, 'Lago Pehoé'], [4300, -5600, 5200, 1500, 0.08, 70, 0x37a5ae, 'Lago Nordenskjöld'], [-9800, -2600, 1500, 7200, 1.48, 70, 0x8fb2bb, 'Lago Grey'],
-      [9500, -11000, 3500, 2200, -0.3, 70, 0x2f9faa, 'Lago Sarmiento'], [-500, -10400, 2600, 1500, 0.4, 70, 0x3aa2a8, 'Lago del Toro'], [18000, 25500, 9000, 3200, 0.15, 250, 0x5aa0b5, 'Lago Viedma']];
+    const LAKES = [[-3600, -6600, 2600, 1500, 0.2, 70, 0x1d8c94, 'Lago Pehoé'], [4300, -5600, 5200, 1500, 0.08, 70, 0x23808c, 'Lago Nordenskjöld'], [-9800, -2600, 1500, 7200, 1.48, 70, 0x6a8e98, 'Lago Grey'],
+      [9500, -11000, 3500, 2200, -0.3, 70, 0x1f6f86, 'Lago Sarmiento'], [-500, -10400, 2600, 1500, 0.4, 70, 0x2a7484, 'Lago del Toro'], [18000, 25500, 9000, 3200, 0.15, 250, 0x3f7f92, 'Lago Viedma']];
     for (const L of LAKES) { L.ca = Math.cos(L[4]); L.sa = Math.sin(L[4]); }
     const lakeQ = (L, e, n) => { const de = e - L[0], dn = n - L[1], u = (de * L.ca + dn * L.sa) / L[2], v = (-de * L.sa + dn * L.ca) / L[3]; const a = Math.atan2(v, u); return Math.hypot(u, v) / (0.85 + 0.3 * fbm(Math.cos(a) * 1.5 + L[0] * 1e-3, Math.sin(a) * 1.5, 3, 1111)); };
     const GREY = [[-13500, 16000], [-12500, 10000], [-10800, 5600], [-10200, 3600]], iGR = makeSegIndex([GREY], 1000, 5000);
@@ -5436,10 +5825,10 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
       for (const M of MASS) {
         const de = e - M[0], dn = n - M[1]; if (Math.abs(de) > M[2] * 1.5 || Math.abs(dn) > M[2] * 1.5) continue;
         const u = (de * Math.cos(M[4]) + dn * Math.sin(M[4])) / M[2], v = (-de * Math.sin(M[4]) + dn * Math.cos(M[4])) / M[3], a = Math.atan2(v, u);
-        const q = Math.hypot(u, v) / (0.8 + 0.4 * fbm(Math.cos(a) * 1.6 + M[0] * 1e-3, Math.sin(a) * 1.6, 3, 1123)), ins = (1 - q) * Math.min(M[2], M[3]);
+        const q = Math.hypot(u, v) / (0.8 + 0.4 * fbm(Math.cos(a) * 1.6 + M[0] * 1e-3, Math.sin(a) * 1.6, 3, 1123)), ins = (1 - q) * Math.min(M[2], M[3]) + 260 * (ridged(e / 650 + 7, n / 650, 2, 1129) - 0.45);
         if (ins < -400) continue;
         const top = M[5] + 520 * Math.pow(ridged(e / 1300 + 2, n / 1300, 4, 1125), 1.5) - 300 * (1 - sstep(0.04, 0.2, Math.abs(2 * fbm(e / 2500, n / 2500, 3, 1127) - 1)));
-        const v2 = 200 + (top - 200) * sstep(-150, 650, ins);
+        const v2 = 200 + (top - 200) * (0.12 * sstep(-500, 0, ins) + 0.88 * Math.pow(sstep(-60, 520, ins), 0.7));
         h = kSmax(h, v2, 120);
       }
       for (const P of PK) { const v = kPyramid(P, e, n); if (v > -1e8) h = kSmax(h, v, 250); }
@@ -5461,7 +5850,7 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
       }
       return h;
     }
-    const BASE = { name: 'Cerro Castillo Air Station', e: 9000, n: -16500, hdg: 120, len: 2600, w: 45, seed: 111, blend: 650, minH: 150, q: 0.45 };
+    const BASE = { name: 'Cerro Castillo Air Station', e: 9000, n: -16500, hdg: 300, len: 2600, w: 45, seed: 111, blend: 650, minH: 150, q: 0.45 };
     const EBASE = { name: 'El Chaltén airstrip', e: 9800, n: 20800, hdg: 35, len: 1800, w: 40, seed: 112, blend: 500, mini: true, enemy: true, minH: 280, q: 0.4 };
     const TOWNS = [{ e: 13500, n: -17500, r: 380, count: 26, style: 'desert', church: true, seed: 1131, name: 'Cerro Castillo' }, { e: 7000, n: 26500, r: 450, count: 40, style: 'nordic', church: true, seed: 1132, name: 'El Chaltén' },
       { e: 1300, n: -8500, r: 200, count: 10, style: 'nordic', seed: 1133, name: 'Pudeto' }, { e: 14000, n: -6000, r: 260, count: 14, style: 'desert', seed: 1134, name: 'Estancia Cerro Guido' }];
@@ -5470,10 +5859,10 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
       name: 'Patagonia', region: 'Torres del Paine & Fitz Roy, Chile/Argentina', N: 400, noWater: true, lodK: 0.05,
       sky: { sunAz: 115, sunEl: 21, fog: 0xc0cfdc, fogD: 0.0000068, hfogA: 0.000007, hfogB: 1 / 1200, zenith: [0.03, 0.1, 0.34], glow: [1.0, 0.82, 0.6], glowW: 0.24, sunCol: [1.0, 0.92, 0.8], disk: 30,
         sunHex: 0xfff0dc, sunI: 2.7, hemiSky: 0xb0c8e2, hemiGround: 0x6a6040, hemiI: 0.5, white: 0xeef2f6, envGround: [0.13, 0.12, 0.08] },
-      ground: { rockOn: 1, rock1: 0x4e4a46, rock2: 0x9b948a, rockA: 0.35, rockB: 0.55, snowH: 1550, snowF: 140, snow: 0xf3f6fa, snowSlope: 0.58, faceN: 0.7, ice: 0xa9c4d4 },
+      ground: { rockOn: 1, rock1: 0x3a3632, rock2: 0x6e665c, rockA: 0.25, rockB: 0.42, snowH: 1550, snowF: 140, snow: 0xf3f6fa, snowSlope: 0.8, faceN: 0.7, ice: 0xa9c4d4 },
       bases: [BASE, EBASE], raw: raw, aux: () => lastIce,
       flats: TOWNS.map((t) => ({ e: t.e, n: t.n, hdg: 0, x0: -t.r * 0.8, x1: t.r * 0.8, z0: -t.r * 0.8, z1: t.r * 0.8, blend: 220, minH: 60, q: 0.4 })),
-      levels: [{ tile: 1920, cell: 48, max: 130, dilate: 40, score: (e0, n0, e1, n1, g) => {
+      levels: [{ tile: 1920, cell: 48, max: 115, dilate: 40, score: (e0, n0, e1, n1, g) => {
         let lo = 1e9, hi = -1e9;
         for (let i = 0; i <= 4; i++) for (let j = 0; j <= 4; j++) { const h = triH(g.H, g.NV, (e0 + i * 480 + 48000) / g.cell, (48000 - (n0 + j * 480)) / g.cell); lo = Math.min(lo, h); hi = Math.max(hi, h); }
         const e = (e0 + e1) / 2, n = (n0 + n1) / 2; if (Math.hypot(e - BASE.e, n - BASE.n) < 2500) return 2e5;
@@ -5507,7 +5896,7 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
         const keep = (e, n) => { const k = e + ',' + n; if (done.has(k)) return false; done.add(k); return true; }; buildLake(ctx, sampleH, lb, L[5], L[6], S, keep); } }
       // granite spires (meshes + solids): the Torres, Fitz Roy, Cerro Torre group
       const hi = new Builder();
-      const GR = { lime: lin(0x988a78), dark: lin(0x463c34), wet: lin(0x4a4440), green: lin(0xf2f5f8), green2: lin(0xdfe6ec) };
+      const GR = { lime: lin(0x8c857c), dark: lin(0x38332f), wet: lin(0x3a3632), green: lin(0xf2f5f8), green2: lin(0xdfe6ec), streaks: 1, tufts: 1 };
       const SP = [[4050, 2550, 210, 2850, 0.42, GR, 'Torre Sur'], [4420, 2880, 190, 2800, 0.45, GR, 'Torre Central'], [4760, 3230, 170, 2700, 0.5, GR, 'Torre Norte'],
         [1500, 30000, 560, 3405, 0.55, GR, 'Fitz Roy'], [-3400, 29400, 190, 3128, 0.72, GR, 'Cerro Torre'], [-3000, 30100, 140, 2850, 0.7, GR, 'Torre Egger'], [-2650, 30700, 130, 2720, 0.68, GR, 'Standhardt'],
         [3100, 29500, 200, 3000, 0.6, GR, 'Aguja Poincenot'], [-200, 30700, 180, 2850, 0.62, GR, 'Aguja Mermoz'], [5800, 1900, 160, 2350, 0.55, GR, 'Fortaleza']];
@@ -5515,7 +5904,7 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
       for (const [e, n, R0, top, tp, cols, nm] of SP) {
         let base = 1e9; for (let a = 0; a < 8; a++) base = Math.min(base, sampleH(e + Math.cos(a * 0.785) * R0, n + Math.sin(a * 0.785) * R0));
         const H = top - base; if (H < 150) continue;
-        buildKarst(hi, null, F, e, n, R0 * 1.25, H, Math.abs(Math.round(e + n)) % 997 + 1, cols, { y0: base, taper: Math.min(0.85, tp + 0.15), notch: 0, dome: 0.3, bury: 80, angNoise: 0.34, crown: 0.6, K: 16 });
+        buildKarst(hi, null, F, e, n, R0 * 1.05, H, Math.abs(Math.round(e + n)) % 997 + 1, cols, { y0: base, taper: Math.min(0.85, tp + 0.1), notch: 0, dome: 0.12, bury: 80, angNoise: 0.45, crown: 1.8, K: 18, maxRings: 18 });
         spires.push({ name: nm, e: e, n: n, base: Math.round(base), top: top });
       }
       const sm = new THREE.Mesh(hi.build(), m2RockMat(ctx, 1.5)); sm.castShadow = true; sm.receiveShadow = true; sm.name = 'spires'; ctx.add(sm);
@@ -5547,7 +5936,7 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
     const BALT = [[-30000, -8200], [-24000, -6000], [-16000, -2600], [-8000, -800], [0, -200], [6000, 0]];
     const GOD = [[6000, 0], [6800, 4500], [7000, 9000]];
     const SIDE = [[[-16000, -2600], [-17500, 5500]], [[-8000, -800], [-6500, -9500]], [[0, -200], [-1500, 7500]], [[6000, 0], [15000, 3500], [21000, 5000]], [[6000, 0], [12000, -7000], [16500, -10500]]];
-    const BRAL = [[-48000, -14000], [-40000, -9500], [-33000, -9000], [-30000, -8200]];
+    const BRAL = [[-48000, -14500], [-43000, -11800], [-40500, -10300], [-36000, -10000], [-31000, -10100], [-28500, -9000]];
     const SHAK = [[48000, 30000], [34000, 26000], [22000, 24000], [12000, 26000]];
     const iBA = makeSegIndex([BALT], 1000, 6000), iGO = makeSegIndex([GOD], 1000, 4000), iSI = makeSegIndex(SIDE, 1000, 3000), iBR = makeSegIndex([BRAL], 2000, 6000), iSH = makeSegIndex([SHAK], 2000, 6000);
     const PK = [{ e: 7500, n: 13500, H: 5800, R: 5800, faces: 4, rot: 0.35, steep: 1.1, base: 2300, facet: 0.75, name: 'K2' },
@@ -5555,13 +5944,14 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
       { e: 18500, n: 7500, H: 5230, R: 4200, faces: 3, rot: 1.4, base: 2100, facet: 0.7, name: 'Gasherbrum II' }, { e: 2000, n: -14500, H: 4950, R: 5200, faces: 4, rot: 0.7, base: 1700, facet: 0.6, name: 'Masherbrum' },
       { e: 4800, n: -3600, H: 3250, R: 2400, faces: 3, rot: 0.2, base: 1700, facet: 0.8, name: 'Mitre Peak' }, { e: 15500, n: -9000, H: 4850, R: 4800, faces: 4, rot: 0.5, base: 1900, facet: 0.55, name: 'Chogolisa' },
       { e: -4500, n: 6500, H: 4400, R: 4000, faces: 3, rot: 0.8, base: 1700, facet: 0.55, name: 'Crystal Peak' }];
+    for (const P of PK) { P.R *= 0.78; P.pw = 0.8; P.rough = 170; P.rough2 = 90; P.facet = Math.min(P.facet, 0.55); }
     let lastIce = 0, lastMor = 0;
     function raw(e, n) {
       lastIce = 0; lastMor = 0;
       const x = e * 0.86 + n * 0.5, y = -e * 0.5 + n * 0.86, wx = 0.7 * fbm(x / 9000, y / 9000, 3, 1201), wy = 0.7 * fbm(x / 9000 - 4, y / 9000 + 5, 3, 1203);
-      let m = 2000 + 2300 * Math.pow(ridged(x / 7000 + wx, y / 7000 + wy, 5, 1205), 1.25) * (0.65 + 0.6 * fbm(e / 16000, n / 16000, 2, 1207));
-      m += 180 * (ridged(y / 1500 + wx, x / 1500 + wy, 3, 1209) - 0.45) * sstep(2200, 3200, m);
-      const c = kChan(e, n, 9000, 1211), p = sstep(220, 1700, c), vf = 1150 + 500 * fbm(e / 12000, n / 12000, 2, 1215);
+      let m = 1900 + 3000 * Math.pow(ridged(x / 6200 + wx, y / 6200 + wy, 5, 1205), 1.6) * (0.65 + 0.6 * fbm(e / 16000, n / 16000, 2, 1207));
+      m += 450 * (ridged(y / 1300 + wx, x / 1300 + wy, 3, 1209) - 0.45) * sstep(2000, 3000, m) + 120 * (ridged(x / 420, y / 420, 2, 1210) - 0.45) * sstep(2600, 3400, m);
+      const c = kChan(e, n, 9000, 1211), p = sstep(150, 1100, c), vf = 1150 + 500 * fbm(e / 12000, n / 12000, 2, 1215);
       let h = vf + (m - vf) * Math.pow(p, 0.75);
       if (p < 0.4) lastIce = sstep(1500, 1900, h) * (1 - sstep(0.25, 0.4, p));
       for (const P of PK) { const v = kPyramid(P, e, n); if (v > -1e8) h = kSmax(h, v, 300); }
@@ -5573,23 +5963,23 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
         const V = fl + 35 * Math.max(0, 1 - Math.pow(d / hw, 2)) + (d < hw ? 0 : (d - hw) * wall) + (ramp ? ramp * Math.pow(sstep(0.7, 1.0, f), 2) + Math.max(0, d - hw) * 0 : 0);
         if (V < h) { h = kSmin(h, V, 70); const ice = 1 - sstep(hw * 0.9, hw * 1.05, d); if (ice > lastIce) { lastIce = ice; const st = Math.abs(((d / hw) * 3.5 + 0.3 * fbm(e / 900, n / 900, 2, 1213)) % 1 - 0.5); lastMor = (1 - sstep(0.04, 0.12, st)) * ice * sstep(0.1, 0.3, f + 0.2); } }
       };
-      glac(iBA, 700, 1750, 1100, 1500, 1.15);
+      glac(iBA, 700, 1750, 1100, 1500, 1.7);
       glac(iGO, 1750, 2250, 1100, 800, 1.1, 1400);
       glac(iSI, 1800, 2500, 700, 450, 1.0, 1500);
       // Braldu valley (Askole, home field) and Shaksgam (enemy) - gravel floors
-      let d = iBR.query(e, n); if (SQ.p >= 0 && d < 6000) { const f = SQ.s / SQ.len, V = 300 + 380 * f + (d < 1200 ? 4 * d / 1200 : 4 + (d - 1200) * 0.7); h = kSmin(h, V, 80); if (V < h + 5) lastIce = 0; }
+      let d = iBR.query(e, n); if (SQ.p >= 0 && d < 6000) { const f = SQ.s / SQ.len, fw = 1200 + 700 * (1 - sstep(0.45, 0.8, f)), V = 300 + 380 * f + (d < fw ? 4 * d / fw : 4 + (d - fw) * 0.75); h = kSmin(h, V, 80); if (V < h + 5) lastIce = 0; }
       d = iSH.query(e, n); if (SQ.p >= 0 && d < 6000) { const f = SQ.s / SQ.len, V = 1000 + 500 * f + (d < 1100 ? 4 * d / 1100 : 4 + (d - 1100) * 0.7); h = kSmin(h, V, 80); if (V < h + 5) lastIce = 0; }
       return h;
     }
-    const BASE = { name: 'Askole Air Station', e: -40500, n: -10300, hdg: 75, len: 2600, w: 45, seed: 121, blend: 650, minH: 300, q: 0.4 };
+    const BASE = { name: 'Askole Air Station', e: -40500, n: -10300, hdg: 50, len: 2600, w: 45, seed: 121, blend: 650, minH: 300, q: 0.4 };
     const EBASE = { name: 'Shaksgam forward strip', e: 30000, n: 25400, hdg: 100, len: 1800, w: 40, seed: 122, blend: 500, mini: true, enemy: true, minH: 1000, q: 0.4 };
     const TOWNS = [{ e: -36500, n: -8700, r: 300, count: 26, style: 'desert', seed: 1231, name: 'Askole' }, { e: -45000, n: -12600, r: 260, count: 18, style: 'desert', seed: 1232, name: 'Hoto' }];
-    const cGrav = lin(0x5e5246), cBrown = lin(0x4a3c32), cIceU = lin(0xd2dde4), cMor = lin(0x4a443e), cOasis = lin(0x5a6a34);
+    const cGrav = lin(0x433a32), cBrown = lin(0x2f2721), cIceU = lin(0xd2dde4), cMor = lin(0x4a443e), cOasis = lin(0x5a6a34);
     const def = {
       name: 'Karakoram', region: 'Baltoro glacier, Pakistan (heights scaled)', N: 400, noWater: true, lodK: 0.03, farHeight: (e, n) => 1800 + 900 * fbm(e / 30000, n / 30000, 2, 1261),
       sky: { sunAz: 160, sunEl: 32, fog: 0xb8c8de, fogD: 0.0000055, hfogA: 0.000004, hfogB: 1 / 2000, zenith: [0.01, 0.05, 0.3], glow: [0.95, 0.88, 0.75], glowW: 0.16, sunCol: [1.0, 0.96, 0.9], disk: 34,
-        sunHex: 0xfff6ea, sunI: 3.0, hemiSky: 0xa8c0e8, hemiGround: 0x6a5e50, hemiI: 0.45, white: 0xf0f4f8, envGround: [0.14, 0.12, 0.1] },
-      ground: { rockOn: 1, rock1: 0x3a3029, rock2: 0x6e6052, rockA: 0.33, rockB: 0.52, snowH: 3150, snowF: 200, snow: 0xf6f8fb, snowSlope: 0.56, faceN: 0.7, ice: 0xc6d6e2 },
+        sunHex: 0xfff6ea, sunI: 2.6, hemiSky: 0xa8c0e8, hemiGround: 0x6a5e50, hemiI: 0.45, white: 0xf0f4f8, envGround: [0.14, 0.12, 0.1] },
+      ground: { rockOn: 1, rock1: 0x2e2722, rock2: 0x5a4f45, rockA: 0.22, rockB: 0.4, snowH: 3150, snowF: 200, snow: 0xf6f8fb, snowSlope: 0.78, faceN: 0.7, ice: 0xc6d6e2 },
       bases: [BASE, EBASE], raw: raw, aux: () => lastIce,
       flats: TOWNS.map((t) => ({ e: t.e, n: t.n, hdg: 0, x0: -t.r * 0.8, x1: t.r * 0.8, z0: -t.r * 0.8, z1: t.r * 0.8, blend: 220, minH: 200, q: 0.4 })),
       levels: [{ tile: 1920, cell: 64, max: 200, dilate: 40, score: (e0, n0, e1, n1, g) => {
@@ -5619,9 +6009,9 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
     function lastMorAt(e, n) { raw(e, n); return lastMor; }
     def.extras = function (ctx) {
       const sampleH = ctx.sampleH, F = [], hi = new Builder();
-      const GR = { lime: lin(0xb8a48a), dark: lin(0x62564a), wet: lin(0x4a4440), green: lin(0xf2f5f8), green2: lin(0xdde4ea) };
+      const GR = { lime: lin(0x9a8268), dark: lin(0x4a3e34), wet: lin(0x3e3630), green: lin(0xf2f5f8), green2: lin(0xdde4ea), streaks: 1 };
       // Trango group (north wall of the Baltoro) + Uli Biaho + Cathedrals; base taken from the terrain
-      const SP = [[-14200, 1600, 520, 3480, 0.5, 'Great Trango'], [-13300, 2300, 170, 3300, 0.75, 'Trango Tower'], [-12600, 1700, 210, 3150, 0.7, 'Trango Monk'], [-15600, 2900, 260, 3250, 0.62, 'Uli Biaho'],
+      const SP = [[-14200, 1600, 560, 3950, 0.5, 'Great Trango'], [-13300, 2300, 210, 3700, 0.75, 'Trango Tower'], [-12600, 1700, 230, 3450, 0.7, 'Trango Monk'], [-15600, 2900, 260, 3250, 0.62, 'Uli Biaho'],
         [-6500, 1500, 330, 3050, 0.55, 'Cathedral I'], [-5600, 1900, 260, 2950, 0.6, 'Cathedral II'], [-21000, -2600, 300, 3000, 0.58, 'Paiju Spire'], [3500, -2900, 220, 3000, 0.7, 'Mitre Needle']];
       const spires = [];
       for (const [e, n, R0, top, tp, nm] of SP) {
@@ -5659,9 +6049,14 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
     const ISL = [[-5300, 15600, 3200, 1500, 0.15, 30, 'Ilha do Governador'], [-1500, 13000, 900, 600, 0.3, 12, 'Ilha do Fundão'], [8200, 20000, 900, 600, 0.6, 60, 'Paquetá'], [1500, -8600, 400, 250, 0.4, 70, 'Cagarras'], [5200, -11500, 350, 250, 0, 40, 'Ilha Rasa']];
     // granite domes / monoliths: [e, n, r, H, profile p, name]
     // [e, n, r, H, shape (0 bullet .. 1 table), name]
-    const DOMES = [[4420, 120, 270, 396, 0.1, 'Pão de Açúcar'], [3850, 300, 380, 220, 0.3, 'Morro da Urca'], [-1030, 220, 480, 710, -1, 'Corcovado'], [-4410, -4200, 330, 533, -0.5, 'Dois Irmãos'],
-      [-3800, -4000, 330, 470, 0, 'Dois Irmãos II'], [-8620, -5250, 750, 844, 1, 'Pedra da Gávea'], [-9700, -4300, 480, 696, 0.2, 'Pedra Bonita'], [1600, -2400, 330, 240, 0.3, 'Morro do Cantagalo'],
+    const DOMES = [[4420, 120, 420, 70, 0.3, 'Pão de Açúcar foot'], [3850, 300, 380, 220, 0.3, 'Morro da Urca'], [-1030, 220, 650, 330, 0.3, 'Corcovado shoulder'], [-4200, -4150, 560, 260, 0.3, 'Dois Irmãos foot'],
+      [-8620, -5250, 750, 844, 1, 'Pedra da Gávea'], [1600, -2400, 330, 240, 0.3, 'Morro do Cantagalo'],
       [3300, -900, 300, 250, 0.3, 'Morro de São João'], [11000, -1600, 420, 270, 0.2, 'Morro do Costão'], [-2600, 1300, 480, 440, 0.2, 'Morro do Sumaré'], [9900, 2400, 400, 230, 0.2, 'Morro do Morcego']];
+    // granite monoliths built as meshes (smooth bullet silhouettes at any distance): [e, n, R0, top height, taper, lean e, lean n, dome, name]
+    const MONO = [[4420, 120, 225, 396, 0.22, 0.12, 0.05, 0.75, 'Pão de Açúcar'], [-1030, 220, 300, 710, 0.45, 0.0, -0.18, 0.5, 'Corcovado'],
+      [-4480, -4180, 230, 533, 0.6, 0.0, -0.1, 0.9, 'Dois Irmãos'], [-3900, -4080, 200, 470, 0.6, 0.05, -0.08, 0.9, 'Dois Irmãos II'], [-9700, -4300, 300, 696, 0.5, 0, -0.08, 1.0, 'Pedra Bonita']];
+    const segD = (e, n, a, b) => { const dx = b[0] - a[0], dy = b[1] - a[1]; let t = ((e - a[0]) * dx + (n - a[1]) * dy) / (dx * dx + dy * dy); t = t < 0 ? 0 : t > 1 ? 1 : t; return Math.hypot(e - a[0] - dx * t, n - a[1] - dy * t); };
+    const TIJ = [[-11800, -1600], [-8600, 900], [-5600, 300], [-2600, 400], [-1000, 250]];
     const LAGOA = [[-1000, -2250, 1100, 800], [-15000, -5200, 2600, 900], [-20000, -5600, 2000, 700]];
     let lastUrb = 0;
     function raw(e, n) {
@@ -5671,14 +6066,16 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
       for (const I of ISL) { const de = e - I[0], dn = n - I[1], ca = Math.cos(I[4]), sa = Math.sin(I[4]); const u = (de * ca + dn * sa) / I[2], v = (-de * sa + dn * ca) / I[3], q = Math.hypot(u, v) * (0.85 + 0.3 * fbm(e / 800, n / 800, 2, 1311)); const di = (1 - q) * Math.min(I[2], I[3]); if (di > D) D = di; }
       for (const L of LAGOA) { const q = Math.hypot((e - L[0]) / L[2], (n - L[1]) / L[3]) * (0.9 + 0.2 * fbm(e / 600, n / 600, 2, 1313)); const dl = (q - 1) * Math.min(L[2], L[3]); if (dl < D && D > 0) D = dl; }
       let h;
-      if (D < 0) h = Math.max(-2 + D * 0.02, inB ? -16 : -32);
+      if (D < 0) h = Math.max(-2.5 + D * 0.05, inB ? -24 : -60);
       else h = 1.5 + Math.min(D, 2500) * 0.004 + 6 * fbm(e / 1500, n / 1500, 2, 1315);
       // Tijuca massif + Pedra Branca + Niterói hills + scattered morros (forested)
-      const tij = Math.max(0, 1 - Math.hypot((e + 6000) / 5200, (n + 1200) / 3800));
+      let dT = 1e9; for (let i = 0; i < TIJ.length - 1; i++) dT = Math.min(dT, segD(e, n, TIJ[i], TIJ[i + 1]));
+      const tij = Math.max(0, 1 - dT / (2700 + 700 * fbm(e / 3000, n / 3000, 2, 1361)));
       const pb = Math.max(0, 1 - Math.hypot((e + 25000) / 7000, (n - 1500) / 4500));
       const nit = Math.max(0, 1 - Math.hypot((e - 14000) / 7000, (n - 2500) / 4500));
-      const r = ridged(e / 2600 + 3, n / 2600, 4, 1317);
-      let hill = 1020 * Math.pow(tij, 0.7) * (0.55 + 0.6 * r) + 1000 * Math.pow(pb, 0.8) * (0.5 + 0.6 * r) + 420 * Math.pow(nit, 0.8) * (0.4 + 0.7 * r);
+      const r = ridged(e / 1700 + 3, n / 1700, 4, 1317), gul = 0.62 + 0.38 * sstep(80, 520, kChan(e, n, 1900, 1371));
+      const tH = 760 + 300 * sstep(-10500, -7500, e) * (1 - sstep(-4500, -2000, e)) - 150 * sstep(-2500, -1000, e);
+      let hill = (tH * Math.pow(tij, 0.5) * (0.55 + 0.55 * r) + 1000 * Math.pow(pb, 0.6) * (0.5 + 0.6 * r) + 420 * Math.pow(nit, 0.65) * (0.4 + 0.7 * r)) * gul;
       hill += 260 * Math.pow(Math.max(0, fbm(e / 2200 + 9, n / 2200, 3, 1319) - 0.55) * 2.2, 1.4) * sstep(200, 900, D);
       // Serra do Mar escarpment (north) + the Baixada plain below it
       { const x = e * 0.8 + n * 0.6, y = -e * 0.6 + n * 0.8, w = 0.7 * fbm(x / 6000, y / 6000, 2, 1327); hill += sstep(31000, 35000, n + 2500 * fbm(e / 9000, 3, 2, 1321)) * (1150 + 700 * Math.pow(ridged(x / 3500 + w, y / 3500 - w, 4, 1323), 1.3)); }
@@ -5689,20 +6086,21 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
         const v = d < 1 ? Dm[3] * (Dm[4] > 0.5 ? Math.pow(1 - Math.pow(d, 6), 0.35) : Dm[4] < 0 ? Math.pow(1 - d, 0.75 - 0.15 * Dm[4]) * (1 + 0.25 * (1 - d)) / 1.25 * 1.25 : Math.pow(1 - d * d, 0.55 - 0.2 * Dm[4]) * (1 - 0.15 * Dm[4] * d)) : -40 * (d - 1);
         if (v > h) h = kSmax(h, v, 25);
       }
-      lastUrb = D > 60 && h < 45 ? sstep(60, 200, D) * (1 - sstep(25, 45, h)) * (1 - sstep(31000, 34000, n)) * (1 - tij * 1.4) * (pb > 0.05 ? 0 : 1) : 0;
+      lastUrb = D > 60 && h < 45 ? 0.42 * sstep(60, 200, D) * (1 - sstep(25, 45, h)) * (1 - sstep(31000, 34000, n)) * (1 - tij * 1.4) * (pb > 0.05 ? 0 : 1) : 0;
       return h;
     }
     const BASE = { name: 'Galeão Air Base', e: -5600, n: 15500, hdg: 100, len: 3000, w: 45, seed: 131, blend: 600, minH: 8, q: 0.5 };
     const EBASE = { name: 'Santa Cruz Air Base', e: -38000, n: -3500, hdg: 65, len: 2200, w: 42, seed: 132, blend: 600, mini: true, enemy: true, minH: 8, q: 0.5 };
-    const cForest = lin(0x234a1c), cForest2 = lin(0x355e22), cCity = lin(0x8a8278), cSand = lin(0xe2d4ac), cGran = lin(0x8a8478), cGrass = lin(0x6a7a3a);
+    const cForest = lin(0x234a1c), cForest2 = lin(0x355e22), cCity = lin(0x8a8278), cSand = lin(0xe2d4ac), cGran = lin(0x8a8478), cGranD = lin(0x55514b), cGrass = lin(0x6a7a3a);
+    const cRoofT = lin(0x9a6048), cRoofW = lin(0xc4c0b6), cRoofG = lin(0x4a5a34), tmpC = [0, 0, 0];
     const def = {
-      name: 'Rio de Janeiro', region: 'Rio de Janeiro, Brazil', N: 400, urban: true,
+      name: 'Rio de Janeiro', region: 'Rio de Janeiro, Brazil', N: 400, urban: true, lodK: 0.055,
       sky: { sunAz: 290, sunEl: 26, fog: 0xc9d4dc, fogD: 0.000011, hfogA: 0.00002, hfogB: 1 / 600, zenith: [0.04, 0.12, 0.36], glow: [1.05, 0.82, 0.55], glowW: 0.3, sunCol: [1.0, 0.9, 0.75], disk: 28,
         sunHex: 0xffeed6, sunI: 2.6, hemiSky: 0xb3cbe0, hemiGround: 0x5a5a40, hemiI: 0.55, white: 0xe6ecf0, envGround: [0.1, 0.12, 0.08] },
       ground: { rockOn: 1, rock1: 0x5c5650, rock2: 0x9a928a, rockA: 0.36, rockB: 0.54, sandH: 2.6, sand: 0xe0d2aa, faceN: 1 },
-      water: { color: 0x0a3550, shallow: 0x2a8a88, foam: 0.9, shallowK: 0.6, roughness: 0.12, normalScale: 0.4 },
+      water: { color: 0x062638, shallow: 0x17625e, foam: 0.5, shallowK: 0.6, roughness: 0.2, normalScale: 0.45 },
       bases: [BASE, EBASE], raw: raw, aux: () => lastUrb,
-      levels: [{ tile: 1920, cell: 48, max: 190, dilate: 40, score: (e0, n0, e1, n1, g) => {
+      levels: [{ tile: 1920, cell: 48, max: 120, dilate: 40, score: (e0, n0, e1, n1, g) => {
         let lo = 1e9, hi = -1e9;
         for (let i = 0; i <= 4; i++) for (let j = 0; j <= 4; j++) { const h = triH(g.H, g.NV, (e0 + i * 480 + 48000) / g.cell, (48000 - (n0 + j * 480)) / g.cell); lo = Math.min(lo, h); hi = Math.max(hi, h); }
         const e = (e0 + e1) / 2, n = (n0 + n1) / 2; if (Math.hypot(e - BASE.e, n - BASE.n) < 2500) return 2e5;
@@ -5713,8 +6111,12 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
         if (h < 0) { mix3(o, cSand, cSand, 1); return 0; }
         mix3(o, cForest, cForest2, sstep(0.35, 0.7, fbm(e / 500, n / 500, 3, 1341)));
         mix3(o, o, cGrass, (1 - sstep(10, 60, h)) * 0.6);
-        mix3(o, o, cGran, (1 - sstep(0.55, 0.8, il)) * 0.9);
-        mix3(o, o, cCity, aux * 0.9);
+        { const st = sstep(0.4, 0.7, vnoise((e + n * 0.7) / 26, h / 160, 1343)); mix3(o, o, st > 0.5 ? cGranD : cGran, (1 - sstep(0.55, 0.8, il)) * 0.95); }
+        if (aux > 0) { // city: mottled roofs (terracotta / white / grey concrete / street trees) under the street grid
+          const q = vnoise(e / 70, n / 70, 1345), q2 = vnoise(e / 23, n / 23, 1347);
+          mix3(tmpC, q < 0.35 ? cRoofT : q < 0.6 ? cCity : q < 0.8 ? cRoofW : cRoofG, cCity, 0.35 + 0.3 * q2);
+          mix3(o, o, tmpC, Math.min(1, aux * 2.4));
+        }
         mix3(o, o, cSand, (1 - sstep(1.6, 3.2, h)) * sstep(0.95, 0.99, il) * (n < coastAt(e) + 400 ? 1 : 0.2));
         return aux;
       },
@@ -5727,14 +6129,14 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
         banks: [[-6500, -500, 3500, 2500, 220, 760], [0, 40000, 20000, 6000, 400, 1500]] },
       extras: null
     };
-    def.vegBlock = (e, n) => { raw(e, n); return lastUrb > 0.2; };
+    def.vegBlock = (e, n) => { raw(e, n); return lastUrb > 0.08; };
     def.extras = function (ctx) {
       const sampleH = ctx.sampleH, F = [], towers = [];
       // ---- city: buildings by district (block grid), split in 3 km cells with a near/far LOD
       const CELL = 5000, cells = new Map(), R = makeRng(1361), farB = new Builder();
       // a continuous high-rise wall along Copacabana / Ipanema / Leblon beaches
       for (let e = -6500; e < 4800; e += 34) { const nb = coastAt(e) + 70 + R() * 40, h = sampleH(e, nb); if (h < 1.5 || h > 30) continue; const tall = 30 + R() * 45, w = 12 + R() * 8; farB.box(e, -nb, w / 2, 10 + R() * 6, h - 2, h + tall, lin([0xf0ece4, 0xe6dccb, 0xd8cfc0, 0xc8d4dc][Math.floor(R() * 4)]), 16, 12, 0, 0.02, 0.02, lin(0x6a6660)); }
-      const cellOf = (e, n) => { const k = Math.floor(e / CELL) + ',' + Math.floor(n / CELL); let c = cells.get(k); if (!c) cells.set(k, c = { hi: new Builder(), lo: new Builder(), e: (Math.floor(e / CELL) + 0.5) * CELL, n: (Math.floor(n / CELL) + 0.5) * CELL }); return c; };
+      const cellOf = (e, n) => { const k = Math.floor(e / CELL) + ',' + Math.floor(n / CELL); let c = cells.get(k); if (!c) cells.set(k, c = { hi: new Builder(), lo: new Builder(), tall: new Builder(), e: (Math.floor(e / CELL) + 0.5) * CELL, n: (Math.floor(n / CELL) + 0.5) * CELL }); return c; };
       const WALLS = [0xe8e2d6, 0xd8cfc0, 0xcfc8bc, 0xbfb8aa, 0xe6dccb, 0xa8b4bc, 0xd9c7a8, 0xf0ece4], GLASS = [0x4a5e70, 0x5a6e7e, 0x3e5262];
       let nb = 0, nf = 0;
       const district = (e, n) => { // [height min, max, density, glass]
@@ -5743,17 +6145,17 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
         if (e > -7000 && e < 5200 && n < 3000) return [12, 40, 0.75, 0.1];                    // Zona Sul
         if (e > -24000 && e < -10000 && n < -4000) return [30, 95, 0.35, 0.5];                // Barra
         if (e > 8000 && e < 16000 && n < 12000) return [10, 45, 0.6, 0.1];                     // Niterói
-        return [6, 18, 0.16, 0];                                                                // Zona Norte / suburbs
+        return [5, 14, 0.22, 0];                                                                // Zona Norte / suburbs
       };
-      for (let n = -9000; n < 30000; n += 90) for (let e = -30000; e < 20000; e += 90) {
+      for (let n = -9000; n < 30000; n += 70) for (let e = -30000; e < 20000; e += 70) {
         const ee = e + (R() - 0.5) * 30, nn = n + (R() - 0.5) * 30, h = sampleH(ee, nn); if (h < 1.5 || h > 45) continue;
-        raw(ee, nn); if (lastUrb < 0.5) continue;
+        raw(ee, nn); if (lastUrb < 0.21) continue;
         const D = district(ee, nn); if (R() > D[2]) continue;
         if (Math.hypot(ee - BASE.e, nn - BASE.n) < 2300 || Math.abs(ee - 6000) < 300 && nn > 7000 && nn < 9500) continue;
-        const tall = D[0] + Math.pow(R(), 2.2) * (D[1] - D[0]), w = 10 + R() * 16, d = 10 + R() * 16, c = cellOf(ee, nn);
+        const tall = D[0] + Math.pow(R(), 2.2) * (D[1] - D[0]), w = 12 + R() * 18, d = 12 + R() * 18, c = cellOf(ee, nn);
         const glass = R() < D[3] && tall > 40, col = lin(glass ? GLASS[Math.floor(R() * 3)] : WALLS[Math.floor(R() * WALLS.length)]);
         const lo = Math.min(sampleH(ee - w / 2, nn - d / 2), sampleH(ee + w / 2, nn + d / 2), h) - 2;
-        (tall > 22 ? farB : c.hi).box(ee, -nn, w / 2, d / 2, lo, h + tall, col, 16, 12, 0, 0.02, 0.02, lin(0x6a6660));
+        (tall > 60 ? farB : tall > 22 ? c.tall : c.hi).box(ee, -nn, w / 2, d / 2, lo, h + tall, col, 16, 12, 0, 0.02, 0.02, lin(0x6a6660));
         if (tall > 60) towers.push({ x: ee, z: -nn, hx: w / 2, hz: d / 2, h: h + tall });
         nb++;
       }
@@ -5767,21 +6169,29 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
       const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7, metalness: 0.05 });
       const meshes = [];
       for (const c of cells.values()) {
-        if (!c.hi.nv) continue;
-        const hm = new THREE.Mesh(c.hi.build(), mat); hm.castShadow = true; hm.receiveShadow = true; hm.name = 'city'; hm.visible = false; ctx.add(hm);
-        meshes.push({ e: c.e, n: c.n, hi: hm, lo: null, near: false });
+        if (c.hi.nv) { const hm = new THREE.Mesh(c.hi.build(), mat); hm.castShadow = true; hm.receiveShadow = true; hm.name = 'city'; hm.visible = false; ctx.add(hm); meshes.push({ e: c.e, n: c.n, hi: hm, lo: null, near: false, k: 1 }); }
+        if (c.tall.nv) { const tm = new THREE.Mesh(c.tall.build(), mat); tm.castShadow = true; tm.receiveShadow = true; tm.name = 'cityMid'; tm.visible = false; ctx.add(tm); meshes.push({ e: c.e, n: c.n, hi: tm, lo: null, near: false, k: 2.6 }); }
       }
       { const fm = new THREE.Mesh(farB.build(), mat); fm.castShadow = true; fm.receiveShadow = true; fm.name = 'cityTall'; ctx.add(fm); }
       // ---- landmarks: Christ the Redeemer, Sugarloaf cable car, Maracanã, Rio-Niterói bridge, Dedo de Deus
       const lm = new Builder(), stone = lin(0xe8e4dc);
-      { const e = -1030, n = 220, y = sampleH(e, n); lm.box(e, -n, 6, 6, y - 2, y + 8, lin(0xb8b0a4), 16, 12, 0, 0.02, 0.02); geoTmp(new THREE.CylinderGeometry(2.2, 3.4, 24, 10), mat4(e, y + 20, -n), lm, stone); lm.box(e, -n, 14, 1.4, y + 27, y + 30, stone, 16, 12, 0, 0.02, 0.02); geoTmp(new THREE.SphereGeometry(1.7, 10, 8), mat4(e, y + 33.6, -n), lm, stone);
+      const sp = new Builder();
+      const GRAN = { lime: lin(0x8c867b), dark: lin(0x4c4842), wet: lin(0x3a3632), green: lin(0x24461a), green2: lin(0x3a6024), streaks: 1, tufts: 1 }, MT = {};
+      const GRANB = Object.assign({}, GRAN, { tufts: 0, lime: lin(0x948e84) });
+      for (const M of MONO) {
+        const [e, n, R0, top, tp, le, ln, dm, nm] = M; let base = 1e9; for (let a = 0; a < 10; a++) base = Math.min(base, sampleH(e + Math.cos(a * 0.628) * R0 * 0.85, n + Math.sin(a * 0.628) * R0 * 0.85));
+        base = Math.max(base - 12, -8); const H = top - base;
+        buildKarst(sp, null, F, e, n, R0, H, Math.abs(Math.round(e + n)) % 997 + 1, nm === 'Pão de Açúcar' || nm === 'Corcovado' ? GRANB : GRAN, { y0: base, taper: tp, notch: 0, dome: dm, domeMax: 0.3, bury: 40, lean: [le, ln], angNoise: 0.16, crown: 0.3, K: 22, maxRings: 18 });
+        MT[nm] = { e: e + le * H, n: n + ln * H, y: top };
+      }
+      { const e = MT.Corcovado.e, n = MT.Corcovado.n, y = MT.Corcovado.y - 3; lm.box(e, -n, 6, 6, y - 2, y + 8, lin(0xb8b0a4), 16, 12, 0, 0.02, 0.02); geoTmp(new THREE.CylinderGeometry(2.2, 3.4, 24, 10), mat4(e, y + 20, -n), lm, stone); lm.box(e, -n, 14, 1.4, y + 27, y + 30, stone, 16, 12, 0, 0.02, 0.02); geoTmp(new THREE.SphereGeometry(1.7, 10, 8), mat4(e, y + 33.6, -n), lm, stone);
         F.push({ x0: e - 15, x1: e + 15, z0: -n - 7, z1: -n + 7, y0: y - 2, y1: y + 36, test: (x, yy, z) => Math.abs(z + n) < 4 && (Math.abs(x - e) < 4 || (Math.abs(x - e) < 15 && yy > y + 26 && yy < y + 31)) }); }
       const cable = (a, b) => { const L = Math.hypot(b[0] - a[0], b[1] - a[1]), N = Math.ceil(L / 40), pts = []; for (let k = 0; k <= N; k++) { const t = k / N; pts.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t - Math.sin(Math.PI * t) * L * 0.04]); }
         for (let k = 0; k < N; k++) { const p = pts[k], q = pts[k + 1], l = Math.hypot(q[0] - p[0], q[1] - p[1], q[2] - p[2]); const g = new THREE.CylinderGeometry(0.4, 0.4, l, 4, 1, true); g.rotateX(Math.PI / 2); const m = new THREE.Matrix4().lookAt(new THREE.Vector3(p[0], p[2], -p[1]), new THREE.Vector3(q[0], q[2], -q[1]), new THREE.Vector3(0, 1, 0)); m.setPosition((p[0] + q[0]) / 2, (p[2] + q[2]) / 2, -(p[1] + q[1]) / 2); geoTmp(g, m, lm, lin(0x2a2a2c)); }
         const mid = pts[Math.floor(N / 2)]; lm.box(mid[0], -mid[1], 3, 2.2, mid[2] - 6, mid[2] - 1.5, lin(0xd8d8d8), 16, 12, 0, 0.02, 0.02);
         F.push({ x0: Math.min(a[0], b[0]) - 8, x1: Math.max(a[0], b[0]) + 8, y0: Math.min(a[2], b[2]) - L * 0.05 - 8, y1: Math.max(a[2], b[2]) + 8, z0: -Math.max(a[1], b[1]) - 8, z1: -Math.min(a[1], b[1]) + 8, test: function (x, y, z) { for (let k = 0; k < pts.length - 1; k++) { const p = pts[k], q = pts[k + 1], dx = q[0] - p[0], dy = q[2] - p[2], dz = -(q[1] - p[1]); let t = ((x - p[0]) * dx + (y - p[2]) * dy + (z + p[1]) * dz) / (dx * dx + dy * dy + dz * dz); t = t < 0 ? 0 : t > 1 ? 1 : t; const ox = x - p[0] - dx * t, oy = y - p[2] - dy * t, oz = z + p[1] - dz * t; if (ox * ox + oy * oy + oz * oz < 25) return true; } return false; } }); };
-      const st0 = [3550, -150], st1 = [3850, 300], st2 = [4380, 140];
-      const P0 = [st0[0], st0[1], sampleH(st0[0], st0[1]) + 15], P1 = [st1[0], st1[1], sampleH(st1[0], st1[1]) + 12], P2 = [st2[0], st2[1], sampleH(st2[0], st2[1]) + 12];
+      const st0 = [3550, -150], st1 = [3850, 300], st2 = [MT['Pão de Açúcar'].e - 60, MT['Pão de Açúcar'].n + 20];
+      const P0 = [st0[0], st0[1], sampleH(st0[0], st0[1]) + 15], P1 = [st1[0], st1[1], sampleH(st1[0], st1[1]) + 12], P2 = [st2[0], st2[1], MT['Pão de Açúcar'].y + 4];
       cable(P0, P1); cable(P1, P2); for (const P of [P0, P1, P2]) lm.box(P[0], -P[1], 8, 6, P[2] - 18, P[2] + 3, lin(0xb8b4aa), 16, 12, 0, 0.02, 0.02, lin(0x5a5a5c));
       { const e = -3080, n = 4210, y = sampleH(e, n), g = new THREE.CylinderGeometry(1, 1, 32, 40, 1, true); g.scale(140, 1, 115); geoTmp(g, mat4(e, y + 14, -n), lm, lin(0xd8d8d4)); const r2 = new THREE.CylinderGeometry(1, 1, 2, 40, 1, true); r2.scale(118, 1, 93); geoTmp(r2, mat4(e, y + 31, -n), lm, lin(0x9aa0a6)); geoTmp(new THREE.CircleGeometry(1, 40).scale(100, 75, 1).rotateX(-Math.PI / 2), mat4(e, y + 0.4, -n), lm, lin(0x3a8a3a)); }
       // Rio-Niterói bridge: deck 26 m high, main navigation span 72 m high over the channel
@@ -5793,7 +6203,7 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
           if (k % 2 === 0 && sampleH(p[0], p[1]) < p[2] - 5 && Math.abs(p[0] - 5900) > 160) { lm.rbox(p[0], -p[1], 3, 5, ang, -12, p[2] - 4, lin(0xa8a8a4), lin(0xa8a8a4), 0); } }
         F.push({ x0: 1400, x1: 9000, z0: -9000, z1: -7300, y0: -15, y1: 80, test: function (x, y, z) { const e = x, n = -z; let best = 1e9, bi = 0; for (let k = 0; k < pts.length - 1; k += 1) { const p = pts[k], d2 = (e - p[0]) * (e - p[0]) + (n - p[1]) * (n - p[1]); if (d2 < best) { best = d2; bi = k; } } if (best > 60 * 60) return false; const p = pts[bi], q = pts[Math.min(bi + 1, pts.length - 1)], ux = q[0] - p[0], uy = q[1] - p[1], ul = Math.hypot(ux, uy) || 1, lat = Math.abs(((e - p[0]) * -uy + (n - p[1]) * ux) / ul); if (lat > brW + 1) return false; if (y > p[2] - 5 && y < p[2] + 1) return true; return bi % 2 === 0 && y < p[2] - 4 && Math.abs(p[0] - 5900) > 160 && Math.hypot(e - p[0], n - p[1]) < 6; } }); }
       // Dedo de Deus (God's Finger) on the Serra do Mar escarpment
-      const sp = new Builder(); { const e = 14000, n = 38800; let base = 1e9; for (let a = 0; a < 8; a++) base = Math.min(base, sampleH(e + Math.cos(a) * 160, n + Math.sin(a) * 160)); buildKarst(sp, null, F, e, n, 150, 1700 - base + 600, 77, { lime: lin(0x8a8478), dark: lin(0x55504a), wet: lin(0x4a4440), green: lin(0x2e5124), green2: lin(0x47702c) }, { y0: base, taper: 0.72, notch: 0, dome: 0.3, bury: 60 }); }
+      { const e = 14000, n = 38800; let base = 1e9; for (let a = 0; a < 8; a++) base = Math.min(base, sampleH(e + Math.cos(a) * 160, n + Math.sin(a) * 160)); buildKarst(sp, null, F, e, n, 150, 1700 - base + 600, 77, { lime: lin(0x8a8478), dark: lin(0x55504a), wet: lin(0x4a4440), green: lin(0x2e5124), green2: lin(0x47702c) }, { y0: base, taper: 0.72, notch: 0, dome: 0.3, bury: 60 }); }
       const lmM = new THREE.Mesh(lm.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.1 })); lmM.castShadow = true; lmM.name = 'landmarks'; ctx.add(lmM);
       const spM = new THREE.Mesh(sp.build(), m2RockMat(ctx, 1.5)); spM.castShadow = true; spM.name = 'dedo'; ctx.add(spM);
       const Z = [['sugarloaf', 'Sugarloaf Mountain', 4400, 100, 1500, 'mountain'], ['corcovado', 'Corcovado (Christ the Redeemer)', -1030, 220, 2000, 'mountain'], ['copacabana', 'Copacabana', 2600, -2300, 1500, 'town'],
@@ -5807,10 +6217,10 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
         solids: makeSolidsGrid(F, 800), towers: towers, seaLanes: lanes,
         update: function (dt, cam) {
           const ce = cam.position.x, cn = -cam.position.z, hiR = cam.position.y > 2500 ? 1500 : 3200;
-          for (const m of meshes) { const d = Math.max(Math.abs(m.e - ce), Math.abs(m.n - cn)) - CELL / 2; const near = d < (m.near ? hiR + 400 : hiR); if (near !== m.near) { m.near = near; m.hi.visible = near; if (m.lo) m.lo.visible = !near; } }
+          for (const m of meshes) { const d = Math.max(Math.abs(m.e - ce), Math.abs(m.n - cn)) - CELL / 2; const near = d < (m.near ? hiR * m.k + 400 : hiR * m.k); if (near !== m.near) { m.near = near; m.hi.visible = near; if (m.lo) m.lo.visible = !near; } }
         },
         debug: { buildings: nb, favela: nf, towers: towers.length, cells: meshes.length,
-          views: { sugarloaf: [7500, -3500, 250, 4400, 100, 200], christ: [-200, -1500, 760, -1030, 220, 720], copacabana: [6500, -5500, 300, 1500, -2500, 40], bridge: [5900, 5500, 60, 5900, 8200, 50],
+          views: { sugarloaf: [6300, -2000, 160, 4420, 120, 260], christ: [600, -2200, 650, -1030, 220, 600], copacabana: [4200, -6200, 260, 1200, -3200, 60], bridge: [5200, 7000, 45, 6300, 8250, 60],
             gavea: [-12000, -9000, 600, -8620, -5250, 500], dedo: [10000, 32000, 1600, 14000, 38800, 1900], overview: [12000, -14000, 2200, -2000, 4000, 200] } }
       };
     };
@@ -6112,13 +6522,13 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
   // karst tower (Ha Long style): limestone column with fluted, streaked walls, a sea notch at the waterline and a jungle cap.
   // hi/lo: Builders for the near and far LOD meshes (lo may be null). Adds a solid. Returns top height.
   const KARST_C = { lime: lin(0x858074), dark: lin(0x3c3a33), wet: lin(0x2e2c28), green: lin(0x22421a), green2: lin(0x365a22), vines: 1 };
-  function karstRadius(R0, H, y, tp, nt, ov) { const t = Math.max(0, y) / H; return R0 * (1 + (ov || 0) * sstep(0.55, 0.85, t)) * (1 - tp * Math.pow(t, tp > 0.3 ? 1.3 : 2)) * (1 - nt * Math.exp(-Math.pow((y - 2) / 5, 2))); }
+  function karstRadius(R0, H, y, tp, nt, ov) { const t = Math.max(0, y) / H; return R0 * (1 + (ov || 0) * sstep(0.55, 0.85, t)) * (1 - tp * Math.pow(t, tp > 0.3 ? 1.3 : 2)) * (1 - nt * (y < 2 ? 1 : Math.exp(-Math.pow((y - 2) / 5, 2)))); }
   // opts: {y0 (base height), taper (0.22 karst .. 0.75 needle), notch (sea notch depth), dome (cap height factor), bury}
   function buildKarst(hi, lo, F, e, n, R0, H, seed, cols, opts) {
     const O = opts || {}, C = cols || KARST_C, tp = O.taper === undefined ? 0.22 : O.taper, nt = O.notch === undefined ? 0.16 : O.notch, Y0 = O.y0 || 0, bury = O.bury || 14;
     const ov = O.overhang || 0, LE = O.lean || [0, 0];
     const kr = (y) => karstRadius(R0, H, y, tp, nt, ov);
-    const dome = Math.min(R0 * (1 - tp) * (O.dome || 0.55), H * 0.2), yW = H - dome, rTop = kr(yW);
+    const dome = Math.min(R0 * (1 - tp) * (O.dome || 0.55), H * (O.domeMax || 0.2)), yW = H - dome, rTop = kr(yW);
     const prof = [];
     const nw = Math.max(4, Math.min(O.maxRings || 14, Math.ceil(H / 26)));
     for (let j = 0; j <= nw; j++) { const y = -bury + (yW + bury) * j / nw; prof.push([kr(y), y]); }
@@ -6143,14 +6553,15 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
         if (nt > 0) mix3(o, o, C.wet, 1 - sstep(1, 7, y));
         let gr = sstep(0.35, 0.65, ny + 0.25 * (vnoise(x / 25, z / 25 + y / 30, seed) - 0.5)) * sstep(8, 30, y);
         if (C.vines) gr = Math.max(gr, sstep(0.52, 0.66, fbm(Math.atan2(z + n, x - e) * 3 + seed, y / 70, 2, 815)) * sstep(6, 25, y) * 0.95, sstep(0.55, 0.85, y / (yW + 1)) * 0.85);
-        if (C.tufts) { gr = sstep(0.28, 0.5, ny + 0.35 * (vnoise(x / 18, z / 18 + y / 22, seed) - 0.5)) * sstep(6, 20, y); gr = Math.max(gr, sstep(yW - dome * 0.8 - 10, yW, y) * sstep(0.25, 0.45, vnoise(x / 14, z / 14, seed + 1)), sstep(0.62, 0.72, fbm(Math.atan2(z + n, x - e) * 4 + seed, y / 50, 2, 821)) * sstep(0.35, 0.8, y / (yW + 1)) * 0.9); }
+        if (C.tufts) { gr = Math.max(gr * 0.8, sstep(0.28, 0.5, ny + 0.35 * (vnoise(x / 18, z / 18 + y / 22, seed) - 0.5)) * sstep(6, 20, y)); gr = Math.max(gr, sstep(yW - dome * 0.8 - 10, yW, y) * sstep(0.25, 0.45, vnoise(x / 14, z / 14, seed + 1)), sstep(0.62, 0.72, fbm(Math.atan2(z + n, x - e) * 4 + seed, y / 50, 2, 821)) * sstep(0.35, 0.8, y / (yW + 1)) * 0.9); }
+        if (C.jungle) gr = Math.max(gr, sstep(0.05, 0.3, ny + 0.3 * (vnoise(x / 20, z / 20 + y / 25, seed) - 0.5)) * sstep(10, 30, y), sstep(0.45, 0.7, y / (yW + 1) + 0.25 * (vnoise(x / 30, z / 30 + y / 40, seed + 2) - 0.5)));
         mix3(o, o, vnoise(x / 40, z / 40, 3) > 0.5 ? C.green : C.green2, gr);
         b.c[v * 3] = o[0]; b.c[v * 3 + 1] = o[1]; b.c[v * 3 + 2] = o[2];
       }
       g.dispose();
     };
     sweep(hi, O.K || (R0 > 120 ? 16 : 12), prof, true);
-    if (lo) sweep(lo, 7, [[R0 * 0.93, -bury], [kr(yW * 0.25) * 0.93, yW * 0.25], [kr(yW * 0.5) * 0.93, yW * 0.5], [rTop * 0.93, yW], [rTop * 0.5, yW + dome * 0.85], [rTop * 0.02, yW + dome * 0.95]], false);
+    const LF = O.loK || 0.78; if (lo) sweep(lo, 7, [[kr(-bury) * LF, -bury], [kr(5) * LF, 5], [kr(yW * 0.25) * LF, yW * 0.25], [kr(yW * 0.5) * LF, yW * 0.5], [rTop * LF, yW], [rTop * 0.42, yW + dome * 0.85], [rTop * 0.02, yW + dome * 0.95]], false);
     const x0 = e, z0 = -n;
     const LX = Math.abs(LE[0]) * H, LZ = Math.abs(LE[1]) * H, RR = R0 * (1.15 + ov);
     F.push({ x0: x0 - RR - LX, x1: x0 + RR + LX, z0: z0 - RR - LZ, z1: z0 + RR + LZ, y0: Y0 - 20, y1: Y0 + H, test: function (x, y, z) {
@@ -6188,7 +6599,7 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
     const fc = P.facet === undefined ? 0.45 : P.facet; m = m * fc + Math.hypot(de, dn) * (1 - fc) * 0.92;
     m += P.R * (P.warp === undefined ? 0.16 : P.warp) * (2 * fbm(e / 1100 + P.e * 1e-3, n / 1100, 3, 1013) - 1);
     const x = m / P.R, B = P.base === undefined ? P.H * 0.4 : P.base;
-    return (x < 1 ? P.H - (P.H - B) * Math.pow(x, P.pw || 0.9) : B - (x - 1) * 5000) + (P.rough === undefined ? 110 : P.rough) * (ridged(e / 800 + 3, n / 800, 3, 1011) - 0.4) * sstep(0.05, 0.4, x);
+    return (x < 1 ? P.H - (P.H - B) * Math.pow(x, P.pw || 0.9) : B - (x - 1) * 5000) + (P.rough === undefined ? 110 : P.rough) * (ridged(e / 800 + 3, n / 800, 3, 1011) - 0.4) * sstep(0.05, 0.4, x) + (P.rough2 ? P.rough2 * (ridged(e / 240 + 5, n / 240, 2, 1015) - 0.45) * sstep(0.03, 0.2, x) : 0);
   }
   // flat lake water surface (quads where the terrain dips below `level` inside a box), returns the mesh
   function buildLake(ctx, sampleH, box, level, colHex, step, keep) {
@@ -13690,7 +14101,7 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
       const nac = [[-4.8, -0.2, 0.42, 0.42, 0.42, 3, 0.35, 0.2, 0.6], [-4.2, -0.2, 0.46, 0.45, 0.45, 3, 0.1, 0.2, 0.5], [-1.5, -0.15, 0.5, 0.45, 0.45, 2.8, 0], [2.5, -0.1, 0.45, 0.42, 0.42, 2.6, 0], [4.5, -0.05, 0.1, 0.2, 0.2, 2, 0]];
       for (const sx of [-1, 1]) {
         P.body.push(loft(nac, 12, 3, sx * 1.32, true)); intake(P, nac[0], sx * 1.32, { lip: 0.03, depth: 2.4, shrink: 0.8, lipCol: [0.45, 0.48, 0.5] });
-        P.metal.push(paint(sphere(0.2, sx * 1.12, -0.2, -4.45).scale(1, 1.4, 2.2), 0.36, 0.39, 0.42));   // DSI bump
+        P.metal.push(paint(sphere(0.2, 0, 0, 0).scale(1, 1.4, 2.2).translate(sx * 1.08, -0.2, -4.3), 0.36, 0.39, 0.42));   // DSI bump
       }
       const lx = planform([[1.0, -2.8], [1.75, -1.0], [2.1, 0.2], [1.0, 0.2]], 0.07, 0.025, 0.05); P.body.push(lx, mirrorX(lx));
       P.body.push(...wingPair([[1.5, -0.6], [6.5, 3.9], [6.5, 5.45], [1.5, 7.5]], 0.12, 0.04, 0.02, (ax) => 1 - 0.5 * clamp01((ax - 1.5) / 5)));
@@ -19567,21 +19978,23 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"x29":{"side":"data:image/webp;base64,UklGRkYgAA
   // The jet's spec.hardpoints = stations open at stock. The Hardpoints upgrade opens the next groups.
   // A spec can override with spec.pylonLayout ('t w c ...') and give 3D points with spec.pylons = { L1: {x,y,z}, ... } (model local).
   var LAYOUT = { mig21: 'w c w', j29: 'w w c', j35: 'w c w c', ja37: 'w w c w', jas39: 't w c w c', su27: 't w w c w c', su35: 't w w w c c w', su57: 't c c w w' };
-  var KIND_TXT = { tip: 'Wingtip rail: small air-to-air missiles only.', wing: 'Wing pylon: missiles, rockets, bombs and pods.', belly: 'Centre pylon: bombs, pods and drop tanks.' };
-  var KIND_NAME = { tip: 'tip', wing: 'wing', belly: 'centre' };
+  var KIND_TXT = { tip: 'Wingtip rail: small air-to-air missiles only.', wing: 'Wing pylon: missiles, rockets, bombs and pods.', belly: 'Centre pylon: bombs, pods and drop tanks.',
+    bay: 'Internal bay: missiles and bombs up to 500 kg. The doors open when you fire (stealth drops for a moment).' };
+  var KIND_NAME = { tip: 'tip', wing: 'wing', belly: 'centre', bay: 'bay' };
+  // roster batch 2 layout codes: b = bay pair, s = side-bay pair, i = centre bay station (kind 'bay': aircraft_b2.js doors)
   function buildLayout(spec, hardpoints) {
     spec = spec || {};
     var lay = spec.pylonLayout || LAYOUT[spec.id] || ((spec.tier || 0) >= 5 ? 't ' : '') + 'w w c w c w';
     var kinds = Array.isArray(lay) ? lay : String(lay).split(/\s+/).filter(Boolean);
     var groups = [], pairN = 0, cN = 0, nW = kinds.filter(function (k) { return k === 'w'; }).length, wI = 0;
     kinds.forEach(function (k) {
-      if (k === 'c') {
+      if (k === 'c' || k === 'i') {
         cN++;
         var cid = cN === 1 ? 'C' : 'C' + cN;
-        groups.push({ ids: [cid], st: [{ id: cid, kind: 'belly', side: 0, index: cN, frac: 0, aft: (cN - 1) * 0.22 }] });
+        groups.push({ ids: [cid], st: [{ id: cid, kind: k === 'i' ? 'bay' : 'belly', side: 0, index: cN, frac: 0, aft: (cN - 1) * 0.22 }] });
       } else {
         pairN++;
-        var kind = k === 't' ? 'tip' : 'wing', w0 = kinds.indexOf('t') >= 0 ? 0.7 : 0.8, fr = kind === 'tip' ? 1 : (nW <= 1 ? 0.55 : w0 - (wI++) * ((w0 - 0.26) / (nW - 1)));
+        var kind = k === 't' ? 'tip' : k === 'b' || k === 's' ? 'bay' : 'wing', w0 = kinds.indexOf('t') >= 0 ? 0.7 : 0.8, fr = kind === 'tip' ? 1 : kind === 'bay' ? (k === 's' ? 0.2 : 0.08) : (nW <= 1 ? 0.55 : w0 - (wI++) * ((w0 - 0.26) / (nW - 1)));
         groups.push({ ids: ['L' + pairN, 'R' + pairN], st: [
           { id: 'L' + pairN, kind: kind, side: -1, index: pairN, frac: fr, aft: 0 },
           { id: 'R' + pairN, kind: kind, side: 1, index: pairN, frac: fr, aft: 0 }] });
@@ -19598,11 +20011,14 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"x29":{"side":"data:image/webp;base64,UklGRkYgAA
     if (!w) return true;
     if (w.type === 'gun' && !isPod(w)) return false;
     if (w.type === 'tank') return kind === 'belly';
+    if (kind === 'bay') return (w.type === 'missile' || w.type === 'bomb') && !w.special && (w.weight || 0) <= 500;   // internal bay: no pods, tanks or specials
     if (w.station) return w.station.indexOf(kind) >= 0;          // specials: 'belly' | 'wing' | 'belly wing'
     if (kind === 'tip') return isAAMw(w) && (w.weight || 0) <= 120;
     if (kind === 'belly') return w.type === 'bomb' || w.type === 'rocket' || w.type === 'missile' || isPod(w);   // belly: bombs, rockets, pods and missiles (Su-27/F-15 style)
     return true;
   }
+  // F-15C (spec.aaOnly): air-to-air only, like the real USAF Eagle: AAMs and drop tanks, no bombs / ground missiles / pods
+  function aaBan(acId, w) { var a = acSpec(acId); return !!(a && a.aaOnly && w && !isAAMw(w) && w.type !== 'tank' && !(w.type === 'gun' && !isPod(w))); }
   function storeType(w) { return !w ? '' : (isPod(w) || w.type === 'beam' || w.type === 'rail') ? 'gunpod' : w.type === 'tank' ? 'tank' : isAAMw(w) ? 'aam' : w.type === 'missile' ? 'agm' : w.type; }
   var DRAG_PER = { aam: 0.012, agm: 0.03, rocket: 0.035, bomb: 0.022, gunpod: 0.03, tank: 0.045 };
 
@@ -19905,7 +20321,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"x29":{"side":"data:image/webp;base64,UklGRkYgAA
       var firstAAM = null;
       sts.open.forEach(function (st) {
         var w = FL.WEAPONS[eq.pyl[st.id]];
-        if (!w || !P.ownedW[w.id] || !fits(st.kind, w) || (w.jet && w.jet.indexOf(P.ac) < 0)) return;   // w.jet: jet-only weapons (R-33 ...)
+        if (!w || !P.ownedW[w.id] || !fits(st.kind, w) || (w.jet && w.jet.indexOf(P.ac) < 0) || aaBan(P.ac, w)) return;   // w.jet: jet-only weapons (R-33 ...)
         var t = storeType(w), n = countFor(st, w, s), ammo = n;
         if (t === 'rocket') ammo = Math.max(1, Math.round((w.ammo + s.podAmmoAdd) * s.specialAmmoMul));
         else if (t === 'gunpod') ammo = w.ammo || 300;
@@ -21112,8 +21528,10 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"x29":{"side":"data:image/webp;base64,UklGRkYgAA
       return { n: n, txt: '×' + n + (t === 'aam' && n === 2 ? ' (twin rail)' : t === 'bomb' && n > 1 ? ' (rack)' : ''), kg: n * w.weight };
     }
     function whyNot(st, w) {
+      if (aaBan(P.ac, w)) return 'Air-to-air only jet';
       if (fits(st.kind, w)) return '';
       if (st.kind === 'tip') return 'Wingtip: small AAM only';
+      if (st.kind === 'bay') return 'Bay: missiles / bombs up to 500 kg';
       if (w.type === 'tank') return 'Centre pylon only';
       if (st.kind === 'belly') return 'Centre: bombs, pods, tanks';
       return 'Does not fit';
@@ -21444,6 +21862,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"x29":{"side":"data:image/webp;base64,UklGRkYgAA
     function equipWeapon(id, slot, quiet) {
       var w = FL.WEAPONS[id]; if (!w || !P.ownedW[id]) return false;
       if (w.jet && w.jet.indexOf(P.ac) < 0) return false;          // jet-only gun / missile
+      if (aaBan(P.ac, w)) return false;                             // F-15C: air-to-air only
       if (w.type === 'gun' && !isPod(w)) { eqOf(P.ac).gun = id; if (!quiet) applyAll(); return true; }
       var sts = stations({ pylonsAdd: pylonsAdd() }), sid = slot && slot !== 'auto' && slot !== 'missile' ? resolveSlot(slot, sts) : null;
       if (sid) return setPylon(sid, id, quiet);
@@ -21707,7 +22126,19 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"x29":{"side":"data:image/webp;base64,UklGRkYgAA
     weasel: { name: 'Wild Weasel', desc: 'Anti-radar missiles lock twice as fast.' },
     vecdrift: { name: 'Vector drift', desc: '3D thrust vectoring: drift with half the speed loss, flat yaw turns, nose authority at any speed.' },
     silent: { name: 'Silent hunter', desc: 'Stealth skin and 3D TVC: enemy radars find you at 65% range.' },
-    highalpha: { name: 'High alpha', desc: 'No 24° limiter: fly at 45° AoA with full roll control.' }
+    highalpha: { name: 'High alpha', desc: 'No 24° limiter: fly at 45° AoA with full roll control.' },
+    // roster batch 2 (aircraft_b2.js)
+    sweep: { name: 'Auto swing wings', desc: 'The wings sweep by themselves: wide (20°) for tight turns and landings, back (68°) for speed. Parked: 75°.' },
+    override: { name: 'G-limiter override', key: true, desc: 'Hold: AoA limit 32°, turn rate +30%. Above the G limit the airframe takes damage.' },
+    spectra: { name: 'SPECTRA jammer', key: true, desc: 'Press: for 6 s, radar missiles at you and allies within 1.5 km lose their lock. 30 s to re-arm.' },
+    decoy: { name: 'Towed decoy', desc: 'A radar decoy on a cable behind the right wingtip pulls away the first radar missile at you. 25 s to reel out a new one.' },
+    eagle: { name: 'Vertical Eagle', desc: 'More thrust than weight: +10% thrust with the nose above 60°. Once per life a killing hit leaves you with 1 HP.' },
+    wso: { name: 'WSO auto-lase', desc: 'Your back-seater keeps ground targets locked and lasered while you turn away. Conformal tanks: boost time x1.4.' },
+    combo: { name: 'PSM combo chain', desc: 'Drift hook, Cobra, Kulbit: three moves inside 4 s wake the Terminator: 6 s of gun +50% and a 3x seeker cone.' },
+    burner: { name: 'Prototype burner', desc: 'The longest boost meter in the game (x2). It refills 50% faster.' },
+    ghost: { name: 'Ghost', desc: 'Enemies find you at half range. Open bay doors or stores under the wings break it (2 s after the doors close).' },
+    supercruise: { name: 'Supercruise', desc: 'Mach 1.6 at military power, no afterburner. The boost meter refills 50% faster while you supercruise. Cold tail: locks on you take 15% longer.' },
+    sniper: { name: 'Sniper beam', key: true, desc: 'Press: the radar narrows to an 8° beam with double lock range. Press again for the wide scan.' }
   };
   FL.SIG_INFO = SIG;
 
@@ -21735,8 +22166,24 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"x29":{"side":"data:image/webp;base64,UklGRkYgAA
     mig31: { sig: 'zaslon', psm: 0, aoaMax: 18, dashMach: 2.83, rcs: 1.3, hp: 120, maxStoresKg: 9000 },
     su35: { sig: 'vecdrift', psm: 3, aoaMax: 26, driftDrag: 0.5, maxStoresKg: 8000, hp: 105 },
     su57: { sig: 'silent', psm: 3, aoaMax: 26, rcs: 0.65, maxStoresKg: 10000, hp: 105 },
-    su47: { sig: 'highalpha', psm: 1, aoaMax: 45, maxStoresKg: 8000 }
+    su47: { sig: 'highalpha', psm: 1, aoaMax: 45, maxStoresKg: 8000 },
+    // roster batch 2. carrier: 'catobar' = catapult + hook, 'stobar' = ski-jump + hook (Su-33 / MiG-29K traits on the Su-27 / MiG-29)
+    f14: { sig: 'sweep', psm: 0, aoaMax: 26, rcs: 1.3, hp: 110, maxStoresKg: 6600, carrier: 'catobar' },
+    f18e: { sig: 'override', psm: 1, aoaMax: 28, rcs: 0.9, hp: 105, maxStoresKg: 8050, carrier: 'catobar' },
+    rafale: { sig: 'spectra', psm: 0, aoaMax: 30, rcs: 0.85, maxStoresKg: 9500, carrier: 'catobar' },
+    typhoon: { sig: 'decoy', psm: 0, aoaMax: 26, rcs: 0.85, maxStoresKg: 7500 },
+    f15c: { sig: 'eagle', psm: 0, aoaMax: 26, rcs: 1.1, maxStoresKg: 7300 },
+    f15e: { sig: 'wso', psm: 0, aoaMax: 24, rcs: 1.15, hp: 110, maxStoresKg: 10400 },
+    su37: { sig: 'combo', psm: 2, aoaMax: 26, hp: 105, maxStoresKg: 8000 },
+    mig144: { sig: 'burner', psm: 3, aoaMax: 26, rcs: 0.75, maxStoresKg: 7000 },
+    j20: { sig: 'sniper', psm: 0, aoaMax: 26, rcs: 0.6, hp: 105, maxStoresKg: 8000 },
+    f22: { sig: 'ghost', psm: 2, aoaMax: 30, rcs: 0.45, hp: 105, maxStoresKg: 8000 },
+    yf23: { sig: 'supercruise', psm: 0, aoaMax: 24, rcs: 0.5, hp: 95, maxStoresKg: 2500 }
   };
+  FIELDS.su27.carrier = 'stobar'; FIELDS.mig29.carrier = 'stobar';
+  // moving parts per jet that jetsig drives and co-op sends (net: one byte each, in this order)
+  FL.SIG_AUX = { ja37: ['rev'], j29: ['slat'], f14: ['sweep', 'vane', 'hook'], f18e: ['fold', 'hook'], rafale: ['hook'], f22: ['bay', 'sbay', 'gundoor'], yf23: ['bay'],
+    j20: ['bay', 'sbay', 'srail'], mig144: ['bay'], su57: ['bay', 'sbay'], f15c: ['ramp'], f15e: ['ramp', 'tgp'], typhoon: ['decoy'] };
   FL.JET_FIELDS = FIELDS;
   function applyFields() {
     (FL.AIRCRAFT || []).forEach(function (a) { var f = FIELDS[a.id]; if (!f) return; for (var k in f) if (a[k] === undefined) a[k] = f[k]; });
@@ -21760,7 +22207,18 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"x29":{"side":"data:image/webp;base64,UklGRkYgAA
     mig29: [['Twin R-73', '+1 missile pair: 2 more air-to-air missiles.', 'reserveAAM+2'], ['Fulcrum look', 'Helmet sight cone +30%.', 'sigPow*0.3']],
     f16: [['Viper', 'Turn and roll rate +5%.', 'rateMul*0.05'], ['Weasel II', 'Anti-radar locks 50% faster still. Ground missile range +20%.', 'sigPow*0.5 agmRangeMul*0.2']],
     mig31: [['Zaslon radar', '+1 lock. Lock range +15%.', 'multiLock+1 lockRange*0.15'], ['Cool engines', 'Engine heat builds 35% slower.', 'heatMul*-0.35']],
-    su47: [['Berkut', 'Thrust +5%.', 'thrustMul*0.05'], ['Golden eagle', 'High alpha up to 50°.', 'sigPow*0.11']]
+    su47: [['Berkut', 'Thrust +5%.', 'thrustMul*0.05'], ['Golden eagle', 'High alpha up to 50°.', 'sigPow*0.11']],
+    f14: [['Bombcat', '+1 bomb on each bomb pylon.', 'bombRackAdd+1'], ['Tomcat CADC', 'The wings sweep 30% faster.', 'sigPow*0.3']],
+    f18e: [['Rhino', 'Turn and roll rate +5%.', 'rateMul*0.05'], ['Overstress', 'Override costs half the health and reaches 35°.', 'sigPow*0.5']],
+    rafale: [['Omnirole', 'Lock time -10%.', 'lockTime*-0.1'], ['SPECTRA II', 'The jammer bubble lasts 9 s and covers 2.5 km.', 'sigPow*0.5']],
+    typhoon: [['Eurocanard', 'Turn and roll rate +5%.', 'rateMul*0.05'], ['Spare decoys', 'A new towed decoy every 15 s.', 'sigCd*-0.4']],
+    f15c: [['Eagle eye', 'Lock range +15%. +1 lock.', 'lockRange*0.15 multiLock+1'], ['Never lost', 'The 1 HP save works twice per life.', 'sigPow*1']],
+    f15e: [['Strike Eagle', '+1 bomb on each bomb pylon.', 'bombRackAdd+1'], ['Mudhen WSO', 'Laser bombs: lock time -30%. Ground missile range +20%.', 'agmLockMul*-0.3 agmRangeMul*0.2']],
+    su37: [['Terminator', 'In a drift you keep 40% more of your speed.', 'driftKeep+0.4'], ['Combo master', 'The Terminator buff lasts 9 s.', 'sigPow*0.5']],
+    mig144: [['Izdeliye 1.44', 'Thrust +5%.', 'thrustMul*0.05'], ['AL-41F', 'Afterburner time +4 s.', 'boostDuration+4']],
+    j20: [['Mighty Dragon', 'Lock range +15%.', 'lockRange*0.15'], ['Long eye', 'Sniper beam: lock range x2.5.', 'sigPow*0.25']],
+    f22: [['Raptor', 'Thrust +5%.', 'thrustMul*0.05'], ['Low observable', 'Ghost comes back 1 s after the bays close. Signature -10%.', 'sigPow*0.5 detectMul*-0.1']],
+    yf23: [['Black Widow', 'Top speed +5%.', 'topSpeedMul*0.05'], ['Cold tail', 'Supercruise refills the boost meter 50% faster still.', 'sigPow*0.5']]
   };
 
   // =================================================================== 4. weapons (same defaults as campaign.js W())
@@ -21778,9 +22236,15 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"x29":{"side":"data:image/webp;base64,UklGRkYgAA
     W({ id: 'r33', type: 'missile', weight: 490, name: 'R-33 Amos', guidance: 'radar', targets: ['air'], range: 60000, minRange: 2000, speed: 1150, g: 18, sustain: 8, seekMul: 3, lockTimeMul: 1.5, damage: 130, blast: 25, autoLock: 4, autoCone: 30, station: 'wing belly', price: 40000, unlockLevel: 20, jet: ['mig31'], desc: 'MiG-31 only. Zaslon salvo: one press fires up to four missiles at four targets. Very long range.' }),
     W({ id: 'r40', type: 'missile', weight: 475, name: 'R-40R Acrid', guidance: 'sarh', targets: ['air'], range: 30000, minRange: 1500, speed: 1250, g: 15, seekMul: 2, lockTimeMul: 1.5, damage: 140, blast: 28, station: 'wing', price: 20000, unlockLevel: 11, jet: ['mig25', 'mig31'], desc: 'Foxbat / Foxhound only. Huge long-range missile. Keep the lock until it hits. It turns badly.' }),
     W({ id: 'rb04', type: 'missile', weight: 600, name: 'Rb 04E', guidance: 'antiship', targets: ['sea'], range: 32000, minRange: 1500, speed: 280, g: 10, damage: 400, blast: 25, needsBombsOK: true, price: 11000, unlockLevel: 4, desc: 'Swedish anti-ship missile. It skims the waves. One hit sinks a frigate.' }),
+    W({ id: 'gian30', type: 'gun', weight: 0.27, name: 'GIAT 30M791 30 mm', targets: ['air', 'ground', 'sea'], range: 1300, speed: 1025, damage: 9, rate: 41, ammo: 125, blast: 2, price: 9000, unlockLevel: 23, jet: ['rafale'], desc: 'Rafale only. 2,500 rounds a minute of 30 mm, 125 rounds.' }),
+    W({ id: 'bk27', type: 'gun', weight: 0.26, name: 'Mauser BK-27 27 mm', targets: ['air', 'ground', 'sea'], range: 1300, speed: 1025, damage: 12, rate: 28, ammo: 150, blast: 1, price: 8000, unlockLevel: 11, jet: ['typhoon', 'jas39'], desc: 'Typhoon / Gripen only. Revolver cannon: fast spin-up, hard hits.' }),
+    W({ id: 'pl15', type: 'missile', weight: 210, name: 'PL-15', guidance: 'radar', targets: ['air'], range: 50000, minRange: 1500, speed: 1300, g: 30, sustain: 7, seekMul: 3, lockTimeMul: 1.45, damage: 115, blast: 22, multi: true, price: 30000, unlockLevel: 33, jet: ['j20'], desc: 'J-20 only. Dual-pulse long-range radar missile. Fits the bays.' }),
+    W({ id: 'mica', type: 'missile', weight: 112, name: 'MICA EM', guidance: 'radar', targets: ['air'], range: 25000, minRange: 400, speed: 1100, g: 50, lockTimeMul: 1.0, damage: 100, blast: 14, multi: true, price: 20000, unlockLevel: 23, jet: ['rafale'], desc: 'Rafale only. Light dual-seeker missile: quick lock, agile, short to medium range.' }),
     W({ id: 'aim7', type: 'missile', weight: 230, name: 'AIM-7E Sparrow', guidance: 'sarh', targets: ['air'], range: 26000, minRange: 1000, speed: 1150, g: 25, lockTimeMul: 1.4, damage: 110, blast: 20, multi: true, price: 12000, unlockLevel: 7, desc: 'Semi-active radar missile. Keep the lock until it hits.' })
   ];
   if (FL.WEAPONS) NEW_W.forEach(function (w) { if (!FL.WEAPONS[w.id]) { FL.WEAPONS[w.id] = w; if (FL.WEAPON_ORDER) FL.WEAPON_ORDER.push(w.id); } });
+  // AIM-54 Phoenix: the F-14's own long-range weapon (ROSTER batch 2), unlocked with the F-14
+  if (FL.WEAPONS && FL.WEAPONS.aim54) { var ph = FL.WEAPONS.aim54; ph.jet = ['f14']; ph.unlockLevel = 12; ph.desc = 'F-14 only. Very long range (60 km). Slow to turn. Heavy. Six fit on the Tomcat.'; }
 
   // =================================================================== 5. jet card line
   function cobraTxt(a) { return a.cobra === 'kort' ? 'KORT PARAD' : (a.psm || 0) >= 1 ? 'YES' + (a.kulbit || a.psm >= 2 ? ' + KULBIT' : '') + (a.psm >= 2 ? ' · TVC ' + (a.psm >= 3 ? '3D' : '2D') : '') : 'NO'; }
@@ -42578,7 +43042,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"x29":{"side":"data:image/webp;base64,UklGRkYgAA
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793175078', updShown = false;
+  var BUILD = '1793175730', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
