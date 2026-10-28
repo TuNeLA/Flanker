@@ -2663,7 +2663,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
           const a = path[Math.max(i - 1, 0)], c = path[Math.min(i + 1, n - 1)], dx = c[0] - a[0], dy = c[1] - a[1], l = Math.hypot(dx, dy) || 1;
           const taper = Math.min(1, i / 15, (n - 1 - i) / 15), off = taper * (55 * Math.sin(i * ROAD_STEP / 900 + sd) + 30 * (fbm(i * ROAD_STEP / 600, sd, 2, 91) - 0.5));
           const q = [path[i][0] - dy / l * off, path[i][1] + dx / l * off];
-          out.push(hf(q[0], q[1]) > 1.6 ? q : path[i]);
+          const h0 = hf(path[i][0], path[i][1]), h1 = hf(q[0], q[1]);
+          out.push(h1 > 1.6 && Math.abs(h1 - h0) < 6 ? q : path[i]);
         }
         path = resample(chaikin(out, 1), ROAD_STEP);
       }
@@ -2707,9 +2708,11 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       const Y = new Float32Array(P.length);
       for (let i = 0; i < P.length; i++) {
         const a = P[Math.max(i - 1, 0)], c = P[Math.min(i + 1, P.length - 1)], dx = c[0] - a[0], dy = c[1] - a[1], l = Math.hypot(dx, dy) || 1, nx = -dy / l, ny = dx / l;
-        Y[i] = Math.max(r.Y[i] - 0.35, sampleH(P[i][0], P[i][1]), sampleH(P[i][0] + nx * hw, P[i][1] + ny * hw), sampleH(P[i][0] - nx * hw, P[i][1] - ny * hw)) + 0.22;
+        const ry = r.Y[Math.min(i, r.Y.length - 1)] - 0.35, gc = sampleH(P[i][0], P[i][1]), gl = sampleH(P[i][0] + nx * hw, P[i][1] + ny * hw), gr = sampleH(P[i][0] - nx * hw, P[i][1] - ny * hw);
+        // follow the graded ground; where the ground is far above the profile (rock spur) the road stays on its profile (cut/tunnel)
+        Y[i] = Math.max(ry, gc - ry < 12 ? gc : ry, gl - ry < 4 ? gl : ry, gr - ry < 4 ? gr : ry) + 0.22;
       }
-      for (let i = 1; i < P.length - 1; i++) { const m = Math.max(sampleH((P[i][0] + P[i - 1][0]) / 2, (P[i][1] + P[i - 1][1]) / 2), sampleH((P[i][0] + P[i + 1][0]) / 2, (P[i][1] + P[i + 1][1]) / 2)) + 0.22; if (m > Y[i]) Y[i] = m; }
+      for (let i = 1; i < P.length - 1; i++) { const m = Math.max(sampleH((P[i][0] + P[i - 1][0]) / 2, (P[i][1] + P[i - 1][1]) / 2), sampleH((P[i][0] + P[i + 1][0]) / 2, (P[i][1] + P[i + 1][1]) / 2)) + 0.22; if (m > Y[i] && m - Y[i] < 6) Y[i] = m; }
       let v = 0, prev = -1;
       for (let i = 0; i < P.length; i++) {
         const a = P[Math.max(i - 1, 0)], c = P[Math.min(i + 1, P.length - 1)], dx = c[0] - a[0], dy = c[1] - a[1], l = Math.hypot(dx, dy) || 1, nx = -dy / l, ny = dx / l;
@@ -3685,13 +3688,13 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     for (const f of FING) { const a = f[3] * DEG; f.ec = coastC(f[0]); f.dE = -Math.cos(a); f.dN = Math.sin(a); f.lE = Math.sin(a); f.lN = Math.cos(a); }
     const ISL = { e: coastC(9000) - 15500, n: 9000, r: 3300 };
     // offshore islands: [e, n, r, cliffTop, summit, seed]
-    const ISLS = [{ name: 'Hirta', e: -38500, n: 35500, r: 2300, top: 300, sum: 430, s: 11 }, { name: 'Boreray', e: -33600, n: 38200, r: 800, top: 290, sum: 384, s: 12 },
+    const ISLS = [{ name: 'Hirta', e: -38500, n: 35500, r: 2300, top: 420, sum: 600, s: 11 }, { name: 'Boreray', e: -33600, n: 38200, r: 800, top: 380, sum: 480, s: 12 },
       { name: 'Staffa', e: coastC(-5000) - 7500, n: -5000, r: 360, top: 62, sum: 70, s: 13 }, { name: 'Rathlin', e: coastC(-41500) - 6500, n: -41500, r: 1700, top: 95, sum: 140, s: 14, white: 1 }];
     const STACKS = [];
     { const R = makeRng(4321); for (let k = 0; k < 22; k++) { const n = -44000 + R() * 88000, off = 180 + R() * 800; STACKS.push([coastC(n) - off, n, 40 + R() * 70, 90 + R() * 150]); } }
     for (let k = 0; k < 4; k++) { const a = k * 1.7 + 0.4; STACKS.push([ISL.e + Math.cos(a) * (ISL.r + 300), ISL.n + Math.sin(a) * (ISL.r + 300), 40 + k * 10, 60 + k * 15]); }
     // St Kilda giants (Stac an Armin 196 m, Stac Lee 172 m, Levenish), the Old Man of Hoy (137 m, slender)
-    STACKS.push([-33100, 39300, 75, 196], [-32700, 37400, 65, 172], [-36400, 32600, 50, 62], [-40900, 34700, 45, 110]);
+    STACKS.push([-33100, 39300, 75, 260], [-32700, 37400, 65, 230], [-36400, 32600, 50, 62], [-40900, 34700, 45, 110]);
     const HOY = { n: 29500 }; HOY.e = coastC(HOY.n) - 260; STACKS.push([HOY.e, HOY.n, 32, 150, 1]);
     function chan(e, n, sc, seed) {
       const wx = e / sc + 1.4 * fbm(e / (sc * 1.7) + 5.2, n / (sc * 1.7) + 1.3, 3, seed), wy = n / sc + 1.4 * fbm(e / (sc * 1.7) - 3.7, n / (sc * 1.7) + 9.1, 3, seed + 2);
@@ -3710,16 +3713,16 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       // highlands inland: the Cuillin (jagged gabbro ridge, ~990 m) behind Skye, rounded hills elsewhere
       const k = sstep(1800, 7000, dx);
       if (k > 0) {
-        const r1 = ridged(e / 4300 + 1, n / 4300 + 2, 5, 423), cu = Math.pow(r1, 2.3) * sstep(3000, 9000, dx) * (1 - sstep(26000, 34000, dx));
-        P += k * (kM * (60 + 820 * cu * (0.7 + 0.6 * fbm(e / 9000, n / 9000, 2, 425))) + (kS + kN) * (40 + 260 * Math.pow(ridged(e / 6000, n / 6000, 3, 427), 1.6)));
+        const r1 = ridged(e / 4300 + 1, n / 4300 + 2, 5, 423), cu = Math.pow(r1, 1.6) * sstep(3000, 9000, dx) * (1 - sstep(26000, 34000, dx));
+        P += k * (kM * (60 + 1000 * cu * (0.7 + 0.6 * fbm(e / 9000, n / 9000, 2, 425))) + (kS + kN) * (40 + 260 * Math.pow(ridged(e / 6000, n / 6000, 3, 427), 1.6)));
         P += sstep(9000, 22000, dx) * 650 * Math.pow(ridged(e / 7000 + 5, n / 7000, 4, 429), 1.6) * (0.6 + 0.8 * fbm(e / 15000, n / 15000, 2, 431));
         // the Cuillin: a black horseshoe of knife-edge ridges (850-990 m) around the head of Loch Coruisk, open to the west
         const ce = coastC(8500) + 12600, cn = 8500, dr = Math.hypot(e - ce, n - cn), th = Math.atan2(n - cn, e - ce);
         if (dr < 6000) {
           const ang = Math.abs(((th + Math.PI) % (2 * Math.PI)) - Math.PI);   // 0 = east (back of the horseshoe), PI = west (open side)
-          const crest = (860 + 130 * ridged(th * 3 + 1, 0.5, 3, 437)) * (1 - sstep(2.3, 2.75, ang));
+          const crest = (1080 + 220 * ridged(th * 3 + 1, 0.5, 3, 437)) * (1 - sstep(2.3, 2.75, ang));
           const R0 = 3300 + 300 * Math.sin(th * 3), d = Math.abs(dr - R0) + 140 * (fbm(e / 400, n / 400, 2, 439) - 0.5);
-          const cu2 = crest * Math.pow(Math.max(0, 1 - d / 1700), 0.8) + 70 * (ridged(e / 180, n / 180, 2, 441) - 0.4) * sstep(500, 800, crest * (1 - d / 1700));
+          const cu2 = crest * Math.pow(Math.max(0, 1 - d / 1500), 0.6) + 90 * (ridged(e / 180, n / 180, 2, 441) - 0.4) * sstep(500, 800, crest * (1 - d / 1500));
           P = Math.max(P, cu2);
         }
         const v = chan(e, n, 6500, 421);
@@ -4416,7 +4419,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       sky: { sunAz: 235, sunEl: 38, fog: 0xb8d2e8, fogD: 0.0000085, hfogA: 0.000006, hfogB: 1 / 650, zenith: [0.025, 0.11, 0.42], glow: [0.95, 0.85, 0.65], glowW: 0.18, sunCol: [1.0, 0.95, 0.85], disk: 30,
         sunHex: 0xfff2dc, sunI: 2.7, hemiSky: 0xa9cff2, hemiGround: 0x4f6a3a, hemiI: 0.55, white: 0xe9eef4, envGround: [0.08, 0.13, 0.08] },
       ground: { rockOn: 1, rock1: 0x352e28, rock2: 0x63584b, rockA: 0.34, rockB: 0.54, sandH: 1.6, sand: 0xd6c8a2, faceN: 1 },
-      water: { color: 0x031c3c, shallow: 0x1fc2b6, foam: 0.45, shallowK: 1.0, roughness: 0.17, normalScale: 0.35 },
+      water: { color: 0x031c3c, shallow: 0x0e9a96, foam: 0.22, shallowK: 0.9, roughness: 0.17, normalScale: 0.35 },
       bases: [BASE, EBASE], raw: raw,
       levels: [{ tile: 1920, cell: 48, max: 205, dilate: 40, score: (e0, n0, e1, n1, g) => {
         let lo = 1e9, hi = -1e9;
@@ -5028,7 +5031,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       if (dx < -300) m = Math.min(m, -70 - Math.min(-dx, 9000) * 0.008 + 150 * sstep(0.62, 0.76, fbm(e / 1500 + 9, n / 1500 - 4, 3, 221)) * (1 - sstep(2500, 9000, -dx)));
       const rough = 34 * (fbm(e / 240, n / 240, 2, 345) - 0.5);
       // buttresses and couloirs: the wall line moves in and out by up to ~±170 m
-      const gul = 340 * (ridged(e / 520 + 7, n / 520 - 3, 2, 347) - 0.45) + 120 * (fbm(e / 1400, n / 1400, 2, 349) - 0.5);
+      const gul = 260 * (fbm(e / 650 + 7, n / 650 - 3, 2, 347) - 0.5) + 160 * (fbm(e / 1600, n / 1600, 2, 349) - 0.5);
       let h = m;
       let d = fIdx.query(e, n);
       if (SQ.p >= 0) {
@@ -5079,7 +5082,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       name: 'Norway Winter Fjords', region: 'Møre og Romsdal / Sogn, Norway', N: 400, lodK: 0.05,
       sky: { sunAz: 205, sunEl: 7, fog: 0xaab6c2, fogD: 0.0000115, hfogA: 0.00003, hfogB: 1 / 520, zenith: [0.10, 0.14, 0.22], glow: [0.9, 0.55, 0.35], glowW: 0.3, sunCol: [1.0, 0.8, 0.6], disk: 18,
         sunHex: 0xffd9b0, sunI: 1.6, hemiSky: 0xb9c8da, hemiGround: 0x5a6068, hemiI: 0.55, white: 0xdfe4ea, envGround: [0.18, 0.2, 0.23] },
-      ground: { rockOn: 1, rock1: 0x34373b, rock2: 0x63666a, rockA: 0.22, rockB: 0.42, snowH: 160, snowF: 50, snow: 0xeef3f8, snowSlope: 0.55, faceN: 0.12, ice: 0xa7bfcf },
+      ground: { rockOn: 1, rock1: 0x34373b, rock2: 0x63666a, rockA: 0.22, rockB: 0.42, snowH: 160, snowF: 50, snow: 0xeef3f8, snowSlope: 0.64, faceN: 0.12, ice: 0xa7bfcf },
       water: { color: 0x0a1a22, shallow: 0x1f3a40, foam: 0.35, shallowK: 0.35, roughness: 0.18 },
       bases: [BASE, EBASE], flats: flats,
       raw: raw,
@@ -5618,7 +5621,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       } else {
         info.land = 0;
         const dist = -best, sw = bc ? bc.shelf * (0.3 + 1.4 * fbm(e / 2300 + 5, n / 2300 - 3, 3, 765)) : 0; info.dist = dist; info.shelf = sw;
-        let s = -1.2 - 11 * sstep(0, sw * 0.8 + 1, dist) - 160 * sstep(sw * 0.8, sw * 0.8 + 600, dist);
+        let s = -(opts.shore === undefined ? 2.5 : opts.shore) - 9 * sstep(0, sw * 0.45 + 1, dist) - 4 * sstep(sw * 0.45, sw * 0.8 + 1, dist) - 160 * sstep(sw * 0.8, sw * 0.8 + 600, dist);
         if (bc && bc.reef !== 0 && sw > 200) {
           const rc = 1 - Math.abs(dist - 0.72 * sw) / (0.14 * sw);
           if (rc > 0) { const pk = sstep(0.42, 0.58, fbm(e / 700 + 3, n / 700, 3, 717)); s = Math.max(s, -3.2 - 8 * (1 - rc * pk)); }
@@ -8658,6 +8661,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       const c = { key, m, mat, t: -9, i: 0 };
       cones.push(c); return c;
     }
+    getCone('_warm');     // one pooled cone from the start: main.js shader pre-warm compiles its program at boot
     fx.vaporCone = function (pos, quat, intensity, key) {
       const c = getCone(key || 'player');
       if (!c) return;
@@ -27858,7 +27862,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
         if (m.cr || m.xp) t.appendChild(el('div', 'rw', '+' + fmtN(m.cr) + ' CR   +' + fmtN(m.xp) + ' XP'));
       }
       b.setAttribute('aria-hidden', 'true');
-      if (toastBox.__layT === undefined) toastBox.style.top = toastTop() + 'px';   // main.js HUD stack places it once it runs (sets __layT)
+      if (menuOpen()) { toastBox.style.top = 'auto'; toastBox.style.bottom = 'max(16px, env(safe-area-inset-bottom, 0px))'; toastBox.__layT = undefined; }   // menus: dock at the bottom
+      else { toastBox.style.bottom = ''; if (toastBox.__layT === undefined) toastBox.style.top = toastTop() + 'px'; }   // flight: main.js HUD stack places it (sets __layT)
       toastBox.appendChild(t);
       toastCur = { el: t, t: 0, born: rnow(), out: false };
     }
@@ -33905,6 +33910,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
   function torusG(r, tube, seg, ts) { return new T.TorusGeometry(r, tube, ts || 6, seg || 16); }
   function box(w, h, d) { return new T.BoxGeometry(w, h, d); }
   function cylY(r1, r2, h, s) { return new T.CylinderGeometry(r1, r2, h, s || 10); }
+  function cylX(r, len, s) { var g = new T.CylinderGeometry(r, r, len, s || 10); g.rotateZ(Math.PI / 2); return g; }
   function cylZ(rFront, rBack, len, s) { var g = new T.CylinderGeometry(rBack, rFront, len, s || 12); g.rotateX(Math.PI / 2); return g; }
   function sph(r, w, h) { return new T.SphereGeometry(r, w || 12, h || 8); }
   function hemi(r, w) { return new T.SphereGeometry(r, w || 16, Math.max(4, (w || 16) >> 1), 0, TAU, 0, Math.PI / 2); }
@@ -34507,15 +34513,51 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
     return out;
   }
   var PP = { x: 0, z: 0, h: 0 };
+  // MAZ-7917 (Topol) 14x12: 22.3 m, 7 axles, full-width cab, side lockers, erector; canister pivots at the rear (z +10.5)
   function geoTEL() {
-    var a = new Acc(), O = 0x4d5a3a, D = 0x1d2018, K = 0x2a2d26;
-    a.add(box(3.4, 1.6, 22), O, 0, 1.9, 0); a.add(box(3.4, 2.6, 3.4), O, 0, 3, -11.4); a.add(box(3.2, 0.9, 0.3), D, 0, 3.6, -13.15);
-    for (var i = 0; i < 7; i++) a.sym(cylY(0.75, 0.75, 0.6, 10), K, 1.55, 0.75, -9 + i * 3.1, 0, 0, Math.PI / 2);
-    a.add(box(3.6, 0.5, 20), 0x3b4630, 0, 2.95, 1);
+    var a = new Acc(), O = 0x4d5a3a, O2 = 0x56633f, D = 0x1d2018, K = 0x23251f, HUB = 0x3d4436, G = 0x10161a, i;
+    a.add(box(2.1, 0.9, 21.2), D, 0, 1.25, 0);                                                                  // frame
+    var AX = [-9.0, -6.7, -3.6, -1.3, 1.4, 4.3, 6.8];
+    for (i = 0; i < 7; i++) {
+      a.sym(cylY(0.84, 0.84, 0.58, 18), K, 1.42, 0.84, AX[i], 0, 0, Math.PI / 2);
+      a.sym(cylY(0.44, 0.44, 0.62, 10), HUB, 1.44, 0.84, AX[i], 0, 0, Math.PI / 2);
+      a.sym(cylY(0.16, 0.16, 0.66, 6), D, 1.45, 0.84, AX[i], 0, 0, Math.PI / 2);
+    }
+    a.sym(box(0.82, 0.14, 4.9), O, 1.42, 1.78, -7.85); a.sym(box(0.82, 0.14, 4.7), O, 1.42, 1.78, -2.45); a.sym(box(0.82, 0.14, 7.6), O, 1.42, 1.78, 4.1);
+    a.sym(box(0.1, 0.5, 4.9), O, 1.8, 1.55, -7.85); a.sym(box(0.1, 0.5, 4.7), O, 1.8, 1.55, -2.45); a.sym(box(0.1, 0.5, 7.6), O, 1.8, 1.55, 4.1);
+    // cab: full width, sloped windscreen, grille, lamps
+    a.add(sideG([[-8.1, 1.0], [-8.1, 2.75], [-10.75, 2.75], [-11.6, 2.05], [-11.65, 1.0]], 3.4), O2, 0, 0, 0);
+    a.add(box(3.0, 0.06, 1.18), G, 0, 2.43, -11.2, 0.92);
+    a.sym(box(0.06, 0.62, 1.4), G, 1.71, 2.3, -9.6); a.sym(box(0.06, 0.7, 0.5), G, 1.71, 2.25, -8.6);
+    a.add(box(2.2, 0.55, 0.08), D, 0, 1.45, -11.68); a.sym(cylZ(0.17, 0.17, 0.1, 10), 0xe8e2c0, 1.25, 1.6, -11.7);
+    a.add(box(3.5, 0.3, 0.6), D, 0, 1.05, -11.85);
+    // equipment lockers, erector beam, canister saddle, rear jacks and launch plate
+    a.sym(box(1.0, 1.5, 6.2), O, 1.2, 2.35, -4.4); a.sym(box(0.9, 1.1, 5.0), O, 1.25, 2.15, 3.4);
+    a.sym(box(0.06, 1.1, 0.06), D, 1.73, 2.3, -6.5); a.sym(box(0.06, 1.1, 0.06), D, 1.73, 2.3, -2.3);
+    a.add(box(1.4, 0.7, 18), O2, 0, 2.05, 0.5); a.add(box(2.6, 0.7, 1.0), O2, 0, 2.6, -7.6);
+    a.sym(cylY(0.22, 0.22, 2.2, 8), 0x8a8f86, 0.9, 2.4, 7.8, 0.5);
+    a.sym(box(0.5, 1.2, 0.5), D, 1.45, 1.0, 10.1); a.sym(box(0.9, 0.12, 0.9), D, 1.45, 0.35, 10.1);
+    a.add(box(2.4, 0.6, 1.2), D, 0, 1.6, 10.6);
     return a.geo();
   }
-  function geoCan() { var a = new Acc(); a.add(cylZ(1.1, 1.1, 21, 12), 0x55633f, 0, 0, -10.5); a.add(cylZ(1.15, 1.15, 0.5, 12), 0x2b3022, 0, 0, -21); a.add(cylZ(1.15, 1.15, 0.6, 12), 0x2b3022, 0, 0, -0.3); return a.geo(); }
-  function geoRocket() { var a = new Acc(); a.add(cylY(0.9, 0.9, 18, 10), 0xd8dccc, 0, 9, 0); a.add(cylY(0.05, 0.9, 3, 10), 0xd8dccc, 0, 19.5, 0); a.add(cylY(1, 1, 2, 10), 0x30332c, 0, 1, 0); return a.geo(); }
+  // Topol transport-launch canister (pivot at its rear end, nose toward -z)
+  function geoCan() {
+    var a = new Acc(), C = 0x4f5d3d, R = 0x3c472f, D = 0x2b3022, i;
+    a.add(lathe([[0, 1.18], [-0.9, 1.2], [-1.0, 1.08], [-15.6, 1.08], [-16.2, 1.0], [-20.2, 1.0], [-20.8, 0.86], [-21.3, 0.52], [-21.5, 0.1]], 20), C, 0, 0, 0);
+    for (i = 0; i < 6; i++) a.add(cylZ(1.15, 1.15, 0.3, 20), R, 0, 0, -2.4 - i * 2.4);
+    a.add(cylZ(1.08, 1.08, 0.5, 20), R, 0, 0, -16.2);
+    a.add(box(0.45, 0.35, 17), R, 0.75, 0.85, -9.2, 0, 0, -0.6); a.add(box(0.45, 0.35, 17), R, -0.75, 0.85, -9.2, 0, 0, 0.6);
+    a.add(cylZ(1.0, 1.0, 0.12, 18), D, 0, 0, 0.05);
+    a.sym(box(0.3, 0.9, 0.6), D, 1.1, -0.5, -0.8);
+    return a.geo();
+  }
+  function geoRocket() {
+    var a = new Acc(), W = 0xd8dccc, D = 0x30332c;
+    a.add(loft([[0.01, 0], [0.9, 0.2], [0.9, 7.6], [0.82, 7.8], [0.82, 13.4], [0.72, 13.6], [0.72, 17.0], [0.5, 18.6], [0.2, 19.8], [0.02, 20.3]].map(function (q) { return ellRing(0, q[0], q[0], 0, 14).map(function (p) { return [p[0], q[1], p[1]]; }); }), W, { caps: [true, false] }), null);
+    a.add(cylY(0.95, 0.95, 0.3, 14), D, 0, 7.7, 0); a.add(cylY(0.86, 0.86, 0.3, 14), D, 0, 13.5, 0);
+    a.add(cylY(1, 0.92, 1.4, 14), D, 0, 0.7, 0);
+    return a.geo();
+  }
   function buildTEL() {
     var g = new T.Group(); g.name = 'icbmTEL'; mesh(cached('tel', geoTEL), g);
     var pv = new T.Group(); pv.position.set(0, 3.9, 10.5); g.add(pv); mesh(cached('telCan', geoCan), pv);
@@ -34597,7 +34639,15 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
       var v = variant | 0, b = v === 1 ? KS.sam_launcher : v === 0 ? KS.aa_gun : null, m = null;
       if (b && b.build) { try { m = b.build(0); } catch (e) { m = null; } }
       if (m && m.group) return m;
-      var g = new T.Group(); mesh(cached('jeep', function () { var a = new Acc(); a.add(box(2.2, 1.4, 4.4), 0x4d5a3a, 0, 1.1, 0); a.add(box(2, 0.9, 2), 0x3b4630, 0, 2.2, 0.6); a.sym(cylY(0.45, 0.45, 0.4, 8), 0x222, 1.05, 0.45, -1.4, 0, 0, Math.PI / 2); a.sym(cylY(0.45, 0.45, 0.4, 8), 0x222, 1.05, 0.45, 1.4, 0, 0, Math.PI / 2); return a.geo(); }), g);
+      var g = new T.Group(); mesh(cached('jeep', function () {           // GAZ Tigr armoured car
+        var a = new Acc(), O = 0x4d5a3a, D = 0x1d2018, G = 0x11171b;
+        a.add(sideG([[2.75, 0.6], [2.75, 2.3], [0.6, 2.35], [-0.6, 2.25], [-1.3, 1.6], [-2.75, 1.45], [-2.8, 0.6]], 2.3), O, 0, 0, 0);
+        a.add(box(2.0, 0.05, 0.75), G, 0, 1.97, -0.95, 0.62); a.sym(box(0.05, 0.45, 2.4), G, 1.16, 1.9, 0.75);
+        a.add(box(2.1, 0.3, 0.2), D, 0, 0.8, -2.85); a.sym(box(0.4, 0.2, 0.1), 0xe8e2c0, 0.75, 1.2, -2.82);
+        a.sym(cylY(0.52, 0.52, 0.36, 14), 0x222622, 1.05, 0.52, -1.75, 0, 0, Math.PI / 2); a.sym(cylY(0.52, 0.52, 0.36, 14), 0x222622, 1.05, 0.52, 1.75, 0, 0, Math.PI / 2);
+        a.sym(box(0.4, 0.12, 1.4), O, 1.05, 1.12, -1.75); a.sym(box(0.4, 0.12, 1.4), O, 1.05, 1.12, 1.75);
+        a.add(cylY(0.32, 0.36, 0.3, 10), D, 0, 2.5, 0.6); a.add(cylZ(0.04, 0.04, 1.2, 6), D, 0, 2.65, 0.0); a.add(box(0.06, 1.6, 0.06), D, -0.9, 3.1, 2.4);
+        return a.geo(); }), g);
       return { group: g, update: null, onDeath: function () { charMesh(g); return null; }, dispose: function () {} };
     },
     spawn: function (ent) { ent.label = ['AAA truck', 'SAM vehicle', 'Command jeep'][ent.variant | 0] || 'Escort'; if ((ent.variant | 0) === 1) { ent.hp = ent.maxHp = 140; ent.points = 700; } },
@@ -34608,23 +34658,101 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
     } });
 
   // ================================================================== Super-SAM fortress (layered S-400 + radar mountain)
-  function geoRadarMtn() {
-    var a = new Acc(), C = 0x8c8a82, W = 0xe6e8e4, D = 0x3a3d40;
-    a.add(cylY(16, 18, 6, 8), C, 0, 3, 0); a.add(cylY(5, 7, 22, 6), C, 0, 17, 0); a.add(sph(14, 16, 10), W, 0, 38, 0);
-    a.add(box(10, 6, 10), C, 22, 3, 8); a.add(box(3, 12, 3), D, -16, 6, -12); a.add(box(9, 4, 1), D, -16, 13, -12);
+  // ---- S-400 parts: BAZ-64022 tractor + 5P85TE2 semi-trailer, 92N6E 'Grave Stone', 96L6E on a 40V6M tower, radome
+  function wheels(a, xs, zs, r, w, col) { zs.forEach(function (z) { a.sym(cylY(r, r, w, 16), col || 0x222622, xs, r, z, 0, 0, Math.PI / 2); a.sym(cylY(r * 0.5, r * 0.5, w + 0.04, 8), 0x3d4436, xs + 0.01, r, z, 0, 0, Math.PI / 2); }); }
+  function geoS400() {
+    var a = new Acc(), O = 0x55603f, O2 = 0x4b5638, D = 0x2a2e24, G = 0x11171b;
+    // tractor: cab-over cab, engine box, fifth wheel, 3 axles
+    a.add(box(1.8, 0.7, 8.6), D, 0, 1.05, -6.8);
+    a.add(sideG([[-8.3, 0.9], [-8.3, 3.3], [-10.9, 3.3], [-11.15, 2.4], [-11.15, 0.9]], 2.6), O, 0, 0, 0);
+    a.add(box(2.3, 0.05, 0.85), G, 0, 2.86, -11.05, 1.28); a.sym(box(0.05, 0.6, 1.3), G, 1.31, 2.75, -9.9);
+    a.add(box(2.2, 0.3, 0.1), D, 0, 1.4, -11.2); a.sym(cylZ(0.15, 0.15, 0.1, 10), 0xe8e2c0, 0.95, 1.4, -11.22);
+    a.add(box(2.4, 1.5, 2.6), O2, 0, 2.15, -6.9); a.add(cylY(0.12, 0.12, 1.6, 8), D, 0.9, 3.4, -7.8);
+    a.add(box(1.6, 0.25, 1.6), D, 0, 1.55, -4.2);
+    wheels(a, 1.12, [-9.6, -5.2, -3.6], 0.62, 0.5);
+    a.sym(box(0.6, 0.12, 1.4), O, 1.12, 1.33, -9.6); a.sym(box(0.6, 0.12, 3.1), O, 1.12, 1.33, -4.4);
+    // semi-trailer: gooseneck, bed, 3 rear axles, outrigger jacks, equipment boxes
+    a.add(box(2.6, 0.6, 3.6), O, 0, 2.0, -4.4); a.add(box(2.9, 0.5, 14.4), O, 0, 1.55, 3.6);
+    a.add(sideG([[-2.6, 1.3], [-2.6, 2.3], [-1.4, 1.8], [-1.4, 1.3]], 2.6), O, 0, 0, 0);
+    wheels(a, 1.18, [6.2, 7.5, 8.8], 0.56, 0.46);
+    a.sym(box(0.62, 0.1, 4.2), O, 1.18, 1.23, 7.5);
+    [[-1.6], [10.4]].forEach(function (q) { a.sym(box(1.4, 0.25, 0.3), D, 1.9, 1.3, q[0]); a.sym(box(0.25, 1.2, 0.25), D, 2.55, 0.75, q[0]); a.sym(box(0.7, 0.1, 0.7), D, 2.55, 0.12, q[0]); });
+    a.sym(box(0.8, 1.0, 3.0), O2, 1.0, 2.3, -0.4); a.add(box(2.6, 0.8, 1.4), O2, 0, 2.2, 2.0);
+    a.add(box(1.2, 0.5, 9.0), D, 0, 1.95, 6.3);
     return a.geo();
   }
+  // erector with 4 canisters (pivot at the trailer rear; tubes lie toward -z, stand up at rotation.x = PI/2)
+  function geoS400Can() {
+    var a = new Acc(), C = 0x5a6542, R = 0x464f35, D = 0x22261d;
+    for (var i = 0; i < 4; i++) {
+      var x = (i & 1 ? 0.52 : -0.52), y = (i & 2 ? 1.6 : 0.58);
+      a.add(lathe([[-8.6, 0.46], [-8.4, 0.5], [-0.2, 0.5], [0, 0.46]], 14), C, x, y, 0);
+      a.add(cylZ(0.53, 0.53, 0.3, 14), R, x, y, -7.9); a.add(cylZ(0.53, 0.53, 0.3, 14), R, x, y, -4.4); a.add(cylZ(0.53, 0.53, 0.3, 14), R, x, y, -0.8);
+      a.add(cylZ(0.44, 0.44, 0.05, 12), D, x, y, -8.62);
+    }
+    a.add(box(1.9, 0.3, 8.8), R, 0, 0.12, -4.3); a.sym(box(0.2, 2.4, 0.4), R, 1.05, 1.1, -0.6); a.sym(box(0.2, 2.4, 0.4), R, 1.05, 1.1, -7.6);
+    a.add(box(1.6, 0.25, 0.25), R, 0, 2.3, -0.6); a.add(box(1.6, 0.25, 0.25), R, 0, 2.3, -7.6);
+    return a.geo();
+  }
+  function buildS400(variant) {
+    var g = new T.Group(); g.name = 's400';
+    mesh(cached('s400', geoS400), g);
+    var er = new T.Group(); er.position.set(0, 1.95, 10.6); g.add(er); mesh(cached('s400can', geoS400Can), er);
+    var yaw = new T.Group(); yaw.position.set(0, 1.1, -8.8); er.add(yaw); var pitch = new T.Group(); yaw.add(pitch);   // missile exit (samThink)
+    var fire = fireSet(g, [[0, 3, 2, 10]], 10), smk = { t: 0 }, dead = false, ang = (variant | 0) === 1 ? 0 : Math.PI / 2;
+    er.rotation.x = ang;
+    return { group: g, yaw: yaw, pitch: pitch,
+      update: function (dt, ent) {
+        if (dead) { fires(dt, fire, 1, smk, 1.3); return; }
+        var n = ent && ent.data && ent.data.net, want = n && n.up === 0 ? 0 : Math.PI / 2;
+        ang += clamp(want - ang, -dt * 0.35, dt * 0.35); er.rotation.x = ang;
+      },
+      onDeath: function () { dead = true; charMesh(g); er.rotation.x = 0.35; return null; }, dispose: function () {} };
+  }
+  function geoRadarMtn() {
+    var a = new Acc(), E = 0x7a6f58, E2 = 0x6b624e, C = 0x9a978e, O = 0x55603f, D = 0x2a2e24, W = 0xe6e8e4, G = 0x11171b, i;
+    // the mountain: terraced earth mound, concrete pad, access ramp, sandbag berms
+    a.add(cylY(30, 42, 8, 14), E, 0, 4, 0); a.add(cylY(27, 30, 0.6, 14), C, 0, 8.3, 0);
+    a.add(box(8, 8, 22), E2, 0, 3.6, 36, -0.36);
+    for (i = 0; i < 10; i++) { var an = i / 10 * TAU + 0.3; if (i === 4 || i === 5) continue; a.add(box(9, 1.4, 1.6), 0x8a7d60, Math.sin(an) * 25, 9.3, Math.cos(an) * 25, 0, an + Math.PI / 2); }
+    // 92N6E Grave Stone on its 8x8 truck: twin front cabs, square array tilted back
+    var tx = -9, tz = 7, ty = 8.6;
+    a.add(box(3.0, 1.4, 12), O, tx, ty + 1.6, tz); a.add(box(1.0, 1.4, 2.2), O, tx + 1.0, ty + 2.2, tz - 5.6); a.add(box(1.0, 1.4, 2.2), O, tx - 1.0, ty + 2.2, tz - 5.6);
+    a.add(box(0.05, 0.5, 0.8), G, tx + 1.52, ty + 2.5, tz - 5.6); a.add(box(0.05, 0.5, 0.8), G, tx - 1.52, ty + 2.5, tz - 5.6);
+    [-4.4, -2.6, 2.4, 4.2].forEach(function (z) { a.add(cylY(0.78, 0.78, 0.5, 14), 0x222622, tx + 1.3, ty + 0.78, tz + z, 0, 0, Math.PI / 2); a.add(cylY(0.78, 0.78, 0.5, 14), 0x222622, tx - 1.3, ty + 0.78, tz + z, 0, 0, Math.PI / 2); });
+    a.add(cylY(1.5, 1.7, 1.0, 12), D, tx, ty + 2.8, tz + 2.5); a.add(box(2.6, 1.6, 2.4), O, tx, ty + 3.9, tz + 2.6);
+    a.add(box(5.0, 5.0, 0.7), O, tx, ty + 7.2, tz + 1.6, -0.26); a.add(box(4.5, 4.5, 0.2), 0x3f4733, tx, ty + 7.25, tz + 1.15, -0.26);
+    for (i = 0; i < 5; i++) a.add(box(4.5, 0.08, 0.22), 0x6d7856, tx, ty + 5.4 + i * 0.95, tz + 0.95 + i * 0.24, -0.26);
+    // 40V6M tower for the 96L6E (antenna head spins in the model)
+    var mx = 11, mz = -5, my = 8.6;
+    a.add(box(6, 0.8, 6), C, mx, my + 0.4, mz);
+    for (i = 0; i < 4; i++) { var sx = i & 1 ? 1 : -1, sz = i & 2 ? 1 : -1; a.add(box(0.35, 22, 0.35), O, mx + sx * 1.6, my + 11.4, mz + sz * 1.6, sz * 0.055, 0, -sx * 0.055); }
+    for (i = 0; i < 7; i++) { var hh = my + 2.5 + i * 3, ww = 3.6 - i * 0.28; a.add(box(ww, 0.22, 0.22), O, mx, hh, mz + ww / 2); a.add(box(ww, 0.22, 0.22), O, mx, hh, mz - ww / 2); a.add(box(0.22, 0.22, ww), O, mx + ww / 2, hh, mz); a.add(box(0.22, 0.22, ww), O, mx - ww / 2, hh, mz); }
+    a.add(box(3.2, 0.5, 3.2), D, mx, my + 22.6, mz);
+    // geodesic radome on a drum, generator trucks, comms masts
+    a.add(cylY(6.4, 6.6, 4, 16), C, -8, 10.6, -11); var ico = new T.IcosahedronGeometry(7.2, 2); ico.computeVertexNormals(); a.add(ico, W, -8, 13.6, -11);
+    a.add(box(2.6, 2.4, 6), O, 14, 9.8, 12); a.add(box(2.6, 2.4, 6), O, 18, 9.8, 6);
+    a.add(box(0.18, 14, 0.18), D, 20, 15.6, -14); a.add(box(2.4, 0.12, 0.12), D, 20, 21.8, -14); a.add(box(0.12, 9, 0.12), D, -20, 13.1, 10);
+    a.add(box(5, 2.6, 4), C, 2, 9.9, 18); a.add(box(1.8, 1.8, 0.2), G, 2, 9.7, 15.95);
+    return a.geo();
+  }
+  function geo96L6() { var a = new Acc(), O = 0x55603f, D = 0x2a2e24; a.add(box(6.2, 4.4, 0.5), O, 0, 2.6, -0.5); a.add(box(5.8, 4.0, 0.12), 0x3f4733, 0, 2.6, -0.8); a.add(box(2.4, 2.2, 2.0), O, 0, 1.4, 0.8); a.add(cylY(1.1, 1.2, 0.6, 12), D, 0, 0.3, 0.3); for (var i = 0; i < 6; i++) a.add(box(5.8, 0.08, 0.16), 0x6d7856, 0, 0.9 + i * 0.7, -0.92); return a.geo(); }
   def('fort_radar', { category: 'ground', label: 'Radar mountain', hp: 1400, points: 4000, lockRange: 12000, radius: 18, radarRange: 0, killMsg: 'RADAR MOUNTAIN DOWN',
     needsBombs: false, subTarget: true, noWaves: true,
-    build: function () { var g = new T.Group(); var m = mesh(cached('radMtn', geoRadarMtn), g); var f = fireSet(g, [[0, 30, 0, 34], [12, 10, 6, 20]], 24); var smk = { t: 0 }, dead = false;
-      return { group: g, update: function (dt) { if (dead) fires(dt, f, 3, smk, 1.3); }, onDeath: function (ent) { dead = true; charMesh(g); m.scale.y = 0.6; if (ent && ent._fire) ent._fire.material = invis(); return null; }, dispose: function () {} }; },
+    build: function () {
+      var g = new T.Group(), inner = new T.Group(); g.add(inner); mesh(cached('radMtn', geoRadarMtn), inner);
+      var head = new T.Group(); head.position.set(11, 31.5, -5); inner.add(head); mesh(cached('r96l6', geo96L6), head);
+      var f = fireSet(g, [[-8, 17, -11, 30], [11, 22, -5, 20]], 24); var smk = { t: 0 }, dead = false;
+      return { group: g, update: function (dt) { if (dead) fires(dt, f, 3, smk, 1.3); else head.rotation.y += dt * 0.9; },
+        onDeath: function (ent) { dead = true; charMesh(g); inner.scale.y = 0.6; if (ent && ent._fire) ent._fire.material = invis(); return null; }, dispose: function () {} }; },
     spawn: function (ent, opts, ctx) { ent.pos.y = gAt(ctx.world, ent.pos.x, ent.pos.z); poseYaw(ent, Math.random() * TAU); ent.aim = ent.pos; },
     think: function () {} });
   def('s400', { category: 'ground', label: 'S-400', hp: 170, points: 1000, lockRange: 8000, radius: 7, radarRange: 16000, killMsg: 'S-400 DOWN', needsBombs: false, noWaves: true,
-    build: function (v) { var b = KS.sam_launcher; var m = b && b.build ? b.build(1) : null; return m && m.group ? m : emptyModel(); },
+    build: buildS400,
     spawn: function (ent, opts, ctx) { var b = KS.sam_launcher; if (b && b.spawn) b.spawn(ent, opts, ctx); ent.data.ring = opts.ring | 0; ent.data.par = opts.par || null; ent.data.sk0 = ent.skill; },
     think: function (ent, dt, ctx) {
       var d = ent.data, pd = d.par && d.par.data || {};
+      if (d.ring === 1) { d.net = d.net || {}; d.net.up = pd.phase >= 1 ? 1 : 0; }                    // inner ring: canisters stowed until phase 1
       if (d.ring === 1 && !(pd.phase >= 1)) { KIT().perceive(ent, dt, ctx, 4000); return; }         // inner ring: radar silent
       if (pd.blind && !d.blindSet) { d.blindSet = true; ent.skill = Math.min(skl(ent), 0.3); }
       var b = KS.sam_launcher; if (b && b.think) b.think(ent, dt, ctx);
@@ -34663,20 +34791,57 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
     } });
 
   // ================================================================== Drone mothership (flying wing)
+  // flying wing, 160 m span, nose -z: thick lifting centre body, sawtooth trailing edge, 2 dorsal engines, 4 ventral drone bays
+  // (doors open, lit inside), ventral AA pylons, sensor band and ball under the nose.
   var MS_BAY = [[-30, -3.2, 8], [-11, -3.2, 2], [11, -3.2, 2], [30, -3.2, 8]], MS_ENG = [[-15, 4.6, 6], [15, 4.6, 6]], MS_AA = [[-46, -3, 14], [46, -3, 14]];
+  var MS_TE = [[0, 25], [12, 15], [28, 24], [46, 13], [62, 22], [80, 18]];
+  function msTE(x) { for (var i = 0; i < MS_TE.length - 1; i++) if (x <= MS_TE[i + 1][0]) return lerp(MS_TE[i][1], MS_TE[i + 1][1], (x - MS_TE[i][0]) / (MS_TE[i + 1][0] - MS_TE[i][0])); return 18; }
+  function msSec(x) { return [x, -42 + x * 0.65, msTE(x), x * 0.02, 1.0 + 8 * Math.pow(1 - x / 80, 1.4)]; }
+  function msTop(x, z) { var s = msSec(x), u = clamp((z - s[1]) / (s[2] - s[1]), 0, 1), U = [[0, 0], [0.12, 0.42], [0.4, 0.5], [0.78, 0.24], [1, 0]], k = 0; while (k < 3 && u > U[k + 1][0]) k++; return s[3] + s[4] * lerp(U[k][1], U[k + 1][1], (u - U[k][0]) / (U[k + 1][0] - U[k][0])); }
   function geoMS() {
-    var a = new Acc(), B = 0x2b3036, D = 0x16191c, L = 0x3a4047;
-    a.add(plan(mirrorPlan([[0, -42], [80, 10], [80, 18], [62, 22], [46, 13], [28, 24], [12, 15], [0, 25]]), 5), B, 0, -2.5, 0);
-    a.add(sph(1, 16, 10), L, 0, 0.5, -6, 0, 0, 0, 15, 5.5, 34);
-    a.sym(box(8, 4, 22), L, 15, 4, 6); a.sym(box(6, 2.6, 0.6), D, 15, 4.4, -5.2);
-    MS_BAY.forEach(function (p) { a.add(box(9, 0.5, 13), D, p[0], -2.7, p[2]); });
-    a.add(box(1, 0.4, 30), 0xa01818, 0, 3.3, -10);
+    var a = new Acc(), B = 0x353b42, B2 = 0x2a2f35, L = 0x424850, P = 0x3c434b, D = 0x16191c, RED = 0xa01818, i;
+    var xs = [0, 6, 12, 20, 28, 37, 46, 54, 62, 70, 76, 80];
+    a.mir(wingG(xs.map(msSec), [B, B, B, B, B2, B2, B2, B2]), null);
+    // centre body (flattened ellipse rings) and canopy-like sensor hump
+    var CB = [[-44.5, 0.6, 0.4, 0.4], [-41, 6, 2.6, 0.8], [-33, 11, 4.4, 1.0], [-20, 14, 5.6, 1.0], [-6, 15, 6.0, 0.8], [8, 14.4, 5.4, 0.6], [18, 11, 4.0, 0.4], [26, 6, 2.2, 0.2], [30, 1, 0.6, 0]];
+    a.add(loft(CB.map(function (q) { return ellRing(q[0], q[1], q[2], q[3], 24); }), L), null);
+    a.add(sph(1, 20, 10), P, 0, 5.2, -14, 0, 0, 0, 5.5, 2.4, 13);
+    // dorsal engines: nacelles with dark intakes and nozzles
+    var EN = [[-8.2, 3.0, 1.9], [-6.5, 3.7, 2.4], [-3, 4.1, 2.7], [10, 4.1, 2.7], [16, 3.5, 2.2], [18.2, 3.0, 1.9]];
+    a.sym(loft(EN.map(function (q) { return ellRing(q[0], q[1], q[2], 0, 18); }), L, { capCol: D }), null, 15, 4.6, 0);
+    a.sym(cylZ(2.5, 2.5, 0.3, 16), D, 15, 4.6, -8.1); a.sym(lathe([[-8.5, 0.1], [-7.6, 1.0], [-7.0, 1.2]], 12), P, 15, 4.6, 0);
+    a.sym(cylZ(2.6, 2.3, 1.6, 16), 0x4a5058, 15, 4.6, 18.9);
+    // ventral bays: frames, dark wells, doors hanging open; outer bays sit in pods under the wing
+    MS_BAY.forEach(function (p, k) {
+      var x = p[0], z = p[2], outer = Math.abs(x) > 20;
+      if (outer) a.add(loft([[-6, 0.5, 0.5], [-2, 4.2, 1.8], [18, 4.2, 1.8], [22, 0.6, 0.6]].map(function (q) { return ellRing(z + q[0] - 8, q[1], q[2], -1.4, 16, x); }), L), null);
+      var yb = outer ? -3.0 : -3.1;
+      a.add(box(9.6, 0.6, 13.6), P, x, yb + 0.1, z); a.add(box(8.4, 0.62, 12.4), D, x, yb + 0.08, z);
+      a.add(box(0.2, 4.4, 12.4), B2, x - 4.6, yb - 2.0, z, 0, 0, -0.25); a.add(box(0.2, 4.4, 12.4), B2, x + 4.6, yb - 2.0, z, 0, 0, 0.25);
+      a.add(box(0.6, 0.3, 12), 0x50565e, x, yb - 0.25, z);                                                      // launch rail
+    });
+    a.sym(box(3, 2.8, 5), P, 46, -1.5, 14);                                                                     // AA pylons
+    // sensor ball under the nose, antennas, panels, red spine stripe, leading-edge band
+    a.add(sph(2.2, 14, 10), 0x0c1014, 0, -3.4, -31); a.add(cylY(2.4, 2.4, 1.2, 14), P, 0, -2.4, -31);
+    a.add(box(1, 0.4, 30), RED, 0, 6.65, -10); a.add(box(0.2, 2.6, 2.4), D, 0, 7.6, 12, 0, 0, 0); a.sym(box(0.2, 1.8, 1.8), D, 6, 6.0, 18);
+    for (i = 0; i < 14; i++) { var px = 22 + (i % 7) * 7.6, pz = -42 + px * 0.65 + 8 + (i >> 3) * 0 + (i < 7 ? 2 : 12); a.sym(box(5.2, 0.12, 6.4), i % 3 ? P : 0x3e454d, px, msTop(px, pz + 3) + 0.04, pz + 3, 0, -0.1); }
+    for (i = 0; i < 6; i++) { var lx = 8 + i * 12; a.sym(box(10.4, 0.3, 1.4), 0x1d2126, lx, msTop(lx, -42 + lx * 0.65 + 1.0) - 0.05, -42 + lx * 0.65 + 1.0, 0, -0.576); }
+    a.sym(box(0.4, 1.2, 0.4), D, 80, 1.6, 14);
+    return a.geo();
+  }
+  function geoMSGlow() {
+    var a = new Acc(), AMB = 0xffa040, BAY = 0xff6a2a, i;
+    var c1 = ellRing(-39.2, 7.15, 3.02, 0.84, 24), c2 = ellRing(-37.6, 8.15, 3.37, 0.88, 24);
+    panes(a, c1, c2, [20, 21, 22, 23, 0, 1, 2, 3, 4], AMB, 0.08, 0.8, 0.12);
+    MS_BAY.forEach(function (p) { var yb = Math.abs(p[0]) > 20 ? -3.0 : -3.1; for (i = 0; i < 3; i++) a.add(box(7.6, 0.1, 0.6), BAY, p[0], yb - 0.25, p[2] - 4.5 + i * 4.5); });
+    a.add(sph(0.6, 8, 6), 0xff2020, -80.2, 1.6, 14.5); a.add(sph(0.6, 8, 6), 0x20ff40, 80.2, 1.6, 14.5); a.add(sph(0.5, 8, 6), 0xffffff, 0, 1.0, 30);
+    a.sym(box(0.8, 0.4, 0.8), 0xff3020, 15, 7.4, 8);
     return a.geo();
   }
   def('mothership', { category: 'air', label: 'Drone mothership', hp: 100000, points: 20000, lockRange: 1, radius: 0.5, radarRange: 30000, killMsg: 'MOTHERSHIP DOWN',
     needsBombs: false, targetable: false, boss: true, noWaves: true,
     build: function () {
-      var g = new T.Group(); g.name = 'mothership'; var inner = new T.Group(); g.add(inner); mesh(cached('ms', geoMS), inner);
+      var g = new T.Group(); g.name = 'mothership'; var inner = new T.Group(); g.add(inner); mesh(cached('ms', geoMS), inner); glowMesh(cached('msGlow', geoMSGlow), inner);
       var gl = MS_ENG.map(function (p) { var s = sprite(inner, glowMat(), p[0], p[1] - 0.5, p[2] + 11.5, 6); s.visible = true; return s; });
       var fl = fireSet(inner, MS_BAY.map(function (p) { return [p[0], 0, p[2], 18]; }).concat(MS_ENG.map(function (p) { return [p[0], p[1] + 2, p[2] + 6, 22]; })), 18);
       var smk = { t: 0 };
@@ -34753,24 +34918,53 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
     think: function (ent, dt, ctx) { mounted(ent, ctx); } });
 
   // ================================================================== Rail gun (train turret / fortress cannon)
-  function geoRail(s) {
-    var a = new Acc(), M = 0x4a4f53, D = 0x22262a, C = 0x6fc8ff;
-    a.add(box(2.8 * s, 1.8 * s, 3.4 * s), M, 0, 0.9 * s, 0.4 * s);
-    a.sym(box(0.4 * s, 0.5 * s, 10 * s), D, 0.55 * s, 1.2 * s, -4.6 * s);
-    for (var i = 0; i < 4; i++) a.add(box(1.8 * s, 1.1 * s, 0.4 * s), C, 0, 1.2 * s, -1.5 * s - i * 2.2 * s);
+  // rail gun: armoured housing on the yaw ring; on the pitch pivot a breech block + two long rails in square coil frames,
+  // glowing rail faces and coils (unlit), cable conduits, flared muzzle. Unit s: 1 = train turret, 4.2 = fortress cannon.
+  function railParts(s, len) {
+    var a = new Acc(), gl = new Acc(), h = new Acc(), hg = new Acc(), M = 0x4a4f53, M2 = 0x3c4044, D = 0x22262a, C = 0x6fc8ff, Y = 0xd8b02a, i;
+    function A(acc, g, col, x, y, z, rx, ry, rz) { acc.add(g, col, x * s, y * s, z * s, rx, ry, rz, s, s, s); }
+    // housing (yaw)
+    A(h, cylY(1.9, 2.1, 0.4, 20), D, 0, 0.2, 0.3);
+    A(h, sideG([[2.9, 0.35], [2.9, 1.15], [1.6, 1.35], [-1.4, 1.25], [-2.0, 0.35]], 3.6), M, 0, 0, 0);
+    A(h, box(0.5, 1.4, 2.4), M2, 1.4, 1.35, 0.3); A(h, box(0.5, 1.4, 2.4), M2, -1.4, 1.35, 0.3);
+    A(h, box(3.0, 0.9, 1.0), M2, 0, 1.6, 2.5); for (i = 0; i < 4; i++) A(hg, box(0.5, 0.12, 1.02), C, -1.05 + i * 0.7, 1.75, 2.5);
+    A(h, box(3.7, 0.12, 0.3), Y, 0, 0.42, -1.9); A(h, cylZ(0.12, 0.12, 2.4, 8), D, 1.95, 0.7, 1.2); A(h, cylZ(0.12, 0.12, 2.4, 8), D, -1.95, 0.7, 1.2);
+    // barrel (pitch; pivot at the origin, muzzle at -len)
+    A(a, box(2.3, 1.5, 2.8), M, 0, 0, 0.7); A(a, box(1.6, 1.1, 1.0), M2, 0, 0, 2.5);
+    A(a, cylX(0.3, 3.0, 12), D, 0, 0, 0);
+    A(a, box(0.44, 0.6, len), M2, 0.5, 0, -len / 2); A(a, box(0.44, 0.6, len), M2, -0.5, 0, -len / 2);
+    A(gl, box(0.06, 0.36, len - 0.6), C, 0.27, 0, -len / 2 - 0.3); A(gl, box(0.06, 0.36, len - 0.6), C, -0.27, 0, -len / 2 - 0.3);
+    var nF = Math.max(4, Math.round(len / 1.5));
+    for (i = 0; i < nF; i++) {
+      var z = -1.2 - i * (len - 2.2) / (nF - 1), w = i === nF - 1 ? 1.25 : 1.6;
+      A(a, box(w, 0.22, 0.34), D, 0, 0.52, z); A(a, box(w, 0.22, 0.34), D, 0, -0.52, z); A(a, box(0.22, 1.2, 0.34), D, w / 2, 0, z); A(a, box(0.22, 1.2, 0.34), D, -w / 2, 0, z);
+      if (i % 2 === 0 && i < nF - 1) { A(gl, box(0.05, 0.7, 0.2), C, w / 2 + 0.13, 0, z); A(gl, box(0.05, 0.7, 0.2), C, -w / 2 - 0.13, 0, z); }
+    }
+    A(a, cylZ(0.11, 0.11, len - 2, 8), D, 0.3, -0.75, -len / 2 + 0.5); A(a, cylZ(0.11, 0.11, len - 2, 8), D, -0.3, -0.75, -len / 2 + 0.5);
+    A(a, box(0.5, 0.82, 0.9), M, 0.55, 0, -len + 0.3, 0, -0.12); A(a, box(0.5, 0.82, 0.9), M, -0.55, 0, -len + 0.3, 0, 0.12);
+    return { bar: a.geo(), barG: gl.geo(), house: h.geo(), houseG: hg.geo() };
+  }
+  var RAILP = {};
+  function railP(s, len) { var k = s + '_' + len; return RAILP[k] || (RAILP[k] = railParts(s, len)); }
+  function geoRailBase() {
+    var a = new Acc(), C = 0x55585b, D = 0x2b2e31, Y = 0xd8b02a;
+    a.add(cylY(11, 13, 6, 24), C, 0, 3, 0); a.add(cylY(9.4, 9.6, 0.4, 24), D, 0, 6.1, 0);
+    for (var i = 0; i < 24; i++) { var an = i / 24 * TAU; a.add(box(2.6, 0.3, 0.9), i % 2 ? Y : D, Math.sin(an) * 12.2, 5.4, Math.cos(an) * 12.2, -0.3, an, 0); }
+    for (i = 0; i < 6; i++) { var a2 = i / 6 * TAU; a.add(box(2, 5, 3), D, Math.sin(a2) * 12.6, 2.4, Math.cos(a2) * 12.6, 0, a2, 0); }
     return a.geo();
   }
   function buildRail(variant) {
-    var big = (variant | 0) === 1, s = big ? 4.2 : 1;
+    var big = (variant | 0) === 1, s = big ? 4.2 : 1, len = big ? 17 : 10, P = railP(s, len);
     var g = new T.Group(); g.name = 'railgun';
     var base = new T.Group(); g.add(base);
-    if (big) mesh(cached('railBase', function () { var a = new Acc(); a.add(cylY(11, 13, 6, 12), 0x55585b, 0, 3, 0); return a.geo(); }), base);
+    if (big) mesh(cached('railBase', geoRailBase), base);
     var yaw = new T.Group(); yaw.position.y = big ? 6 : 0; base.add(yaw);
+    mesh(P.house, yaw); glowMesh(P.houseG, yaw);
     var pitch = new T.Group(); pitch.position.y = 1.2 * s; yaw.add(pitch);
-    var m = mesh(cached('rail' + s, function () { var gg = geoRail(s); gg.translate(0, -1.2 * s, 0); return gg; }), pitch);
-    var ch = sprite(pitch, blueMat(), 0, 0, -10 * s, 3 * s);
+    mesh(P.bar, pitch); glowMesh(P.barG, pitch);
+    var ch = sprite(pitch, blueMat(), 0, 0, -len * s, 3 * s);
     var me = null;
-    return { group: g, yaw: yaw, pitch: pitch, muzzleZ: -10 * s,
+    return { group: g, yaw: yaw, pitch: pitch, muzzleZ: -len * s,
       update: function (dt, ent) { me = ent; var n = (ent.data && ent.data.net) || {}; ch.visible = (n.ch || 0) > 0; if (ch.visible) ch.scale.setScalar((2 + 6 * n.ch) * s * (0.8 + Math.random() * 0.4)); },
       onDeath: function (ent) { ch.visible = false; charMesh(g); pitch.rotation.x = -0.2; dropBeam(ent || me); return null; }, dispose: function () { dropBeam(me); } };
   }
@@ -34832,35 +35026,127 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
       var cars = (ent.data && ent.data.cars) || [], d = ent.data; d.rail = [];
       var idx = cars.length >= 4 ? [1, cars.length - 2] : [Math.min(1, cars.length - 1)];
       for (var i = 0; i < idx.length; i++) { var car = cars[idx[i]]; if (car) { var r = mountChild(ctx, 'railgun', 0, ent, 0, 0, 0, { mount: car, local: V(0, 3.6, 0) }); if (r) d.rail.push(r); } }
+      for (i = 0; i < cars.length; i++) {             // BZhRK look (see train_car wrapper below)
+        var cc = cars[i], cv = cc ? cc.variant | 0 : -1, role = idx.indexOf(i) >= 0 ? 2 : cv === 0 ? 1 : cv === 3 || cv === 4 ? 3 : cv === 1 || cv === 2 ? 4 : 0;
+        if (cc && cc.data && role) { cc.data.net = cc.data.net || {}; cc.data.net.bz = role; }
+      }
       track(ent);
     },
     think: function (ent, dt, ctx) { KS.train.think(ent, dt, ctx); } }));
-  // fortress superweapon
-  function geoRailFort(ice) {
-    var a = new Acc(), C = ice ? 0xd8e2ea : 0x3b3633, W = ice ? 0x9fb7c8 : 0x55504b, D = 0x1f2224;
-    a.add(cylY(42, 48, 10, 8), C, 0, 5, 0); a.add(cylY(30, 34, 8, 8), W, 0, 14, 0);
-    for (var i = 0; i < 8; i++) { var an = i / 8 * TAU; a.add(box(10, 14, 6), C, Math.sin(an) * 44, 7, Math.cos(an) * 44, 0, an); }
-    a.add(box(12, 3, 12), D, 0, 18.5, 0);
+  // BZhRK-style armoured train look for the rail gun train: the host tags each car (data.net.bz, sent to co-op clients) and the
+  // wrapped train_car model swaps its body for: 1 armoured DM62 loco, 2 rail-gun flat car, 3 'reefer' missile car, 4 armoured weapon car.
+  function bzBogies(a, L, col) {
+    for (var e = -1; e <= 1; e += 2) {
+      var z = e * L * 0.34;
+      a.add(box(2.0, 0.45, 3.4), 0x1d2018, 0, 0.75, z); a.sym(box(0.16, 0.36, 3.8), 0x1d2018, 1.0, 0.62, z);
+      for (var w = -1; w <= 1; w += 2) { a.sym(cylY(0.46, 0.46, 0.16, 14), 0x262626, 0.76, 0.46, z + w * 1.0, 0, 0, Math.PI / 2); a.sym(cylY(0.2, 0.2, 0.2, 8), 0x55595c, 0.82, 0.46, z + w * 1.0, 0, 0, Math.PI / 2); }
+    }
+    a.add(box(2.9, 0.35, L - 0.4), 0x1d2018, 0, 1.0, 0);
+    a.add(box(0.4, 0.4, 0.8), 0x55595c, 0, 0.95, -L / 2 - 0.2); a.add(box(0.4, 0.4, 0.8), 0x55595c, 0, 0.95, L / 2 + 0.2);
+    if (col) { a.sym(box(0.14, 0.95, L * 0.3), col, 1.56, 1.05, -L * 0.34); a.sym(box(0.14, 0.95, L * 0.3), col, 1.56, 1.05, L * 0.34); }
+  }
+  function geoBz(role, L) {
+    var a = new Acc(), G = 0x3f4c36, G2 = 0x34402d, D = 0x1d2018, GL = 0x11171b, RED = 0x9a2a1e, R = 0x5d625a, i;
+    bzBogies(a, L, G2);
+    if (role === 1) {                       // armoured diesel loco, cabs at both ends
+      a.add(sideG([[-9, 1.2], [-9, 3.0], [-7.9, 4.35], [7.9, 4.35], [9, 3.0], [9, 1.2]], 3.12), G, 0, 0, 0);
+      a.add(box(3.14, 0.18, 17.6), RED, 0, 1.75, 0);
+      for (var e = -1; e <= 1; e += 2) { a.add(box(2.4, 0.06, 0.95), GL, 0, 3.72, e * 8.5, e * 0.88); a.sym(box(0.06, 0.6, 1.3), GL, 1.57, 3.5, e * 7.3); a.sym(cylZ(0.16, 0.16, 0.1, 10), 0xe8e2c0, 0.95, 2.2, e * 9.03); a.add(box(3.2, 0.5, 0.4), D, 0, 1.05, e * 9.25); }
+      for (i = 0; i < 6; i++) a.sym(box(0.06, 0.9, 1.0), D, 1.57, 3.0, -4.2 + i * 1.6);
+      a.add(box(1.8, 0.3, 4.2), D, 0, 4.5, 2.4); a.add(box(1.8, 0.3, 3.0), D, 0, 4.5, -2.6); a.add(cylY(0.22, 0.2, 0.9, 8), D, 0.4, 4.8, 0.4); a.add(cylY(0.22, 0.2, 0.9, 8), D, -0.4, 4.8, 0.4);
+      a.sym(box(0.05, 0.05, 13), 0x6d7378, 1.66, 2.9, 0);
+    } else if (role === 2) {                // rail-gun flat car: armoured bed, sloped side walls, turret ring, capacitor bins
+      a.add(box(3.0, 0.6, L), G, 0, 1.45, 0);
+      a.sym(box(0.3, 1.4, L - 0.6), G2, 1.42, 2.3, 0, 0, 0, -0.22);
+      a.add(cylY(1.8, 2.0, 0.5, 18), D, 0, 3.35, 0); a.add(cylY(2.0, 2.0, 1.5, 18), G, 0, 2.5, 0);
+      for (var e2 = -1; e2 <= 1; e2 += 2) { a.add(box(2.5, 1.4, 3.0), G, 0, 2.4, e2 * 4.9); for (i = 0; i < 4; i++) a.sym(box(0.06, 0.9, 0.3), D, 1.26, 2.4, e2 * 4.9 - 1.1 + i * 0.73); }
+      a.add(box(3.04, 0.16, L - 0.2), RED, 0, 1.25, 0);
+    } else if (role === 3) {                // disguised 'reefer' missile car: ribbed box, roof doors, end platforms
+      a.add(box(3.1, 3.3, L - 0.6), G, 0, 3.0, 0); a.add(cylZ(1.62, 1.62, L - 0.6, 18), G, 0, 4.05, 0, 0, 0, 0, 0.96, 0.32, 1);
+      for (i = 0; i < 13; i++) a.sym(box(0.08, 3.1, 0.12), G2, 1.57, 3.0, -(L - 1) / 2 + i * (L - 1) / 12);
+      a.add(box(0.12, 0.12, L - 1), D, 0, 4.58, 0); a.add(box(3.0, 0.1, 0.12), D, 0, 4.4, -2); a.add(box(3.0, 0.1, 0.12), D, 0, 4.4, 2.8);
+      a.sym(box(0.08, 2.4, 1.6), G2, 1.6, 2.7, -1.2); a.add(box(1.6, 0.9, 0.5), D, 0, 3.4, L / 2 - 0.25);
+      a.add(box(3.14, 0.14, L - 0.5), RED, 0, 1.55, 0);
+    } else {                                // armoured weapon car (flak / SAM keep their weapons)
+      a.add(box(3.0, 0.6, L), G, 0, 1.4, 0); a.sym(box(0.25, 1.1, L - 0.4), G2, 1.42, 2.2, 0); a.add(box(3.0, 1.1, 0.25), G2, 0, 2.2, -L / 2 + 0.3); a.add(box(3.0, 1.1, 0.25), G2, 0, 2.2, L / 2 - 0.3);
+      a.add(box(3.04, 0.16, L - 0.2), RED, 0, 1.25, 0);
+    }
+    return a.geo();
+  }
+  if (KS.train_car && !KS.train_car._bz) {
+    var TC = KS.train_car, tcBuild = TC.build; TC._bz = true;
+    TC.build = function (variant, o) {
+      var m = tcBuild(variant, o), up = m.update, od = m.onDeath, done = false;
+      m.update = function (dt, ent) {
+        if (up) up(dt, ent);
+        var role = !done && ent && ent.data && ent.data.net && ent.data.net.bz;
+        if (role) {
+          done = true; var L = m.length || 14;
+          m.group.children.forEach(function (c) { if (c.isMesh || (role === 2 && c.isGroup)) c.visible = false; });
+          mesh(cached('bz' + role + '_' + L, function () { return geoBz(role, L); }), m.group);
+        }
+      };
+      m.onDeath = function (ent, fx) { charMesh(m.group); return od ? od(ent, fx) : null; };
+      return m;
+    };
+  }
+  // fortress superweapon: two-tier octagonal bunker, blast-door housings, buttresses, hazard-striped gun pit, cable trenches
+  // to the 3 capacitor towers, rail spur, vents, lights. variant 1 = ice palette.
+  function geoRailFort(ice, glow) {
+    var a = new Acc(), C = ice ? 0xd8e2ea : 0x5d5853, C2 = ice ? 0xc4d0da : 0x4d4844, W = ice ? 0x9fb7c8 : 0x6b665f, D = 0x1f2224, Y = 0xd8b02a, L = 0x6fc8ff, i, an;
+    if (glow) {
+      for (i = 0; i < 8; i++) { an = i / 8 * TAU; a.add(box(10, 0.2, 0.4), L, Math.sin(an) * 34.9, 18.1, Math.cos(an) * 34.9, 0, an, 0); }
+      for (i = 0; i < 3; i++) { an = i / 3 * TAU + 0.5; a.add(box(0.5, 0.12, 16), L, Math.sin(an) * 22, 18.75, Math.cos(an) * 22, 0, an, 0); }
+      for (i = 0; i < 4; i++) { an = i / 4 * TAU; a.add(box(5.6, 0.4, 0.3), 0xffb040, Math.sin(an) * 47.7, 6.6, Math.cos(an) * 47.7, 0, an, 0); }
+      return a.geo();
+    }
+    a.add(cylY(42, 48, 10, 8), C, 0, 5, 0, 0, Math.PI / 8); a.add(cylY(46.1, 46.3, 0.5, 8), C2, 0, 3.4, 0, 0, Math.PI / 8); a.add(cylY(44.2, 44.4, 0.5, 8), C2, 0, 6.6, 0, 0, Math.PI / 8);
+    a.add(cylY(38, 40, 8, 8), W, 0, 14, 0, 0, Math.PI / 8); a.add(cylY(38.6, 38.6, 0.6, 8), C2, 0, 17.7, 0, 0, Math.PI / 8);
+    a.add(cylY(16, 17.5, 2, 32), C2, 0, 19, 0); a.add(cylY(14.6, 14.6, 0.3, 32), D, 0, 20.05, 0);
+    for (i = 0; i < 32; i++) { an = i / 32 * TAU; a.add(box(2.9, 0.12, 1.2), i % 2 ? Y : D, Math.sin(an) * 15.6, 20.06, Math.cos(an) * 15.6, 0, an, 0); }
+    for (i = 0; i < 8; i++) { an = i / 8 * TAU + Math.PI / 8; a.add(box(10, 14, 6), C2, Math.sin(an) * 45, 7, Math.cos(an) * 45, 0, an); a.add(box(10.4, 1, 6.4), D, Math.sin(an) * 45, 14.4, Math.cos(an) * 45, 0, an); }
+    for (i = 0; i < 4; i++) {                       // blast-door housings with dark doors
+      an = i / 4 * TAU;
+      a.add(box(11, 7.5, 6), C, Math.sin(an) * 44.5, 3.75, Math.cos(an) * 44.5, 0, an); a.add(box(7.5, 5.6, 0.4), D, Math.sin(an) * 47.6, 2.8, Math.cos(an) * 47.6, 0, an);
+      a.add(box(7.5, 0.5, 0.45), Y, Math.sin(an) * 47.62, 5.85, Math.cos(an) * 47.62, 0, an);
+    }
+    for (i = 0; i < 3; i++) {                       // cable trenches to the capacitor towers
+      an = i / 3 * TAU + 0.5; var cx = Math.sin(an), cz = Math.cos(an);
+      a.add(box(2.4, 0.8, 17), D, cx * 22, 18.3, cz * 22, 0, an); a.add(cylZ(0.45, 0.45, 17, 10), 0x30353a, cx * 22 + cz * 0.6, 18.6, cz * 22 - cx * 0.6, 0, an); a.add(cylZ(0.45, 0.45, 17, 10), 0x30353a, cx * 22 - cz * 0.6, 18.6, cz * 22 + cx * 0.6, 0, an);
+    }
+    for (i = 0; i < 6; i++) { an = i / 6 * TAU + 0.15; a.add(box(3, 4, 3), C2, Math.sin(an) * 30, 20, Math.cos(an) * 30, 0, an); a.add(box(2.4, 0.4, 2.4), D, Math.sin(an) * 30, 22.1, Math.cos(an) * 30, 0, an); }
+    a.add(cylY(0.25, 0.25, 12, 6), D, 26, 24, -14); a.add(box(4, 0.3, 0.3), D, 26, 29.8, -14); a.add(cylY(2.6, 0.2, 1.2, 12), 0xc9c6b6, 26, 31, -14);
+    for (i = 0; i < 2; i++) a.add(box(0.5, 0.4, 70), D, -1.2 + i * 2.4, 0.2, -86, 0, 0, 0);
+    for (i = 0; i < 40; i++) a.add(box(4, 0.25, 0.5), 0x3a2e24, 0, 0.05, -52 - i * 1.75);
+    return a.geo();
+  }
+  function geoRfCap(glow) {                         // origin at the tower's mid-height (sub-target point)
+    var a = new Acc(), M = 0x4a5056, D = 0x2b3036, L = 0x6fc8ff, i;
+    if (glow) { for (i = 0; i < 6; i++) a.add(cylY(3.28, 3.28, 0.7, 20), L, 0, -6 + i * 2.5, 0); a.add(sph(2.3, 16, 10), 0x9fe0ff, 0, 11, 0); return a.geo(); }
+    a.add(box(9, 1.6, 9), 0x5d5853, 0, -8.2, 0); a.add(cylY(3.0, 3.5, 16, 20), M, 0, 0.6, 0);
+    for (i = 0; i < 8; i++) { var an = i / 8 * TAU + 0.2; a.add(box(0.3, 13.5, 1.5), D, Math.sin(an) * 3.6, 0.2, Math.cos(an) * 3.6, 0, an); }
+    a.add(torusG(3.4, 0.6, 24, 8), D, 0, 8.9, 0, Math.PI / 2); a.add(cylY(1.1, 2.4, 2.2, 16), M, 0, 9.2, 0);
+    a.add(box(2.2, 2.6, 2.2), D, 3.8, -6.2, 0); a.add(cylZ(0.3, 0.3, 4, 8), D, 0, -6.8, 4.8);
     return a.geo();
   }
   def('rf_cap', { category: 'ground', label: 'Capacitor', hp: 500, points: 2000, lockRange: 10000, radius: 7, radarRange: 0, killMsg: 'CAPACITOR DOWN', needsBombs: false, subTarget: true, noWaves: true,
     build: function () {
-      var g = new T.Group(); mesh(cached('rfcap', function () { var a = new Acc(); a.add(cylY(4, 4.6, 12, 10), 0x4a5056, 0, 6, 0); for (var i = 0; i < 4; i++) a.add(cylY(4.3, 4.3, 0.8, 10), 0x6fc8ff, 0, 2.5 + i * 2.6, 0); a.add(sph(3, 10, 6), 0x9fe0ff, 0, 13, 0); return a.geo(); }), g);
-      var gl = sprite(g, blueMat(), 0, 13, 0, 12); gl.visible = true;
-      return { group: g, update: function () { gl.scale.setScalar(10 + Math.random() * 4); }, onDeath: function (ent) { gl.visible = false; charMesh(g); g.scale.y = 0.5; return null; }, dispose: function () {} };
+      var g = new T.Group(); mesh(cached('rfcap', function () { return geoRfCap(false); }), g); glowMesh(cached('rfcapG', function () { return geoRfCap(true); }), g);
+      var gl = sprite(g, blueMat(), 0, 11, 0, 12); gl.visible = true;
+      return { group: g, update: function () { gl.scale.setScalar(10 + Math.random() * 4); }, onDeath: function (ent) { gl.visible = false; charMesh(g); g.children.forEach(function (c) { if (c.isMesh) { c.scale.y = 0.5; c.position.y = -4.5; } }); return null; }, dispose: function () {} };
     },
     spawn: function (ent, opts, ctx) { KIT().mountSpawn(ent, opts, ctx); },
     think: function (ent, dt, ctx) { mounted(ent, ctx); } });
   def('railfort', { category: 'ground', label: 'Rail cannon fortress', hp: 100000, points: 0, lockRange: 1, radius: 0.5, radarRange: 0, killMsg: 'SUPERWEAPON DESTROYED',
     needsBombs: false, targetable: false, boss: true, noWaves: true,
-    build: function (v) { var g = new T.Group(); g.name = 'railfort'; var m = mesh(cached('rfort' + (v | 0), function () { return geoRailFort((v | 0) === 1); }), g); return { group: g, update: null, onDeath: function () { charMesh(g); return null; }, dispose: function () {} }; },
+    build: function (v) { var g = new T.Group(); g.name = 'railfort'; var m = mesh(cached('rfort' + (v | 0), function () { return geoRailFort((v | 0) === 1); }), g); glowMesh(cached('rfortG', function () { return geoRailFort(false, true); }), g); return { group: g, update: null, onDeath: function () { charMesh(g); return null; }, dispose: function () {} }; },
     spawn: function (ent, opts, ctx) {
       var d = ent.data, w = ctx.world, i;
       d.cat = 'rf'; ent.pos.y = gAt(w, ent.pos.x, ent.pos.z) - 2; poseYaw(ent, Math.random() * TAU);
       KIT().syncGroup(ent);
       d.gun = mountChild(ctx, 'railgun', 1, ent, 0, 20, 0);
       d.caps = [];
-      for (i = 0; i < 3; i++) { var an = i / 3 * TAU + 0.5; d.caps.push(mountChild(ctx, 'rf_cap', 0, ent, Math.sin(an) * 34, 18, Math.cos(an) * 34)); }
+      for (i = 0; i < 3; i++) { var an = i / 3 * TAU + 0.5; d.caps.push(mountChild(ctx, 'rf_cap', 0, ent, Math.sin(an) * 34, 27, Math.cos(an) * 34)); }
       d.sams = [];
       for (i = 0; i < (opts.sams != null ? opts.sams : 2); i++) {
         for (var t = 0; t < 8; t++) { var a2 = Math.random() * TAU, x = ent.pos.x + Math.sin(a2) * 1300, z = ent.pos.z - Math.cos(a2) * 1300; if (hAt(w, x, z) > 1) { var s = ctx.spawnChild('s400', 0, { e: x, n: -z, ring: 0, par: ent, group: ent.group + '_sam' }, ent); if (s) d.sams.push(s); break; } }
@@ -34987,7 +35273,9 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
     function L(k, pts, v, f) { return pts.map(function (p, i) { return [k, v == null ? i : v, p[0], p[1], p[2], !!f]; }); }
     if (kind === 'ekranoplan') return L('ekr_engine', EK_ENG, 0).concat(L('carrier_aa', EK_TUR));
     if (kind === 'mothership') return L('carrier_aa', MS_AA, null, true);
-    if (kind === 'railfort') { var c = [['railgun', 1, 0, 20, 0, false]]; for (var i = 0; i < 3; i++) { var an = i / 3 * TAU + 0.5; c.push(['rf_cap', 0, Math.sin(an) * 34, 18, Math.cos(an) * 34, false]); } return c; }
+    if (kind === 'railtrain') return [['train_car', 0, 0, 0, -33, false, { bz: 1 }], ['train_car', 1, 0, 0, -17, false, { bz: 2 }], ['railgun', 0, 0, 3.6, -17, false],
+      ['train_car', 3, 0, 0, -2, false, { bz: 3 }], ['train_car', 2, 0, 0, 13, false, { bz: 2 }], ['railgun', 0, 0, 3.6, 13, false], ['train_car', 4, 0, 0, 27.5, false, { bz: 3 }]];
+    if (kind === 'railfort') { var c = [['railgun', 1, 0, 20, 0, false]]; for (var i = 0; i < 3; i++) { var an = i / 3 * TAU + 0.5; c.push(['rf_cap', 0, Math.sin(an) * 34, 27, Math.cos(an) * 34, false]); } return c; }
     return [];
   };
 })();
@@ -37706,7 +37994,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
       var p = projTo(t.pos, trkP), dx = p.x - W / 2, dy = p.y - H / 2; if (p.behind) { dx = -dx; dy = -dy; }
       var a = Math.atan2(dy, dx), r = Math.min(W, H) * 0.31, cp = new Path2D(), chx = W / 2 + Math.cos(a) * r, chy = H / 2 + Math.sin(a) * r;
       // skip the bearing chevron where it would sit on the top text stack (the RWR line on the radar still shows it)
-      if (!(chy < (HS.upBottom || 0) + 12 * u && Math.abs(chx - W / 2) < Math.min(W, H) * 0.28)) { chevron(cp, chx, chy, a, 11 * u); ln(AMB, 2.6); hx.stroke(cp); }
+      var inCol = Math.abs(chx - W / 2) < Math.min(W, H) * 0.28;
+      if (!(inCol && (chy < (HS.upBottom || 0) + 12 * u || (HS.lowBot > HS.lowTop && chy > HS.lowTop - 16 * u && chy < HS.lowBot + 16 * u)))) { chevron(cp, chx, chy, a, 11 * u); ln(AMB, 2.6); hx.stroke(cp); }
     }
     hx.globalAlpha = 1;
   }
@@ -38252,6 +38541,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
     var locked = canLock && !!lk.locked, prog = canLock && lk.target ? (lk.progress01 || 0) : 0;
     if (locked) HS.lock = 1; else if (prog <= 0) HS.lock = 0; else HS.lock += (prog - HS.lock) * Math.min(1, dt * 14);
     var desig = canLock ? (lk.designated || lk.target || null) : null;
+    HS.desigXY = null;
     if (canLock) drawTracks(u, ch);
     // seeker cone: faint corner brackets at the nose, only while nothing is designated
     if (canLock && combat.active && !n.behind && !desig) {
@@ -38302,6 +38592,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
     // locked: SOLID RED square + LOCK tag. All open around the target itself.
     if (desig) {
       var dp = projTo(desig, P3);
+      HS.desigXY = !dp.behind ? dp : null;
       if (!dp.behind && dp.x > -40 && dp.x < W + 40 && dp.y > -40 && dp.y < H + 40) {
         var kL = locked ? 1 : HS.lock, bs = (locked ? 17 : 17 + 15 * (1 - kL)) * u, pb = new Path2D();
         if (locked) { pb.rect(dp.x - bs, dp.y - bs, bs * 2, bs * 2); stroke2(pb, RED, 2.2); }
@@ -38811,7 +39102,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
 
   function drawWeapons(u, ch, R, b) {
     var lx = R - 172 * u, iconX = R - 40 * u, slots = Math.min(HS.mslMax, 12), iw = 7.5 * u;
-    var dev = inputDev(), wide = W >= 640;
+    var dev = inputDev(), wide = W >= 640 && (!HS.tapeBox || R - 196 * u - 112 * u > HS.tapeBox[3] + 6 * u);
     blit(sprite('wpPlate', 200 * u, 82 * u, function (g, w, h) { g.shadowBlur = 0; hFade(g, 0, 0, w, h, true); }), R - 188 * u, b - 76 * u);
     var on = sprite('mslOn', 9 * u, 24 * u, function (g) { mslIcon(g, true); }), off = sprite('mslOff', 9 * u, 24 * u, function (g) { mslIcon(g, false); });
     var y1 = b - 58 * u, y2 = b - 34 * u, y3 = b - 12 * u, i;
@@ -38956,11 +39247,17 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
     for (i = 0; i < dom.length; i++) {
       var de = dom[i]; if (!de) continue;
       var on = !de.classList.contains('off') && de.offsetHeight > 4 && (de.className.indexOf('flx-toasts') < 0 || de.children.length);
+      if (!on && de.__layF) { de.__layF = false; de.style.opacity = ''; }
       if (on) (function (el, h, w) {
         // small screens: scale the toast down to the room left above the centre (never below 55 %)
         var k = clamp((yMaxUp - y0 - 36 * u) / h, 0.55, 1), kk = Math.round(k * 100) / 100;
         if (el.__layK !== kk) { el.__layK = kk; el.style.transformOrigin = 'top center'; el.style.transform = kk < 1 ? 'translateX(-50%) scale(' + kk + ')' : ''; }
-        want('up', 99, 5, h * k, function (y) { var t = Math.round(y); if (el.__layT !== t) { el.__layT = t; el.style.top = t + 'px'; } HS.upHalfW = Math.max(HS.upHalfW, w * k / 2 + 8 * u); });
+        want('up', 99, 5, h * k, function (y) {
+          var t = Math.round(y); if (el.__layT !== t) { el.__layT = t; el.style.top = t + 'px'; } HS.upHalfW = Math.max(HS.upHalfW, w * k / 2 + 8 * u);
+          // the target wins: fade the toast while the designated target is under it
+          var d = HS.desigXY, under = !!d && Math.abs(d.x - W / 2) < w * k / 2 + 30 * u && d.y > y - 30 * u && d.y < y + h * k + 30 * u;
+          if (el.__layF !== under) { el.__layF = under; el.style.opacity = under ? '0.3' : ''; }
+        });
       })(de, de.offsetHeight, de.offsetWidth);
     }
     HS.upHalfW = 230 * u; HS.band = band;
@@ -39450,7 +39747,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793160827', updShown = false;
+  var BUILD = '1793161613', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
@@ -39580,6 +39877,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
   // with every pooled object shown and frustum culling off (debris, wrecks, fx), so the main-pass and the shadow-depth
   // programs all link before play. Warm copies leave the scene; only their geometry is freed (materials keep the programs).
   function warmBoot() {
+    // test builds (software GL: each program JITs for ~0.5 s at its first draw) keep the short warm-up, unless ?warm
+    if (window.FLK_DEV && !window.FLK_WARM && !/[?&]warm\b/.test(location.search)) { warmShaders('boot'); return; }
     var t0 = performance.now(), ri = renderer.info, n0 = ri.programs ? ri.programs.length : 0, nb = 0, i;
     var g = new T.Group(); g.name = 'shaderWarm';
     var K = FL.ENEMY_KINDS || {};
@@ -39592,19 +39891,31 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
     });
     var tB = performance.now();
     g.position.copy(st.pos); scene.add(g); g.updateMatrixWorld(true);
-    var hid = [], cul = [];
+    // the light count is part of every lit program key: warm copies bring no lights, and force-shown pools must not
+    // switch on lights that are hidden in play (else every program compiles for a light setup the game never uses)
+    var gl0 = []; g.traverse(function (o) { if (o.isLight) gl0.push(o); });
+    for (i = 0; i < gl0.length; i++) if (gl0[i].parent) gl0[i].parent.remove(gl0[i]);
+    var litOn = new Set(); scene.traverseVisible(function (o) { if (o.isLight) litOn.add(o); });
+    var hid = [], cul = [], dark = [];
     scene.traverse(function (o) {
       if (!o.visible) { hid.push(o); o.visible = true; }
       if (o.frustumCulled && (o.isMesh || o.isPoints || o.isLine || o.isSprite)) { cul.push(o); o.frustumCulled = false; }
     });
+    scene.traverse(function (o) { if (o.isLight && !litOn.has(o) && o.visible) { dark.push(o); o.visible = false; } });
     var tC = 0;
     try {
       warmShaders('boot'); tC = performance.now();
       world.sun.position.copy(st.pos).addScaledVector(world.sunDir, 400); world.sun.target.position.copy(st.pos); world.sun.target.updateMatrixWorld();
       if (post && post.enabled) post.render(0, postParams(0)); else renderer.render(scene, camera);
     } catch (e) { glog('shader pre-warm frame failed: ' + e.message); }
+    for (i = 0; i < dark.length; i++) dark[i].visible = true;
     for (i = 0; i < hid.length; i++) hid[i].visible = false;
     for (i = 0; i < cul.length; i++) cul[i].frustumCulled = true;
+    // the player jet is hidden after a crash: its lights go out, so the lit programs need that light count too
+    if (plane && plane.group && plane.group.visible) {
+      plane.group.visible = false;
+      try { warmShaders('boot, jet hidden'); } finally { plane.group.visible = true; }
+    }
     scene.remove(g);
     g.traverse(function (o) { if (o.geometry && o.geometry.dispose) o.geometry.dispose(); });
     var n1 = ri.programs ? ri.programs.length : 0;
