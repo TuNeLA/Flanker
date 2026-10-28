@@ -26045,6 +26045,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
 
   // ---------------------------------------------------------------- state
   var world, fx, plane, vapor, phys, combat, player, st;
+  var carrier = null;  // carrier.js: friendly carrier on sea maps (deck takeoff, wire landing, rearm)
   var extras = null;   // extras.js: missile/kill cam picture-in-picture, medals, stats
   var started = false, paused = false, booted = false;
   var view = 0, VIEWS = ['CHASE', 'REAR', 'COCKPIT', 'FAR CHASE', 'FLYBY'];
@@ -26495,6 +26496,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     if (combat && !(campaign && campaign.active)) combat.stop();
     if (kind === 'rejoin') phys.reset('air', pt);
     else if (kind === 'air') phys.reset('air', mapId === 'lax' ? AIR_SPAWN : (world.airSpawn || { e: world.spawn.e, n: world.spawn.n, alt: world.airportH + 1300, hdgDeg: world.spawn.hdgDeg, speed: 200 }));
+    else if (kind === 'carrier' && carrier && carrier.available()) carrier.spawn(0);
     else phys.reset('runway', { e: world.spawn.e, n: world.spawn.n, h: world.airportH, hdgDeg: world.spawn.hdgDeg });
     plane.group.visible = true; crashHandled = false; crashT = 0; if (kind !== 'rejoin') lastSpawn = kind; camReset = true; hitFlash = 0; syncLever();
     resetAim(); glog('spawn ' + kind + ' (' + aircraftId + ')');
@@ -27256,6 +27258,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     if (!crashed) drawOrdnance(u, ch);
     if (!crashed) drawPullUp(u, dt);
     if (!crashed) drawTracked(u, ch, dt);
+    if (!crashed) drawCarrier(u);
 
     // ---- flight data (dimmed on the crash screen)
     var dimA = crashed ? 0.25 : 1;
@@ -27329,6 +27332,32 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   // test hook: average drawHUD cost over n synchronous calls (ms)
   window.__hudBench = function (n) { var t = performance.now(); for (var i = 0; i < n; i++) drawHUD(0); return (performance.now() - t) / n; };
 
+  // ---- carrier: marker + distance; on final approach a glide-slope / line-up cross and the LSO call
+  var CVP = {};
+  function drawCarrier(u) {
+    if (!carrier) return;
+    var c = carrier.hudInfo && carrier.hudInfo(); if (!c || !c.available || !c.pos) return;
+    if (c.onDeck) { if (c.msg) text(c.msg, W / 2, H * 0.62, 13 * u, HC, 'center'); return; }
+    if (c.dist > 30000) return;
+    var p = projTo(c.aim || c.pos, CVP);
+    if (!p.behind && p.x > 0 && p.x < W && p.y > 0 && p.y < H) {
+      var r = 9 * u, pp = new Path2D();
+      pp.moveTo(p.x - r, p.y); pp.lineTo(p.x, p.y - r * 0.6); pp.lineTo(p.x + r, p.y); pp.lineTo(p.x, p.y + r * 0.6); pp.closePath();
+      ln('#7fc8ff', 1.8); hx.stroke(pp);
+      text('CV ' + (c.dist / 1000).toFixed(1), p.x + r + 5 * u, p.y, 11 * u, '#7fc8ff');
+    }
+    if (c.onFinal) {
+      // glide slope (vertical) and line-up (horizontal) needles around the centre
+      var cx = W / 2, cy = H / 2, R0 = 46 * u, gy = clamp((c.glideErr || 0) / 2, -1, 1) * R0, lx = clamp((c.lineupErr || 0) / 4, -1, 1) * R0;
+      var sb = hx.shadowBlur; hx.shadowBlur = 0;
+      hx.globalAlpha = 0.9;
+      hx.strokeStyle = 'rgba(127,200,255,.35)'; hx.lineWidth = 1 * u; hx.strokeRect(cx - R0, cy - R0, R0 * 2, R0 * 2);
+      hx.fillStyle = '#ffb347'; hx.fillRect(cx - R0, cy + gy - 1.5 * u, R0 * 2, 3 * u);
+      hx.fillStyle = '#7fc8ff'; hx.fillRect(cx + lx - 1.5 * u, cy - R0, 3 * u, R0 * 2);
+      hx.globalAlpha = 1; hx.shadowBlur = sb;
+      if (c.call) text(c.call, cx, cy + R0 + 16 * u, 13 * u, '#7fc8ff', 'center');
+    } else if (c.msg) text(c.msg, W / 2, H * 0.62, 13 * u, '#7fc8ff', 'center');
+  }
   // ---- SAM radar track warning (before launch): flashing TRACKED + bearing chevron + slow tone
   var TRK = { on: 0, beep: 0 }, trkP = {};
   function drawTracked(u, ch, dt) {
@@ -28534,7 +28563,9 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     updatePlaneVisual(dt);
     updateTeammates(dt); pfMark(4);
     updateCamera(dt); if (extras) extras.updateCamera(rdt);
-    world.update(dt, camera); pfMark(5);
+    world.update(dt, camera);
+    if (carrier) { try { carrier.update(dt, camera); } catch (e) {} }
+    pfMark(5);
     world.sun.position.copy(st.pos).addScaledVector(world.sunDir, 400);
     world.sun.target.position.copy(st.pos); world.sun.target.updateMatrixWorld();
     gpuBegin();
@@ -28936,6 +28967,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       };
       Object.defineProperty(player, 'health', { get: function () { return st.health; } });
       combat = FL.createCombat({ scene: scene, world: world, fx: fx, buildFlanker: FL.buildFlanker, player: player, camera: camera, sound: sound });
+      if (FL.createCarrier) { try { carrier = FL.createCarrier({ scene: scene, world: world, phys: phys, combat: combat, fx: fx, camera: camera, getCampaign: function () { return campaign; }, flash: flash }); } catch (e) { carrier = null; console.warn('carrier', e); } }
       if (combat.setLocalInfo) combat.setLocalInfo({ name: playerName(), aircraftId: aircraftId });
       if (combat.setPlayerModel) { try { combat.setPlayerModel(plane); } catch (e) {} }
       if (FL.createCampaign) {
@@ -28990,7 +29022,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       renderMaps(); syncLever();
       $('loading').hidden = true;
       window.__flanker = {
-        phys: phys, combat: combat, world: function () { return world; }, camera: camera, start: startGame, campaign: function () { return campaign; }, setResMode: setResMode, resMode: function () { return resMode; },
+        phys: phys, combat: combat, world: function () { return world; }, camera: camera, start: startGame, campaign: function () { return campaign; }, carrier: function () { return carrier; }, setResMode: setResMode, resMode: function () { return resMode; },
         setView: function (v) { view = v; camReset = true; }, changeMap: changeMap, setAircraft: setAircraft, startMission: tryStartMission,
         // test hook: simulate `sec` seconds at 60 Hz with fixed inputs (no rendering)
         sim: function (sec, i) {
