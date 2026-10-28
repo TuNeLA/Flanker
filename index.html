@@ -19699,6 +19699,15 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     combat.setGun = setGun;
     combat.setTrigger = setTrigger;
     combat.cycleWeapon = cycleWeapon;
+    // select the n-th weapon (0-based, pods skipped) — keyboard 1..4
+    combat.selectWeapon = function (n) {
+      var k = -1;
+      for (var i = 0; i < wl.length; i++) {
+        var w = wl[i]; if (isPodSpec(w.spec)) continue; k++;
+        if (k === n) { if (w.spec.type === 'gun' || w.ammo > 0) { if (i !== wsel) { wsel = i; multi.length = 0; } return combat.weapon; } return null; }
+      }
+      return null;
+    };
     combat.dropFlares = dropFlares;
     combat.cycleTarget = cycleTarget;
     combat.setLoadout = setLoadout;
@@ -22250,8 +22259,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   // device bindings (match main.js input code)
   var KEYS = {
     pad:   { gas: 'RT', brake: 'LT', boost: 'B', drift: 'A', fire: 'X', weapon: 'Y', target: 'D-pad ◀ ▶', flares: 'D-pad ▼', missions: 'D-pad ▲', zoom: 'R3', camera: 'View', menu: 'Menu' },
-    mouse: { gas: 'W', brake: 'S', boost: 'Space', drift: 'V / right mouse', fire: 'F / left click', weapon: 'R / middle mouse', target: '[ ]', flares: 'X', missions: 'N', zoom: 'G', camera: 'C', menu: 'P' },
-    kb:    { gas: 'Shift', brake: 'Z', boost: 'Space', drift: 'V', fire: 'F', weapon: 'R', target: '[ ]', flares: 'X', missions: 'N', zoom: 'G', camera: 'C', menu: 'P' },
+    mouse: { gas: 'W', brake: 'S', boost: 'Shift', drift: 'Space', fire: 'left click', weapon: '1-4', target: 'Tab', flares: 'F', missions: 'N', zoom: 'right click', camera: 'C', menu: 'P' },
+    kb:    { gas: 'R', brake: 'Z', boost: 'Shift', drift: 'Space', fire: 'J', weapon: '1-4', target: 'Tab', flares: 'F', missions: 'N', zoom: 'G', camera: 'C', menu: 'P' },
     touch: { gas: 'GAS', brake: 'BRAKE', boost: 'GAS', drift: 'DRIFT', fire: 'FIRE', weapon: 'WPN', target: 'WPN', flares: 'FLARE', missions: 'MENU', zoom: '', camera: 'CAM', menu: 'MENU' }
   };
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
@@ -22730,7 +22739,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     // ---- helpers on game state
     function st() { return phys && phys.st; }
     function inGame() { var s = st(); return !!(s && !menuOpen() && !(campaign && campaign.hangarOpen)); }
-    function isCoop() { try { return !!(combat && combat.remotePlayers && combat.remotePlayers().length > 0); } catch (e) { return false; } }
+    function isCoop() { try { if (combat && combat._ally && !combat._ally.netOn()) return false; return !!(combat && combat.remotePlayers && combat.remotePlayers().length > 0); } catch (e) { return false; } }   // AI wingman (wingman.js) is not co-op
     var PMS = [];
     function playerMissiles() {
       if (combat && typeof combat.playerMissiles === 'function') { try { return combat.playerMissiles() || []; } catch (e) { return []; } }
@@ -22795,7 +22804,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       var cx = W / 2, off = Math.min(330 * u, cx - gut - 36 * u), tapeR = cx + off + 33 * u + 34 * u;
       var w = Math.min(W * 0.26, 420), gap = R - tapeR - 8 * u;
       if (gap >= 150) w = Math.min(w, gap); else w = Math.min(Math.max(w, 170), W * 0.46);
-      var h = w / 1.6, y = TP + 2 * rm + 50 * u;
+      var h = w / 1.6, y = TP + 2 * rm + 70 * u;
       if (y + h > H * 0.72) { h = Math.max(80, H * 0.72 - y); w = h * 1.6; }
       PIP.w = Math.round(w); PIP.h = Math.round(h); PIP.x = Math.round(R - w); PIP.y = Math.round(y);
     }
@@ -24681,7 +24690,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     setupPilot();
     var p = R.opt.player;
     frameFromPlayer(0);
-    W.aim.copy(slot).addScaledVector(fS, -900); W.aim.y += 80;
+    W.aim.copy(slot).addScaledVector(fS, -650); W.aim.y += 60;
     var gy = gAt(W.aim.x, W.aim.z) + 150; if (W.aim.y < gy) W.aim.y = gy;
     W.vel.copy(p.vel); if (W.vel.length() < 150) W.vel.copy(fS).multiplyScalar(180);
     wd.spd = W.vel.length(); wd.up = V(0, 1, 0); wd.wS = fS.clone(); wd.thr = 0.8;
@@ -24839,7 +24848,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     want.subVectors(tmpA, W.aim);
     tmpB.subVectors(slot, W.aim); var d = tmpB.length();
     var ahead = tmpB.dot(fS) < 0;
-    var spd = ahead ? ps - 45 : ps + clamp((d - 120) * 0.08, -50, 150);
+    var spd = ahead ? ps - 45 : ps + clamp((d - 100) * 0.12, -50, 170);
     avoidPlayer();
     btt(h, Math.max(110, spd), Math.max(st.perf.maxSpd, ps + 160), 100);
     return d;
@@ -26375,7 +26384,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       wheelSteps = 0;
     } else if (started) {
       if (E(9) || KP('Escape') || KP('KeyP')) pause();
-      // Keyboard + mouse: mouse aim (default) => W/S = gas/brake, instructor flies to the mouse; classic => W/S pitch, Shift/Z gas/brake.
+      // Keyboard + mouse (War Thunder style): mouse aim => W/S = gas/brake; classic => W/S pitch, R/Z gas/brake. Shift boost, Space drift, F flares, 1-4 weapons, RMB zoom.
       var maim = mouseAimOn(), mfly = mouseFlyOn(), mstk = mouseStickOn();
       // mouse flying (aim or stick): W/S = throttle, arrows = pitch / roll override. Keyboard only: W/S or arrows = pitch.
       var tp = mfly ? (K('ArrowDown') ? 1 : 0) - (K('ArrowUp') ? 1 : 0) : (K('KeyS') || K('ArrowDown') ? 1 : 0) - (K('KeyW') || K('ArrowUp') ? 1 : 0);
@@ -26414,7 +26423,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         inp.roll = clamp(kbR + gx + tx, -1, 1);
         inp.yaw = clamp(kbY + gyaw, -1, 1);
       }
-      var kGas = mfly ? K('KeyW') : (K('ShiftLeft') || K('ShiftRight'));
+      var kGas = mfly ? K('KeyW') : (K('KeyR') || K('Equal'));
       var kBrk = mfly ? K('KeyS') : K('KeyZ');
       var gasIn = Math.max(VAL(7), (kGas || touch.thrUp) ? 1 : 0), brkIn = Math.max(VAL(6), (kBrk || touch.thrDn) ? 1 : 0);
       // mouse wheel = throttle lever in Sim throttle mode (5 % per notch, wheel up = more); in Arcade it switches targets
@@ -26428,22 +26437,24 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       } else {
         inp.lever = null; inp.gas = gasIn; inp.brake = brkIn;
       }
-      inp.boost = B(1) || K('Space');
-      inp.drift = B(0) || K('KeyV') || (mfly && mouseBtn.r) || touch.drift;
+      inp.boost = B(1) || K('ShiftLeft') || K('ShiftRight');
+      inp.drift = B(0) || K('Space') || K('KeyV') || touch.drift;
       if (inp.drift && tp * (invert ? -1 : 1) > 0) inp.cobra = true;   // keyboard: drift + pull key = Cobra at once (no ramp wait)
-      if (zoomMode === 'toggle') { if (E(11) || KP('KeyG')) zoomLatch = !zoomLatch; zoomHeld = zoomLatch; }
-      else { zoomHeld = B(11) || K('KeyG'); zoomLatch = false; }
+      var rmbEdge = mouseBtn.r && !rmbPrev; rmbPrev = mouseBtn.r;
+      if (zoomMode === 'toggle') { if (E(11) || KP('KeyG') || rmbEdge) zoomLatch = !zoomLatch; zoomHeld = zoomLatch; }
+      else { zoomHeld = B(11) || K('KeyG') || mouseBtn.r; zoomLatch = false; }
       if (KP('KeyC') || E(8)) { view = (view + 1) % VIEWS.length; flash('CAMERA: ' + VIEWS[view]); camReset = true; }
       if (KP('KeyT')) spawn('air');
       if (B(8) && B(9) && (E(8) || E(9))) setDbg(!dbgOn);
       if (KP('KeyM')) { setMuted(!muted); }
       if (KP('KeyI')) { setInvert(!invert); flash(invert ? 'PITCH INVERTED' : 'PITCH NORMAL'); }
       if (!st.crashed) {
-        var trig = B(2) || K('KeyF') || touch.gun || (mfly && mouseBtn.l);
+        var trig = B(2) || K('KeyJ') || touch.gun || (mouseBtn.l && lastDevice === 'mouse');
         if (combat.setTrigger) combat.setTrigger(trig);
-        else { if (KP('KeyF') || E(2)) combat.firePlayerMissile(); }
-        if ((KP('KeyR') || E(3)) && combat.cycleWeapon) { combat.cycleWeapon(); flash('WEAPON: ' + (combat.weapon === 'GUN' ? 'GUN' : 'MISSILES')); }
-        if (KP('KeyX') || KP('KeyL') || E(13)) combat.dropFlares();
+        else { if (KP('KeyJ') || E(2)) combat.firePlayerMissile(); }
+        if ((KP('KeyX') || E(3)) && combat.cycleWeapon) { combat.cycleWeapon(); flash('WEAPON: ' + combat.weapon); }
+        for (var wk = 0; wk < 4; wk++) if (KP('Digit' + (wk + 1)) && combat.selectWeapon) { var wn = combat.selectWeapon(wk); flash(wn ? 'WEAPON: ' + wn : 'WEAPON ' + (wk + 1) + ': EMPTY'); }
+        if (KP('KeyF') || KP('KeyL') || E(13)) combat.dropFlares();
         if (wheelSteps) { combat.cycleTarget(wheelSteps > 0 ? 1 : -1); wheelSteps = 0; }
         if (KP('BracketRight') || KP('Tab') || E(15)) combat.cycleTarget(1);
         if (KP('BracketLeft') || E(14)) combat.cycleTarget(-1);
@@ -26849,11 +26860,11 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     var secs = {
       pad: ['Controller', [[fly, steer], ['RT', gas], ['LT', brk], ['B', 'Boost (afterburner)'], ['A (hold)', 'Drift. Pull back for a Cobra.'], ['X', 'Fire. Hold for gun.'], ['Y', 'Next weapon'],
         ['LB / RB', 'Yaw left / right'], ['D-pad ◀ ▶', 'Next target'], ['D-pad ▼', 'Flares'], ['D-pad ▲', 'Start missions'], [lookS, 'Move the view'], ['R3 (hold)', 'Zoom'], ['View', 'Camera'], ['Menu', 'Menu']]],
-      mouse: ['Mouse and keyboard', [['Mouse', mouseMode === 'stick' ? 'Joystick. Move to steer. It stays set.' : 'Steer. The jet flies to the circle.'], ['Left button', 'Fire. Hold for gun.'], ['Right button', 'Drift. Pull for a Cobra.'], ['Middle button · R', 'Next weapon'],
+      mouse: ['Mouse and keyboard', [['Mouse', mouseMode === 'stick' ? 'Joystick. Move to steer. It stays set.' : 'Steer. The jet flies to the circle.'], ['Left button', 'Fire. Hold for gun.'], ['Right button', 'Zoom on the crosshair'], ['1 2 3 4 · X · middle button', 'Select weapon · next weapon'],
         ['Wheel', sim ? 'Throttle. Tab = next target.' : 'Next target'], ['Side buttons', 'Flares · next target'], ['Alt or B (hold)', mouseMode === 'stick' ? 'Look around. Centres the stick.' : 'Look around. The jet keeps its course.'],
-        ['W / S', sim ? 'Throttle up / down. It stays set.' : 'Throttle / airbrake'], ['A D', 'Roll'], ['↑ ↓', 'Pitch (takes over from the mouse)'], ['Q E', 'Rudder'], ['Space', 'Boost'], ['X or L', 'Flares'], ['C · G', 'Camera · zoom'], ['N · T', 'Start missions · air start'], ['P or Esc', 'Menu']]],
-      kb: ['Keyboard only', [['S / W, ↓ / ↑', 'Nose up / down'], ['A D, ← →', turn ? 'Turn left / right' : 'Roll'], ['Q E', 'Rudder'], ['Shift / Z', sim ? 'Throttle up / down. It stays set.' : 'Throttle / airbrake'], ['Space', 'Boost'],
-        ['V (hold)', 'Drift. Pull S for a Cobra.'], ['F', 'Fire. Hold for gun.'], ['R', 'Next weapon'], ['[ ] or Tab', 'Next target'], ['X or L', 'Flares'], ['C · G', 'Camera · zoom'], ['N · T', 'Start missions · air start'], ['P or Esc', 'Menu']]],
+        ['W / S', sim ? 'Throttle up / down. It stays set.' : 'Throttle / airbrake'], ['A D', 'Roll'], ['↑ ↓', 'Pitch (takes over from the mouse)'], ['Q E', 'Rudder'], ['Shift', 'Boost'], ['Space (hold)', 'Drift. Pull for a Cobra.'], ['F', 'Flares'], ['Tab', 'Next target'], ['C · G', 'Camera · zoom'], ['N · T', 'Start missions · air start'], ['P or Esc', 'Menu']]],
+      kb: ['Keyboard only', [['S / W, ↓ / ↑', 'Nose up / down'], ['A D, ← →', turn ? 'Turn left / right' : 'Roll'], ['Q E', 'Rudder'], ['R / Z', sim ? 'Throttle up / down. It stays set.' : 'Throttle / airbrake'], ['Shift', 'Boost'],
+        ['Space (hold)', 'Drift. Pull S for a Cobra.'], ['J', 'Fire. Hold for gun.'], ['1 2 3 4 · X', 'Select weapon · next weapon'], ['[ ] or Tab', 'Next target'], ['F', 'Flares'], ['C · G', 'Camera · zoom'], ['N · T', 'Start missions · air start'], ['P or Esc', 'Menu']]],
       touch: ['Touch screen', [['Left pad', turn ? 'Pitch. Left and right to turn.' : 'Pitch and roll'], ['GAS', sim ? 'Throttle up. It stays set.' : 'Throttle'], ['BRAKE', sim ? 'Throttle down' : 'Airbrake'], ['FIRE', 'Fire'], ['WPN', 'Next weapon'], ['DRIFT', 'Drift'], ['FLARE', 'Flares'], ['CAM · MENU', 'Camera · menu']]]
     };
     var mine = myDevice(), order = [mine].concat(['pad', 'mouse', 'kb', 'touch'].filter(function (k) { return k !== mine && (k !== 'touch' || coarse); }));
@@ -26913,6 +26924,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   var camOff = new V3(), camUp = new V3(0, 1, 0), tgtPos = new V3(), tmp = new V3(), tmp2 = new V3(), tmp3 = new V3();
   var lookQ = new T.Quaternion(), eul = new T.Euler(), flyPos = new V3(), flyAge = 99;
   var camQ = new T.Quaternion(), camQL = new T.Quaternion(), tgtQ = new T.Quaternion(), UPW = new V3(0, 1, 0), rigM = new T.Matrix4(), rX = new V3(), rY = new V3(), rZ = new V3();
+  var rmbPrev = false;
   var zoomHeld = false, zoomV = 0, fovBase = 62, zoomLatch = false, zoomMode = 'hold';
   try { zoomMode = localStorage.getItem('flk_zoom') === 'toggle' ? 'toggle' : 'hold'; } catch (e) {}
   var zq0 = new THREE.Quaternion(), zq1 = new THREE.Quaternion(), zT = new V3(), zUp = new V3();
@@ -27590,8 +27602,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   }
   var BIND = {
     pad: { fire: 'pad:X', weapon: 'pad:Y', flares: 'pad:▼', missions: 'pad:▲', target: 'pad:◀▶' },
-    mouse: { fire: 'LMB', weapon: 'MMB', flares: 'X', missions: 'N', target: '[ ]' },
-    kb: { fire: 'F', weapon: 'R', flares: 'X', missions: 'N', target: '[ ]' }
+    mouse: { fire: 'LMB', weapon: '1-4', flares: 'F', missions: 'N', target: 'Tab' },
+    kb: { fire: 'J', weapon: '1-4', flares: 'F', missions: 'N', target: 'Tab' }
   };
   function rrect(g, x, y, w, h, r) {
     g.beginPath(); g.moveTo(x + r, y); g.lineTo(x + w - r, y); g.quadraticCurveTo(x + w, y, x + w, y + r); g.lineTo(x + w, y + h - r);
@@ -28242,8 +28254,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   try { KH.t = parseFloat(localStorage.getItem('flk_keyhints_t')) || 0; } catch (e) {}
   var KH_ROWS = [['fire', 'FIRE'], ['weapon', 'WEAPON'], ['target', 'TARGET'], ['flares', 'FLARES'], ['boost', 'BOOST'], ['drift', 'DRIFT']];
   BIND.pad.boost = 'pad:B'; BIND.pad.drift = 'pad:A';
-  BIND.mouse.boost = 'Space'; BIND.mouse.drift = 'RMB'; BIND.mouse.target = 'WHEEL';
-  BIND.kb.boost = 'Space'; BIND.kb.drift = 'V';
+  BIND.mouse.boost = 'Shift'; BIND.mouse.drift = 'Space'; BIND.mouse.target = 'Tab';
+  BIND.kb.boost = 'Shift'; BIND.kb.drift = 'Space';
   window.__flankerKeyHints = { reset: function () { KH.t = 0; KH.used = {}; KH.a = 1; try { localStorage.setItem('flk_keyhints_t', '0'); } catch (e) {} } };
   function keyHintTick(dt, ch) {
     KH.chk -= dt;
