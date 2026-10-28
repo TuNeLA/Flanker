@@ -1351,7 +1351,7 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
     { id: 'lax', name: 'Pacific Coast', region: 'Coastal city, Pacific', blurb: 'A sprawling coastal city between the ocean and a high mountain range, with an enemy-held international airport at its heart and a rocky island offshore.', timeOfDay: 'afternoon' },
     { id: 'fjords', name: 'Norway Winter Fjords', region: 'Nordland, Norway', blurb: 'Snowbound peaks and a maze of narrow, dark fjords: hug the walls and stay below the ridgelines.', timeOfDay: 'overcast' },
     { id: 'cliffs', name: 'Highland Cliffs', region: 'Scotland & Antrim coast', blurb: 'Sheer Atlantic cliffs, sea stacks, Fingal\'s Cave and the Giant\'s Causeway, the jagged Cuillin and long sea lochs.', timeOfDay: 'evening' },
-    { id: 'canyon', name: 'Desert Canyon', region: 'Colorado Plateau, USA', blurb: 'A 40 km winding red-rock canyon at sunset: pop up, shoot, drop back in.', timeOfDay: 'sunset' },
+    { id: 'canyon', name: 'Grand Canyon', region: 'Colorado Plateau, Arizona, USA', blurb: 'A 1.5 km deep, 20 km wide canyon with temples and side canyons: pop up, shoot, drop back in.', timeOfDay: 'afternoon' },
     { id: 'volcano', name: 'Virgin Islands', region: 'British Virgin Islands, Caribbean', blurb: 'Dozens of steep jungle islands, turquoise reefs, sea arches to fly through, a pirate cove and an erupting volcano.', timeOfDay: 'afternoon' },
     { id: 'halong', name: 'Ha Long Bay', region: 'Quang Ninh, Vietnam', blurb: 'Over 1500 sheer jungle-capped karst towers in a jade bay: slalom between them, find the hidden lagoons, raid Cat Ba.', timeOfDay: 'afternoon' },
     { id: 'alps', name: 'Swiss Alps', region: 'Bernese Oberland, Switzerland', blurb: 'Thread the 800 m deep Lauterbrunnen slot past its waterfalls, skim the Eiger north face and the Aletsch glacier, dodge the Schilthorn cables.', timeOfDay: 'midday' },
@@ -15441,7 +15441,10 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
       AOAMAX = (a.aoaMax || 24) * DEG; AOAMIN = -(a.aoaMin || 12) * DEG; PSM = a.psm != null ? a.psm : 1; KORT = a.cobra === 'kort';
       KULBIT = a.kulbit != null ? !!a.kulbit : PSM >= 2 || !a.id; SUPER = a.supercruise || 0; DASH = a.dashMach || 0; ZOOM = a.zoomThrust || 0.7; DDRAG = a.driftDrag || 1;
       CPEAK = KORT ? 70 * DEG : COB_PEAK; AKS = clamp(24 * DEG / AOAMAX, 0.35, 1);
+      // ROSTER M3 VTOL (Harrier 'harrier', F-35B 'f35'): nozzle range, max stores for a hover (jetsig.js drives st.nozzle / st.hoverVS)
+      VT = a.vtol || ''; NOZMAX = (a.nozzleMax || 90) * DEG; HOVKG = a.hoverStoresKg != null ? a.hoverStoresKg : 2000;
     }
+    var VT = '', NOZMAX = 90 * DEG, HOVKG = 2000;
     var AOAMAX = 24 * DEG, AOAMIN = -12 * DEG, PSM = 1, KORT = false, KULBIT = true, SUPER = 0, DASH = 0, ZOOM = 0.7, DDRAG = 1, CPEAK = 115 * DEG, AKS = 1;
     function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
 
@@ -15469,7 +15472,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
     function ease(x) { return 0.5 - 0.5 * Math.cos(Math.PI * x); }
     function easeD(x) { return 0.5 * Math.PI * Math.sin(Math.PI * x); }
     var fwd = new T.Vector3(), up = new T.Vector3(), right = new T.Vector3();
-    var vh = new T.Vector3(), F = new T.Vector3(), ld = new T.Vector3();
+    var vh = new T.Vector3(), F = new T.Vector3(), ld = new T.Vector3(), hvv = new T.Vector3();
     var eul = new T.Euler(), dq = new T.Quaternion();
 
     function axes() {
@@ -15487,6 +15490,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
       st.cobraPhase = ''; st.cobraT = 0; st.cobraK = 0; cobSettle = 0; st.cobraArm = true; pendBoost = 0; st.belly = false; st.scrapeT = 0; st.lastHurt = 0; st.driftRecover = false;
       st.heat = 0; st.engDmgT = 0; st.superStallT = 0; st.rev = 0; st.supercruise = false; st.sigThrust = 1; st.sigRate = 1; st.sigLift = 1; st.sigAoaMax = 0;
       st.sigDrag = 1; st.sigTrans = 1; st.sigMach = 1; st.sigRoll = 1; st.sigBoostDur = 1; st.sigBoostRe = 1;
+      st.nozzle = 0; st.nozAng = 0; st.hoverW = 0; st.hover = false; st.hoverVS = 0; st.sigHoverLift = 1; st.hoverCap = 0;
       var h = sp.hdgDeg * DEG;
       eul.set(0, -h, 0, 'YXZ'); st.q.setFromEuler(eul); axes();
       if (kind === 'air') {
@@ -15558,8 +15562,12 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
         st.brake = brk;
         st.thrMode = brk > 0.1 && !wantBoost ? 'BRAKE' : wantBoost ? 'BOOST' : gas > 0.5 ? 'MIL' : (st.onGround && gas < 0.02) ? 'IDLE' : 'CRUISE';
       }
+      // VTOL (ROSTER M3): nozzle angle (0 = aft) and the jet-borne weight hw (1 = full hover law: nozzles >= 65 deg and below ~55 m/s)
+      var nozA = VT ? clamp(st.nozzle || 0, 0, 1) * NOZMAX : 0, hw = VT ? clamp((nozA - 35 * DEG) / (30 * DEG), 0, 1) * clamp((80 - speed) / 25, 0, 1) : 0;
+      st.nozAng = nozA; st.hoverW = hw; st.hover = hw > 0.5;
       // Automatic gear
       if (st.onGround) st.gearDown = true;
+      else if (hw > 0.2) st.gearDown = st.agl < 150;
       else if (st.gearDown && (st.agl > 60 || speed > 150)) st.gearDown = false;
       else if (!st.gearDown && st.agl < 80 && speed < 120 && st.vel.y < 0.5) st.gearDown = true;
       st.gearT += clamp((st.gearDown ? 1 : 0) - st.gearT, -dt * 1.2, dt * 1.2);
@@ -15572,7 +15580,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
       var qd = 0.5 * rho * speed * speed;
       // Post-stall lift never collapses: very hard to stall.
       // Drift (hold A): lift mostly dumped, nose free like a rocket, momentum carries on.
-      var drift = !!inp.drift && !st.onGround && speed > 15;
+      var drift = !!inp.drift && !st.onGround && speed > 15 && hw < 0.3;
       var slip = Math.acos(clamp(fwd.dot(vh), -1, 1)); st.slip = slip;
       if (drift && !st.drift) driftEnter(inp, speed);
       else if (!drift && st.drift) driftExit();
@@ -15594,6 +15602,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
       var CL = 1.5 * Math.sin(2 * aoa) * (st.cobraPhase ? 0.5 : drift ? 0.38 : 1.2) * (st.sigLift || 1) * (st.superStallT > 0 ? 0.45 : 1);
       var sa = Math.sin(aoa), mach = speed / 340;
       var airbrake = (!st.onGround ? 0.13 * st.brake : 0) + 0.25 * (st.rev || 0);   // rev: thrust reverser (JA 37) dumps speed 2-3x the airbrake
+      if (VT === 'harrier' && nozA > 0.05 && hw < 1) airbrake += 0.16 * Math.sin(Math.min(nozA, 1.5)) * (1 - hw);   // VIFF: nozzles down in forward flight = a hard brake
       // supercruise: military power, no boost -> transonic drag rise x0.3 and dry thrust +25% up to the supercruise Mach
       var scOn = SUPER > 0 && !wantBoost && st.thr >= 0.78 && !st.onGround; st.supercruise = scOn && mach > 1.0;
       // dash (MiG-25 / MiG-31): boosting above Mach 2.3 moves the second drag rise up to 0.85 x dashMach
@@ -15619,7 +15628,28 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
       if (DASH && wantBoost && mach > 2.1) thrust *= 1.3;   // dash: the engines run like ramjets at high Mach (R-15 / D-30F6)
       if (st.rev) thrust = -0.45 * TMIL * 1.15 * st.rev;   // reverser: reverse thrust
       st.ab = st.thr > 0.8 ? (st.thr - 0.8) / 0.2 : 0;
-      F.addScaledVector(fwd, thrust * (slide ? 1.3 : 1));   // drift: a bit more push along the nose
+      if (nozA > 0.001) {
+        // vectored thrust (nozzles down): fwd * cos + up * sin. Jet-borne (hw): thrust follows the vertical-speed target st.hoverVS,
+        // capped at (empty mass + hoverStoresKg) x 1.15 g; heavier jets sink, an empty boost meter (hover heat) leaves 0.95 g
+        var cn = Math.cos(nozA), sn = Math.sin(nozA);
+        tv.copy(fwd).multiplyScalar(cn).addScaledVector(up, sn);
+        if (hw > 0) {
+          var cap = (baseM + HOVKG) * G * (st.boostLock ? 0.95 : 1.15) * (st.sigThrust || 1) * (st.sigHoverLift || 1) * (st.engDmgT > 0 ? 0.5 : 1);
+          var need = M * (G + 2.6 * ((st.hoverVS || 0) - st.vel.y)) / Math.max(0.35, tv.y);
+          st.hoverCap = cap / (M * G);
+          thrust += (clamp(need, 0, cap) - thrust) * hw;
+          st.thr += (clamp(0.8 * thrust / (TMIL * 1.15), 0.2, 0.8) - st.thr) * hw;
+        }
+        F.addScaledVector(tv, thrust);
+      } else F.addScaledVector(fwd, thrust * (slide ? 1.3 : 1));   // drift: a bit more push along the nose
+      if (hw > 0 && !st.onGround) {
+        // hover: stick = translate. Horizontal velocity target in the heading frame (25 m/s fore-aft, 18 m/s sideways), accel <= 4 m/s2
+        hvv.set(fwd.x, 0, fwd.z); if (hvv.lengthSq() < 1e-6) hvv.set(-up.x, 0, -up.z); hvv.normalize();
+        var hvf = st.vel.x * hvv.x + st.vel.z * hvv.z, hvr = st.vel.x * -hvv.z + st.vel.z * hvv.x;
+        var af = clamp(1.2 * (-(inp.pitch || 0) * 25 - hvf), -4, 4), ar = clamp(1.2 * ((inp.roll || 0) * 18 - hvr), -4, 4);
+        F.x += M * hw * (af * hvv.x - ar * hvv.z); F.z += M * hw * (af * hvv.z + ar * hvv.x);
+        st.hoverAF = af; st.hoverAR = ar;
+      }
       if (st.driftBoostT > 0) F.addScaledVector(fwd, M * BOOST_A[st.driftBoostLvl] * (0.4 + 0.6 * st.driftBoostT / st.driftBoostDur));
       st.gLoad = F.dot(up) / (M * G);
       st.liftRatio = qd * S * CL / (M * G);
@@ -15660,6 +15690,13 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
         c.gp = 150 * DEG * ad * DRIFT; c.gr = RR * DEG * ad; c.gy = 110 * DEG * ad * DRIFT; c.sp = -0.04 * kA * Math.sin(aoa); c.mode = 'drift';
       }
       var kP = k7;
+      if (hw > 0 && !st.cobraPhase) {
+        // hover attitude: the nose and wings follow the translate command (lean into it), puffer yaw on the rudder
+        var pA = Math.asin(clamp(fwd.y, -1, 1)), rA = Math.atan2(-right.y, up.y);
+        var pT = 4 * DEG - clamp((st.hoverAF || 0) / G, -0.3, 0.3), rT = clamp((st.hoverAR || 0) / G, -0.3, 0.3);
+        tp += (3 * (pT - pA) - tp) * hw; tr += (3 * (rT - rA) - tr) * hw; ty += ((inp.yaw || 0) * 45 * DEG - ty) * hw;
+        c.mode = hw > 0.5 ? 'hover' : c.mode;
+      }
       if (st.driftRecover) {
         // rotate the nose straight back onto the flight path (shortest way), no fly-by-wire pitch flip
         tv.crossVectors(fwd, vh); var rl = tv.length();
@@ -43558,7 +43595,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793180333', updShown = false;
+  var BUILD = '1793180574', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
