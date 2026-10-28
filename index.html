@@ -204,6 +204,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         <h2 class="sh"><span class="sec">1.1</span>Map <span id="mapNote" class="note-inline"></span></h2>
         <div id="mapGrid" class="maps" role="group" aria-label="Maps"></div>
         <label class="opt mixrow"><span><span class="sec">1.2</span>Missions<small id="mixNote">Select more air targets or more ground targets.</small></span><select id="optMix"><option value="air">Air only</option><option value="airmost">Mostly air</option><option value="mixed" selected>Mixed</option><option value="ground">Mostly ground</option></select></label>
+        <label class="opt mixrow"><span><span class="sec">1.3</span>Weather<small id="wxNote">The host selects the weather.</small></span><select id="optWx"><option value="clear">Clear</option><option value="scattered" selected>Scattered clouds</option><option value="overcast">Overcast</option><option value="heavy">Heavy clouds</option><option value="thunderstorm">Thunderstorm</option><option value="fog">Fog</option><option value="snow">Snow</option><option value="sunset">Sunset</option><option value="night">Night</option></select></label>
       </div>
       <div class="actions sub">
         <button id="bHangar" hidden>Hangar <span class="pad-hint">Y</span></button>
@@ -286,6 +287,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         <div id="coRoom" class="coroom" hidden><span class="lbl">ROOM</span><strong id="coCodeBig">—</strong><button id="bCopy" class="small">Copy invite link</button></div>
         <p id="coMap" class="comap"></p>
         <label class="opt mixrow"><span>Missions<small id="coMixNote">The host selects. All pilots fly the same missions.</small></span><select id="coMix"><option value="air">Air only</option><option value="airmost">Mostly air</option><option value="mixed" selected>Mixed</option><option value="ground">Mostly ground</option></select></label>
+        <label class="opt mixrow"><span>Weather<small id="coWxNote">The host selects the weather.</small></span><select id="coWx"><option value="clear">Clear</option><option value="scattered" selected>Scattered clouds</option><option value="overcast">Overcast</option><option value="heavy">Heavy clouds</option><option value="thunderstorm">Thunderstorm</option><option value="fog">Fog</option><option value="snow">Snow</option><option value="sunset">Sunset</option><option value="night">Night</option></select></label>
         <ul id="coPeers" class="copeers"></ul>
         <p id="coStatus" class="costatus">To host: push Host room. Send the code or the link to your friends. To join: type the room code. Push Join.</p>
       </section>
@@ -26045,6 +26047,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
 
   // ---------------------------------------------------------------- state
   var world, fx, plane, vapor, phys, combat, player, st;
+  var weather = null;  // weather.js: host-selected weather presets (rain, storms, fog, snow, night)
   var carrier = null;  // carrier.js: friendly carrier on sea maps (deck takeoff, wire landing, rearm)
   var extras = null;   // extras.js: missile/kill cam picture-in-picture, medals, stats
   var started = false, paused = false, booted = false;
@@ -26085,6 +26088,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     if (world && world.sun && world.sun.target && world.sun.target.parent) world.sun.target.parent.remove(world.sun.target);
     if (world && world.dispose) world.dispose();
     world = FL.buildWorld(scene, renderer, id);
+    if (weather) { try { weather.onWorldChanged(world); } catch (e) {} }
     if (!world.sun.target.parent) scene.add(world.sun.target);
     phys.setWorld(world);
     if (fx && fx.setWorld) { try { fx.setWorld(world); } catch (e) {} }
@@ -26819,6 +26823,21 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     $('coMixNote').textContent = lock ? 'The host selected: ' + nm + '.' : (net && net.connected ? 'You select. All pilots fly the same missions.' : 'The host selects. All pilots fly the same missions.');
   }
   $('optMix').addEventListener('change', function (e) { setMix(e.target.value); });
+  // ---- weather (solo / host choice; clients follow the host)
+  function setWx(id) {
+    if (!weather || inClientRoom()) { renderWx(); return; }
+    try { weather.set(id); } catch (e) {}
+    if (net && net.isHost && net.connected) net.sendEvent(weather.netState());
+    renderWx(); glog('weather: ' + id);
+  }
+  function renderWx() {
+    if (!weather) return;
+    var lock = inClientRoom(), v = weather.preset && weather.preset.id ? weather.preset.id : (weather.preset || 'scattered');
+    ['optWx', 'coWx'].forEach(function (id) { var el = $(id); if (el) { el.value = v; el.disabled = lock; } });
+    var n1 = $('wxNote'), n2 = $('coWxNote'), tx = lock ? 'The host selected the weather.' : 'Select the weather. In a room, all pilots get it.';
+    if (n1) n1.textContent = tx; if (n2) n2.textContent = tx;
+  }
+  ['optWx', 'coWx'].forEach(function (id) { var el = $(id); if (el) el.addEventListener('change', function (e) { setWx(e.target.value); }); });
   $('coMix').addEventListener('change', function (e) { setMix(e.target.value); });
 
   // ---- control scheme: settings, presets, reference lists
@@ -27057,7 +27076,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     // shake: small and scaled by the setting; trauma (hits, explosions) dominates, flight rumble is subtle
     var rumble = (st.onGround ? Math.min(sp / 90, 1) * 0.25 : (st.rough || 0) * Math.min(sp / 300, 1) * 0.35) +
       st.ab * 0.15 + Math.max(0, Math.abs(st.gLoad) - 6) * 0.04 + (st.drift ? 0.1 : 0);
-    var amt = reduceMotion ? 0 : (trauma * trauma * 0.8 + (st.onGround ? rumble * 0.06 : 0)) * shakeScale;
+    var wxT = weather && !st.onGround ? (weather.turbulence || 0) : 0;
+    var amt = reduceMotion ? 0 : (trauma * trauma * 0.8 + (st.onGround ? rumble * 0.06 : 0) + wxT * wxT * 0.3) * shakeScale;
     if (mode === 'FLYBY') amt *= 0.25;
     if (amt > 0.0005) {
       var tt = simTime * 26;
@@ -28538,6 +28558,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       acc += dt; var h = 1 / 240, n = 0;
       while (acc >= h && n < 16) { phys.step(h, inp); acc -= h; n++; }
       if (n >= 16) acc = 0;
+      if (weather && weather.gust && !st.onGround && !st.crashed) st.vel.addScaledVector(weather.gust, dt);
       pfMark(0);
       if (!wasGround && st.onGround && !st.crashed) addTrauma(clamp(-vyBefore / 12, 0.08, 0.5));
       simTime += dt;
@@ -28563,6 +28584,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     updatePlaneVisual(dt);
     updateTeammates(dt); pfMark(4);
     updateCamera(dt); if (extras) extras.updateCamera(rdt);
+    if (weather) { try { weather.update(dt, { vel: st.vel }); } catch (e) {} }
     world.update(dt, camera);
     if (carrier) { try { carrier.update(dt, camera); } catch (e) {} }
     pfMark(5);
@@ -28779,6 +28801,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     }
     if (post && post.setQuality) post.setQuality(q === 'fast' ? 'fast' : q);
     if (fx && fx.setQuality) { try { fx.setQuality(q); } catch (e) {} }
+    if (weather && weather.setQuality) { try { weather.setQuality(q); } catch (e) {} }
     var sel = $('optQuality'); if (sel) sel.value = q;
   }
   var sunV = new V3(), sunEnd = new V3(), sunChk = 0, sunVis = 1, sunVisT = 1;
@@ -28788,7 +28811,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     if (sunChk > 0.15) { sunChk = 0; sunEnd.copy(camera.position).addScaledVector(world.sunDir, 25000); sunVisT = world.lineOfSight(camera.position, sunEnd) ? 1 : 0; }
     sunVis += (sunVisT - sunVis) * (1 - Math.exp(-dt * 6));
     return {
-      speed01: clamp((st.speed - 250) / 300, 0, 1), trauma01: trauma, hit01: hitFlash, flash01: killFlash,
+      speed01: clamp((st.speed - 250) / 300, 0, 1), trauma01: trauma, hit01: hitFlash, flash01: Math.max(killFlash, weather ? (weather.flash01 || 0) * 0.6 : 0),
       boost01: st.crashed ? 0 : st.ab, cloud01: world.cameraCloud || 0, sunWorld: sunV, sunVisible: sunVis
     };
   }
@@ -28863,13 +28886,14 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         li.children[2].textContent = (p.id === net.myId ? 'YOU' : '') + (p.host || p.isHost ? ' HOST' : '');
         ul.appendChild(li);
       });
-      if (net.isHost && net.connected) { net.sendEvent({ t: 'map', id: mapId }); net.sendEvent({ t: 'mix', id: curMix() }); }
+      if (net.isHost && net.connected) { net.sendEvent({ t: 'map', id: mapId }); net.sendEvent({ t: 'mix', id: curMix() }); if (weather) net.sendEvent(weather.netState()); }
       if (comms && list && list.length > 1) comms.say('peers' + list.length, 'Overlord. ' + list.length + ' pilots in the squadron.', 1, 20);
     });
     net.on('event', function (msg) {
       if (!msg || !msg.t) return;
       if (msg.t === 'reward' && campaign && combat.isClient) campaign.onTeamReward(msg);
       else if (msg.t === 'mix' && msg.id && !net.isHost) { hostMix = msg.id; renderMix(); }
+      else if (msg.t === 'wx' && !net.isHost && weather) { try { weather.applyNetState(msg); } catch (e) {} renderWx(); }
       else if (msg.t === 'cmp' && campaign && campaign.applyNetState && !net.isHost) campaign.applyNetState(msg);
       else if (msg.t === 'map' && msg.id && !net.isHost) { hostMapId = msg.id; if (net.connected) followHostMap(msg.id); }   // client follows the host map (on join and on every host change)
     });
@@ -28878,6 +28902,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   function leaveRoom(why) {
     try { if (net) net.leave(); } catch (e) {}
     combat.setNet(null); if (campaign) campaign.setRole('solo');
+    if (weather && weather.restoreLocal) { try { weather.restoreLocal(); } catch (e) {} }
     roomCode = ''; hostMapId = null; hostMix = null; mapQueued = null; $('coPeers').innerHTML = ''; coStatus(why || 'Left the room.'); coUi(); setTimeout(coUi, 450);
   }
 
@@ -28948,6 +28973,13 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       setAircraft(aircraftId, true);
       vapor = fx.createVapor();
       if (FL.createPost) { post = FL.createPost(renderer, scene, camera); post.setSize(W, H, Math.min(devicePixelRatio || 1, 1.6)); }
+      if (FL.createWeather) {
+        try {
+          weather = FL.createWeather({ scene: scene, camera: camera, renderer: renderer, world: world, audio: null,
+            onThunder: function (d) { try { if (audio.thunder) audio.thunder(d); } catch (e) {} if (d < 2500 && started && st && !st.crashed) addTrauma(0.12 * (1 - d / 2500)); } });
+        } catch (e) { weather = null; console.warn('weather', e); }
+        renderWx();
+      }
       var savedQ = null; try { savedQ = localStorage.getItem('flk_q'); } catch (e) {}
       quality = savedQ === 'ultra' || savedQ === 'high' || savedQ === 'fast' ? savedQ : defaultQuality();
       setQuality(quality, quality !== savedQ);   // a GPU-based default is not stored as the user's choice
@@ -29022,7 +29054,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       renderMaps(); syncLever();
       $('loading').hidden = true;
       window.__flanker = {
-        phys: phys, combat: combat, world: function () { return world; }, camera: camera, start: startGame, campaign: function () { return campaign; }, carrier: function () { return carrier; }, setResMode: setResMode, resMode: function () { return resMode; },
+        phys: phys, combat: combat, world: function () { return world; }, camera: camera, start: startGame, campaign: function () { return campaign; }, carrier: function () { return carrier; }, weather: function () { return weather; }, setResMode: setResMode, resMode: function () { return resMode; },
         setView: function (v) { view = v; camReset = true; }, changeMap: changeMap, setAircraft: setAircraft, startMission: tryStartMission,
         // test hook: simulate `sec` seconds at 60 Hz with fixed inputs (no rendering)
         sim: function (sec, i) {
