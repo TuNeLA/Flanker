@@ -13786,41 +13786,58 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   // Each 5 levels: values[0] = stock, values[5] = max.
   var LV = [1, 2, 3.5, 6, 10];
   var LV_REQ = [0, 0, 2, 5, 9];          // player level needed to buy level i+1
+  // Groups like War Thunder modules / Ace Combat parts: flight, weapons, survival, systems. ids are save keys: do not rename.
+  // feel = what you feel in flight (shown on the card). Every stat here is read in flight (physics, combat, main, wingman).
+  var UPG_GROUPS = [['flight', 'Flight'], ['weapons', 'Weapons'], ['survival', 'Survival'], ['systems', 'Systems']];
   var UPGRADES = [
-    { id: 'engine', name: 'Engine', tag: 'ENG', base: 2000, desc: 'More thrust at all speeds.', v: { thrustMul: [1, 1.07, 1.14, 1.21, 1.28, 1.35] } },
-    { id: 'afterburner', name: 'Afterburner', tag: 'A/B', base: 1600, desc: 'More boost thrust. Longer burn. Faster refill.', v: { boostMul: [1, 1.08, 1.16, 1.24, 1.32, 1.4], boostDuration: [9, 10, 11.5, 13, 14.5, 16], boostRecharge: [8, 7.2, 6.4, 5.6, 4.8, 4] } },
-    { id: 'airframe', name: 'Airframe', tag: 'AFR', base: 1800, desc: 'Faster roll and pitch. Less weight.', v: { rateMul: [1, 1.06, 1.12, 1.18, 1.24, 1.3], massMul: [1, 0.98, 0.96, 0.94, 0.92, 0.9] } },
-    { id: 'targeting', name: 'Targeting', tag: 'TGT', base: 1500, desc: 'Faster lock. Wider seeker. Lock more targets (salvo).', v: { lockTime: [6, 4.5, 3.2, 2.2, 1.5, 1.0], seekerCone: [20, 22, 24, 26, 28, 30], multiLock: [1, 1, 2, 2, 3, 4] } },
-    { id: 'aim', name: 'Fire control', tag: 'FCS', base: 1400, desc: 'Gun aim assist. Rounds bend onto the target.', v: { aimAssist: [0.35, 0.5, 0.65, 0.8, 0.95, 1.1] } },
-    { id: 'radar', name: 'Radar', tag: 'RDR', base: 1400, desc: 'Lock targets at longer range.', v: { lockRange: [1, 1.08, 1.16, 1.24, 1.32, 1.4] } },
-    { id: 'stealth', name: 'Stealth', tag: 'STL', base: 2600, desc: 'Enemy radars find you at shorter range.', v: { detectMul: [1, 0.92, 0.84, 0.76, 0.68, 0.6] } },
-    { id: 'armor', name: 'Armor', tag: 'ARM', base: 1800, desc: 'Less damage from each hit.', v: { armorMul: [1, 0.9, 0.8, 0.7, 0.6, 0.5] } },
-    { id: 'repair', name: 'Damage control', tag: 'DCS', base: 2200, desc: 'Repairs the jet in flight.', v: { repairPerSec: [0, 0.4, 0.8, 1.2, 1.6, 2] } },
-    { id: 'missiles', name: 'Missiles', tag: 'MSL', base: 1700, desc: 'Faster missiles that turn harder. Twin rails: 2 AAMs on each wing pylon. Reserve AAMs reload in flight.', v: { missileSpeed: [650, 730, 810, 890, 970, 1050], missileG: [28, 32.4, 36.8, 41.2, 45.6, 50], missileRails: [1, 2, 2, 2, 2, 2], reserveAAM: [0, 0, 2, 4, 6, 8] } },
-    { id: 'gun', name: 'Gun', tag: 'GUN', base: 1200, desc: 'More damage. Longer bursts before overheat.', v: { gunDamageMul: [1, 1.16, 1.32, 1.48, 1.64, 1.8], gunBurst: [4.5, 5, 5.5, 6, 6.5, 7.5] } },
-    { id: 'cm', name: 'Countermeasures', tag: 'CMS', base: 900, desc: 'More flares. Flares pull missiles away better.', v: { flares: [20, 28, 36, 44, 52, 60], flareEff: [1, 1.1, 1.2, 1.3, 1.4, 1.5] } },
-    { id: 'hardpoints', name: 'Hardpoints', tag: 'HPT', base: 3000, desc: 'Opens more pylons on the jet. More rockets in each pod.', v: { pylonsAdd: [0, 1, 2, 3, 3, 4], specialAmmoMul: [1, 1, 1.1, 1.1, 1.3, 1.5] } },
-    { id: 'svs', name: 'Terrain vision', tag: 'SVS', base: 1300, desc: 'See terrain outlines through clouds. Red = terrain above you.', v: { svsRange: [0, 2500, 4000, 5500, 7500, 10000], svsWarn: [0, 0, 1, 1, 1, 1] } },
-    { id: 'bombs', name: 'Bomb racks', tag: 'BMB', base: 1000, desc: 'Multiple-ejector racks. Each bomb pylon carries more bombs. Wider blast.', v: { bombRack: [1, 2, 2, 3, 3, 3], bombBlastMul: [1, 1, 1.15, 1.15, 1.3, 1.45] } },
+    { id: 'engine', grp: 'flight', name: 'Engine', tag: 'ENG', base: 2000, desc: 'More thrust at all speeds.', feel: 'You get to top speed faster. You keep speed in turns and climbs.', v: { thrustMul: [1, 1.07, 1.14, 1.21, 1.28, 1.35] } },
+    { id: 'afterburner', grp: 'flight', name: 'Afterburner', tag: 'A/B', base: 1600, desc: 'Stronger boost. Longer burn. Faster refill.', feel: 'Boost pushes harder and lasts longer.', v: { boostMul: [1, 1.08, 1.16, 1.24, 1.32, 1.4], boostDuration: [9, 10, 11.5, 13, 14.5, 16], boostRecharge: [8, 7.2, 6.4, 5.6, 4.8, 4] } },
+    { id: 'airframe', grp: 'flight', name: 'Airframe', tag: 'AFR', base: 1800, desc: 'Faster roll and pitch. Lighter jet.', feel: 'The nose comes around faster in a dogfight.', v: { rateMul: [1, 1.06, 1.12, 1.18, 1.24, 1.3], massMul: [1, 0.98, 0.96, 0.94, 0.92, 0.9] } },
+    { id: 'missiles', grp: 'weapons', name: 'Missile motors', tag: 'MSL', base: 1700, desc: 'Faster missiles that turn harder. Level 1: twin rails (2 air-to-air missiles on each wing pylon). Level 2+: reserve missiles reload in flight.', feel: 'Missiles catch fast targets that turn hard.', v: { missileSpeed: [650, 730, 810, 890, 970, 1050], missileG: [28, 32.4, 36.8, 41.2, 45.6, 50], missileRails: [1, 2, 2, 2, 2, 2], reserveAAM: [0, 0, 2, 4, 6, 8] } },
+    { id: 'targeting', grp: 'weapons', name: 'Seeker', tag: 'TGT', base: 1500, desc: 'Faster lock. Wider seeker cone. More locks for a salvo (missiles with SALVO).', feel: 'The lock box goes red sooner. You lock from a wider angle.', v: { lockTime: [4.5, 3.6, 2.8, 2.1, 1.5, 1.0], seekerCone: [20, 22, 24, 26, 28, 30], multiLock: [1, 1, 2, 2, 3, 4] } },
+    { id: 'radar', grp: 'weapons', name: 'Radar', tag: 'RDR', base: 1400, desc: 'Lock targets from farther away.', feel: 'You get a lock before the enemy is in range to fire.', v: { lockRange: [1, 1.08, 1.16, 1.24, 1.32, 1.4] } },
+    { id: 'gun', grp: 'weapons', name: 'Gun', tag: 'GUN', base: 1200, desc: 'More damage. Longer bursts before the gun overheats.', feel: 'Fewer rounds for a kill. Longer bursts.', v: { gunDamageMul: [1, 1.16, 1.32, 1.48, 1.64, 1.8], gunBurst: [4.5, 5, 5.5, 6, 6.5, 7.5] } },
+    { id: 'aim', grp: 'weapons', name: 'Gun sight', tag: 'FCS', base: 1400, desc: 'Gun aim assist: rounds bend onto the target. It also makes the seeker cone a little wider.', feel: 'Gun hits come easy when the pipper is near the target.', v: { aimAssist: [0.35, 0.5, 0.65, 0.8, 0.95, 1.1] } },
+    { id: 'bombs', grp: 'weapons', name: 'Bomb racks', tag: 'BMB', base: 1000, desc: 'Racks with more bombs on each bomb pylon. Wider blast.', feel: 'More bombs in each run. One bomb kills more.', v: { bombRack: [1, 2, 2, 3, 3, 3], bombBlastMul: [1, 1, 1.15, 1.15, 1.3, 1.45] } },
+    { id: 'hardpoints', grp: 'weapons', name: 'Hardpoints', tag: 'HPT', base: 3000, desc: 'Opens more pylons on your jet. More rockets in each pod.', feel: 'More weapons on the jet. More weight too.', v: { pylonsAdd: [0, 1, 2, 3, 3, 4], specialAmmoMul: [1, 1, 1.1, 1.1, 1.3, 1.5] } },
+    { id: 'armor', grp: 'survival', name: 'Armor', tag: 'ARM', base: 1800, desc: 'Less damage from each hit.', feel: 'You live through one more missile hit.', v: { armorMul: [1, 0.9, 0.8, 0.7, 0.6, 0.5] } },
+    { id: 'repair', grp: 'survival', name: 'Damage control', tag: 'DCS', base: 2200, desc: 'Repairs the jet in flight.', feel: 'Health comes back slowly between fights.', v: { repairPerSec: [0, 0.4, 0.8, 1.2, 1.6, 2] } },
+    { id: 'cm', grp: 'survival', name: 'Flares', tag: 'CMS', base: 900, desc: 'More flares. Each flare pulls missiles away better.', feel: 'More missiles miss you.', v: { flares: [20, 28, 36, 44, 52, 60], flareEff: [1, 1.1, 1.2, 1.3, 1.4, 1.5] } },
+    { id: 'stealth', grp: 'survival', name: 'Stealth', tag: 'STL', base: 2600, desc: 'Enemy radars find you at a shorter range.', feel: 'You get closer before enemies see you and fire.', v: { detectMul: [1, 0.92, 0.84, 0.76, 0.68, 0.6] } },
+    { id: 'svs', grp: 'systems', name: 'Terrain vision', tag: 'SVS', base: 1300, desc: 'See terrain lines through clouds. Red = terrain above you.', feel: 'You see mountains in cloud and at night.', v: { svsRange: [0, 2500, 4000, 5500, 7500, 10000], svsWarn: [0, 0, 1, 1, 1, 1] } },
     // wingman.js reads P.upg.wingman. minLevel: player level needed for the first level (mid game)
-    { id: 'wingman', name: 'Wingman', tag: 'WGM', base: 25000, minLevel: 8, desc: 'A friendly jet flies on your right wing. When you attack, he fights alone, then rejoins. Better jet and pilot each level. Keys: Y = attack my target, U = cover me.', v: { wingTier: [0, 3, 4, 5, 6, 7], wingSkill: [0, 0.55, 0.65, 0.75, 0.88, 1] } }
+    { id: 'wingman', grp: 'systems', name: 'Wingman', tag: 'WGM', base: 25000, minLevel: 8, desc: 'A friendly jet flies on your right wing. When you attack, he fights alone, then he comes back. Better jet and pilot each level. Keys: Y = attack my target, U = cover me.', feel: 'One more gun in each fight.', v: { wingTier: [0, 3, 4, 5, 6, 7], wingSkill: [0, 0.55, 0.65, 0.75, 0.88, 1] } }
   ];
   var UPG = {}; UPGRADES.forEach(function (u) { UPG[u.id] = u; });
   function upgPrice(u, lvl) { return lvl >= 5 ? 0 : Math.round(u.base * LV[lvl] / 50) * 50; }
 
   var STAT_FMT = {
-    thrustMul: ['Thrust', 'pct'], boostMul: ['Boost', 'pct'], boostDuration: ['Burn time', 's'], boostRecharge: ['Recharge', 's'],
-    rateMul: ['Turn', 'pct'], massMul: ['Weight', 'pct'], lockTime: ['Lock', 's'], seekerCone: ['Cone', 'deg'], multiLock: ['Locks', 'n'],
-    lockRange: ['Range', 'pct'], detectMul: ['Seen at', 'pct'], armorMul: ['Damage in', 'pct'], repairPerSec: ['Repair', 'hps'],
-    missileSpeed: ['Speed', 'ms'], missileG: ['Pull', 'g'], missileRails: ['Wing rails', 'rails'], reserveAAM: ['Reserve', 'plus'],
-    gunDamageMul: ['Damage', 'pct'], gunBurst: ['Burst', 's'], flares: ['Flares', 'n'], flareEff: ['Decoy', 'pct'], aimAssist: ['Assist', 'pct'],
-    svsRange: ['Range', 'km'], svsWarn: ['Red warning', 'onoff'],
-    pylonsAdd: ['Pylons', 'pyl'], specialAmmoMul: ['Pod ammo', 'pct'], bombRack: ['Per pylon', 'bombs'], bombBlastMul: ['Blast', 'pct'],
-    wingTier: ['Wing jet tier', 'n'], wingSkill: ['Wing pilot', 'pct']
+    thrustMul: ['Thrust', 'pct'], boostMul: ['Boost thrust', 'pct'], boostDuration: ['Burn time', 's'], boostRecharge: ['Refill time', 's'],
+    rateMul: ['Roll and pitch', 'pct'], massMul: ['Weight', 'pct'], lockTime: ['Lock time', 's'], seekerCone: ['Seeker cone', 'deg'], multiLock: ['Salvo locks', 'n'],
+    lockRange: ['Lock range', 'pct'], detectMul: ['Enemy radar range', 'pct'], armorMul: ['Damage taken', 'pct'], repairPerSec: ['Repair', 'hps'],
+    missileSpeed: ['Missile speed', 'mpct'], missileG: ['Missile turn', 'gpct'], missileRails: ['Wing rails', 'rails'], reserveAAM: ['Reserve missiles', 'plus'],
+    gunDamageMul: ['Gun damage', 'pct'], gunBurst: ['Burst to overheat', 's'], flares: ['Flares', 'n'], flareEff: ['Decoy chance', 'decoy'], aimAssist: ['Aim assist', 'pct'],
+    svsRange: ['View range', 'km'], svsWarn: ['Red warning', 'onoff'],
+    pylonsAdd: ['Pylons', 'pyl'], specialAmmoMul: ['Rockets per pod', 'pct'], bombRack: ['Bombs per pylon', 'bombs'], bombBlastMul: ['Blast radius', 'pct'],
+    wingTier: ['Wingman jet tier', 'n'], wingSkill: ['Wingman skill', 'pct']
   };
+  // real numbers for a card line: missile stats for your first missile, ranges in km (base ranges from enemies.js / CONTRACT)
+  var AIR_LOCK_M = 9000, ENEMY_RADAR_M = 22000;
+  function realStat(k, v, s) {
+    var w = s && s.firstAAM ? FL.WEAPONS[s.firstAAM] : null;
+    if (k === 'missileSpeed' && w) return Math.round((w.speed || 800) * v / 800) + ' m/s';
+    if (k === 'missileG' && w) return Math.round((w.g || 40) * v / 40) + ' g';
+    if (k === 'lockRange') return (AIR_LOCK_M * v / 1000).toFixed(1) + ' km';
+    if (k === 'detectMul') return (ENEMY_RADAR_M * v / 1000).toFixed(1) + ' km';
+    return fmtStat(k, v);
+  }
+  var REAL_NOTE = { missileSpeed: 'your missile', missileG: 'your missile', lockRange: 'fighters', detectMul: 'enemy fighters' };
   function fmtStat(k, v) {
     var f = (STAT_FMT[k] || [k, 'n'])[1];
     if (f === 'pct') return Math.round(v * 100) + '%';
+    if (f === 'mpct') return Math.round(v / 8) + '%';    // combat: missile top speed = catalog speed x missileSpeed / 800
+    if (f === 'gpct') return Math.round(v / 0.4) + '%';  // combat: missile g = catalog g x missileG / 40
+    if (f === 'decoy') return Math.round(Math.min(0.95, 0.55 * v) * 100) + '%';   // combat decoyMissiles: 0.55 x flareEff, max 95%
     if (f === 's') return v.toFixed(1) + ' s';
     if (f === 'deg') return Math.round(v) + '°';
     if (f === 'hps') return v.toFixed(1) + '/s';
@@ -13845,41 +13862,41 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   var TIER_COST = [1, 2, 3], TIER_NEED = [0, 3, 6];
   var BRANCHES = [
     { id: 'flight', name: 'Flight', s: [
-      ['f_hands', 'Quick hands', 'Turn and roll rate +4%.', 3, 0, 'rateMul*0.04'],
-      ['f_clean', 'Clean airframe', 'Top speed +3%.', 3, 0, 'topSpeedMul*0.03'],
-      ['f_drift', 'Drift', 'In a drift you keep 35% of the speed that you lose.', 2, 1, 'driftKeep+0.35'],
-      ['f_cobra', 'Cobra reset', 'After a Cobra: afterburner +50%. You get back 40% of the speed that you lost.', 1, 2, 'cobraFuel+0.5 cobraKeep+0.4'],
-      ['f_light', 'Light frame', 'Weight -8%. Turn and roll rate +5%.', 1, 2, 'massMul*-0.08 rateMul*0.05']] },
+      ['f_hands', 'Quick hands', 'Roll and pitch rate +4%.', 3, 0, 'rateMul*0.04'],
+      ['f_clean', 'Clean skin', 'Top speed +3%.', 3, 0, 'topSpeedMul*0.03'],
+      ['f_drift', 'Drift control', 'In a drift you keep 35% of the speed that you lose.', 2, 1, 'driftKeep+0.35'],
+      ['f_cobra', 'Cobra master', 'Choose this for stunts. After a Cobra you get back 40% of the lost speed and +50% afterburner.', 1, 2, 'cobraFuel+0.5 cobraKeep+0.4'],
+      ['f_light', 'Light frame', 'Choose this for turn fights. Weight -8%, roll and pitch +5%. But you take 10% more damage.', 1, 2, 'massMul*-0.08 rateMul*0.05 armorMul*0.1']] },
     { id: 'gun', name: 'Gun', s: [
       ['g_hot', 'Hot rounds', 'Gun damage +8%.', 3, 0, 'gunDamageMul*0.08'],
       ['g_cool', 'Barrel cooling', 'Fire 1 s longer before the gun overheats.', 3, 0, 'gunBurstAdd+1'],
       ['g_aim', 'Gun computer', 'Gun aim assist +15%.', 2, 1, 'aimAssist+0.15'],
-      ['g_feed', 'Fast feed', 'Gun fire rate +20%.', 1, 2, 'gunRateMul*0.2'],
-      ['g_knife', 'Knife fight', 'Each gun kill: +250 credits and +10 HP repair.', 1, 2, 'gunKillCash+250 gunKillHeal+10']] },
+      ['g_feed', 'Fast feed', 'Choose this for short, deadly bursts. Fire rate +25%. But the gun overheats 1 s sooner.', 1, 2, 'gunRateMul*0.25 gunBurstAdd+-1'],
+      ['g_knife', 'Knife fight', 'Choose this for money and health. Each gun kill: +250 credits and +10 HP.', 1, 2, 'gunKillCash+250 gunKillHeal+10']] },
     { id: 'msl', name: 'Missiles', s: [
-      ['m_tone', 'Quick tone', 'Lock time -8%.', 3, 0, 'lockTime*-0.08'],
-      ['m_head', 'Warhead', 'Missile damage +10%. Fuse radius +10%.', 3, 0, 'missileDamageMul*0.1 missileFuseMul*0.1'],
+      ['m_tone', 'Fast lock', 'Lock time -8%.', 3, 0, 'lockTime*-0.08'],
+      ['m_head', 'Big warhead', 'Missile damage +10%. Fuse radius +10%.', 3, 0, 'missileDamageMul*0.1 missileFuseMul*0.1'],
       ['m_motor', 'Hot motor', 'Missile speed +6%. Missile range +10%.', 2, 1, 'missileSpeedMul*0.06 missileRangeMul*0.1'],
-      ['m_second', 'Second lock', '+1 lock. Each salvo fires 1 more missile.', 1, 2, 'multiLock+1'],
-      ['m_reserve', 'Reserve rack', '+4 air-to-air missiles in reserve.', 1, 2, 'reserveAAM+4']] },
+      ['m_second', 'Second lock', 'Choose this for quality. +1 lock: each salvo fires 1 more missile (missiles with SALVO).', 1, 2, 'multiLock+1'],
+      ['m_reserve', 'Reserve rack', 'Choose this for quantity. +4 air-to-air missiles in reserve. They reload in flight.', 1, 2, 'reserveAAM+4']] },
     { id: 'strike', name: 'Strike', s: [
       ['o_iron', 'Heavy iron', 'Bomb damage +10%. Bomb blast +8%.', 3, 0, 'bombDamageMul*0.1 bombBlastMul*0.08'],
       ['o_pods', 'Rocket pods', 'Rocket damage +10%. +2 rockets in each pod.', 3, 0, 'rocketDamageMul*0.1 podAmmoAdd+2'],
-      ['o_salvo', 'Salvo', '+2 rockets in each salvo.', 2, 1, 'rocketSalvoAdd+2'],
-      ['o_rack', 'Extra rack', '+1 bomb on each bomb pylon.', 1, 2, 'bombRackAdd+1'],
-      ['o_eye', 'Long eye', 'Ground missiles and guided bombs: range +25%, lock time -25%.', 1, 2, 'agmRangeMul*0.25 agmLockMul*-0.25']] },
+      ['o_salvo', 'Rocket salvo', '+2 rockets in each salvo.', 2, 1, 'rocketSalvoAdd+2'],
+      ['o_rack', 'Extra rack', 'Choose this for carpet bombing. +1 bomb on each bomb pylon. More weight.', 1, 2, 'bombRackAdd+1'],
+      ['o_eye', 'Long eye', 'Choose this for precision. Ground missiles and guided bombs: range +25%, lock time -25%.', 1, 2, 'agmRangeMul*0.25 agmLockMul*-0.25']] },
     { id: 'def', name: 'Defense', s: [
       ['d_plate', 'Armor plates', 'Damage taken -5%.', 3, 0, 'armorMul*-0.05'],
-      ['d_flare', 'Flare racks', '+6 flares. Flare decoy +5%.', 3, 0, 'flares+6 flareEff*0.05'],
-      ['d_fix', 'Field repair', 'Repair +0.5 HP per second in flight.', 2, 1, 'repairPerSec+0.5'],
-      ['d_auto', 'Auto flares', 'A missile comes closer than 2.5 km: flares fire by themselves (1 pair each 1.5 s).', 1, 2, 'autoFlare+1'],
-      ['d_ext', 'Fire extinguisher', 'One time in each life: health goes below 30 HP, it goes back to 60 HP.', 1, 2, 'extinguisher+1']] },
+      ['d_flare', 'Flare racks', '+6 flares. Decoy chance +5%.', 3, 0, 'flares+6 flareEff*0.05'],
+      ['d_fix', 'Field repair', 'Repair +0.5 HP each second in flight.', 2, 1, 'repairPerSec+0.5'],
+      ['d_auto', 'Auto flares', 'Choose this to dodge. A missile comes closer than 2.5 km: flares fire by themselves (1 pair each 1.5 s). They use your flares.', 1, 2, 'autoFlare+1'],
+      ['d_ext', 'Fire extinguisher', 'Choose this to survive. One time in each life: health goes below 30 HP, it goes back to 60 HP.', 1, 2, 'extinguisher+1']] },
     { id: 'ace', name: 'Ace', s: [
       ['a_merc', 'Mercenary', 'Credits +6%.', 3, 0, 'creditMul*0.06'],
       ['a_learn', 'Fast learner', 'XP +8%.', 3, 0, 'xpMul*0.08'],
-      ['a_chain', 'Kill chain', 'Chain time +3 s. +80 credits for each chain kill after the first.', 2, 1, 'comboWindow+3 chainCash+80'],
-      ['a_burn', 'Adrenaline', 'Each kill fills the afterburner +35%.', 1, 2, 'killFuel+0.35'],
-      ['a_show', 'Showman', '+150 credits for a kill when you fly inverted or below 120 m.', 1, 2, 'stuntCash+150']] }
+      ['a_chain', 'Kill chain', 'Chain time +3 s (combo too). +80 credits for each chain kill after the first.', 2, 1, 'comboWindow+3 chainCash+80'],
+      ['a_burn', 'Adrenaline', 'Choose this to fight on. Each kill fills the afterburner +35%.', 1, 2, 'killFuel+0.35'],
+      ['a_show', 'Showman', 'Choose this for credits. +150 credits for a kill when you fly inverted or below 120 m.', 1, 2, 'stuntCash+150']] }
   ];
   var SKILLS = [], SK = {};
   BRANCHES.forEach(function (b) {
@@ -14029,7 +14046,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
 
     function newProfile() {
       var s = starterAc();
-      return { v: 3, credits: 2500, xp: 0, level: 1, sp: 0, upg: {}, skills: {}, skv: SKILL_V, ownedAc: [s], ac: s, map: null,
+      return { v: 3, credits: 2500, xp: 0, level: 1, sp: 0, upg: {}, skills: {}, skv: SKILL_V, skFix: 1, ownedAc: [s], ac: s, map: null,
         ownedW: { gsh23: 1, r60: 1, fab500: 1 }, eqs: {}, mastery: {}, paint: {}, mirror: true,
         missions: 0, failed: 0, best: 0, earned: 0, kills: 0, ranks: { S: 0, A: 0, B: 0, C: 0 }, aces: {} };
     }
@@ -14065,6 +14082,13 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       }
       if (P.skv !== SKILL_V) { P.skv = SKILL_V; migrated = true; }
       if (refund > 0) { P.sp += refund; loadNote = ['SKILLS RESET', 'NEW SKILL TREE · ' + refund + ' POINTS BACK']; }
+      // skFix 1: Light frame and Fast feed now have a cost (choose-one trade-off) -> give their points back, the pilot chooses again
+      if (!(d && d.skFix >= 1)) {
+        var fixBack = 0;
+        ['f_light', 'g_feed'].forEach(function (q) { if (P.skills[q] && SK[q]) { fixBack += P.skills[q] * SK[q].cost; delete P.skills[q]; } });
+        P.skFix = 1; migrated = true;
+        if (fixBack > 0) { P.sp += fixBack; if (!loadNote) loadNote = ['SKILLS CHANGED', 'LIGHT FRAME / FAST FEED · ' + fixBack + ' POINTS BACK']; }
+      }
       var fresh = !P.eqs[P.ac];
       var dropped = fitLoadout();
       if (fresh) ensureAAM();   // new pilot: a missile pair on the first pylons
@@ -14127,7 +14151,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       // derived + clamps
       s.missileSpeed *= s.missileSpeedMul; s.missileSpeedMul = s.missileSpeed / 650; s.missileGMul = s.missileG / 28;
       s.gunBurst = s.gunBurst + s.gunBurstAdd; s.gunHeatMul = 4.545 / Math.max(1, s.gunBurst);   // combat: heat 0.22/s x gunHeatMul -> overheat after gunBurst s
-      s.lockTime = Math.round(Math.max(0.6, s.lockTime) * 100) / 100; s.detectMul = clamp(s.detectMul, 0.35, 1); s.armorMul = clamp(s.armorMul, 0.3, 1);
+      s.lockTime = Math.round(Math.max(0.6, s.lockTime) * 100) / 100; s.detectMul = clamp(s.detectMul, 0.35, 1); s.armorMul = clamp(s.armorMul, 0.3, 1.5);
       s.boostRecharge = Math.max(2.5, s.boostRecharge); s.multiLock = Math.min(6, Math.round(s.multiLock));
       s.flares = Math.round(s.flares); s.reserveAAM = Math.round(s.reserveAAM); s.driftKeep = clamp(s.driftKeep, 0, 0.95); s.cobraKeep = clamp(s.cobraKeep, 0, 1);
       s.aimAssist = Math.round(s.aimAssist * 100) / 100; s.massMul = clamp(s.massMul, 0.6, 1.2);
@@ -14136,6 +14160,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       s.hardpoints = sts.open.length; s.pylonsMax = sts.all.length; s.pylonsBase = sts.baseCount;
       var lo = loadoutCalc(s, sts), sum = function (f) { return lo.filter(f).reduce(function (a, w) { return a + w.ammo; }, 0); };
       s.missiles = sum(function (w) { return w.type === 'aam'; });
+      s.firstAAM = (lo.filter(function (w) { return w.type === 'aam'; })[0] || {}).id || null;
       s.agms = sum(function (w) { return w.type === 'agm'; });
       s.bombs = sum(function (w) { return w.type === 'bomb'; });
       s.rockets = sum(function (w) { return w.type === 'rocket'; });
@@ -15305,6 +15330,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       var b = el.querySelector('#flcBody'), sc = b.scrollTop;
       var at = el.querySelector('.flc-tab[aria-selected=true]'); if (at && at.scrollIntoView) { var tb = el.querySelector('#flcTabs'); tb.scrollLeft = Math.max(0, at.offsetLeft - (tb.clientWidth - at.offsetWidth) / 2); }
       b.innerHTML = tab === 'upgrades' ? htmlUpgrades() + (FL.hangarExtra ? FL.hangarExtra(P, esc) : '') : tab === 'loadout' ? htmlLoadout() : tab === 'aircraft' ? htmlAircraft() : tab === 'skills' ? htmlSkills() : htmlMaps();
+      if (FL.hangarIcons) { try { FL.hangarIcons.hydrate(b, render); } catch (e) { console.warn('hangarIcons', e); } }   // jet / weapon pictures
       b.scrollTop = sc;
       if (tab === 'skills') { drawLines(); showSkill(focusKey && focusKey.indexOf('sk-') === 0 ? focusKey.slice(3) : null); }
       if (focusKey) { var f = el.querySelector('[data-key="' + focusKey + '"]'); if (f) { try { f.focus({ preventScroll: true }); } catch (e) { f.focus(); } } }
@@ -15312,8 +15338,14 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     function priceHtml(p, can) { return '<span class="flc-price' + (can ? '' : ' no') + '">' + (p ? fmtN(p) + ' cr' : 'Free') + '</span>'; }
 
     function htmlUpgrades() {
-      return '<div class="flc-grid">' + UPGRADES.map(function (u) {
+      var s0 = curStats(), aamN = s0.firstAAM && FL.WEAPONS[s0.firstAAM] ? shortName(FL.WEAPONS[s0.firstAAM]) : '';
+      return '<div class="flc-grid">' + UPGRADES.map(function (u, ui) {
         var l = upgLevel(u.id), p = upgPrice(u, l), max = l >= 5, req = Math.max(LV_REQ[Math.min(l, 4)], u.minLevel || 0), gated = P.level < req;
+        var gh = !ui || UPGRADES[ui - 1].grp !== u.grp ? UPG_GROUPS.filter(function (g) { return g[0] === u.grp; }).map(function (g) { return '<div class="fli-grp">' + g[1] + '</div>'; }).join('') : '';
+        var real = function (k, a, nb) {   // second line with real numbers (km, m/s, g) where they help
+          if (!REAL_NOTE[k] || ((k === 'missileSpeed' || k === 'missileG') && !aamN)) return '';
+          return '<div><span>' + (k === 'missileSpeed' || k === 'missileG' ? esc(aamN) : REAL_NOTE[k]) + '</span> ' + realStat(k, a, s0) + (nb != null && nb !== a ? ' → <em>' + realStat(k, nb, s0) + '</em>' : '') + '</div>';
+        };
         var pips = ''; for (var i = 0; i < 5; i++) pips += '<i class="' + (i < l ? 'on' : '') + '"></i>';
         var fx = Object.keys(u.v).map(function (k) {
           var a = u.v[k][l], nb = max ? null : u.v[k][l + 1];
@@ -15322,11 +15354,14 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
             var c0 = cnt(a), c1 = nb != null ? cnt(nb) : c0, cm = cnt(99);
             return '<div><span>Pylons</span> ' + c0 + (c1 !== c0 ? ' → <em>' + c1 + '</em>' : '') + ' <span>of ' + cm + (c0 >= cm ? ' · max on this jet' : '') + '</span></div>';
           }
-          return '<div><span>' + (STAT_FMT[k] || [k])[0] + '</span> ' + fmtStat(k, a) + (nb != null && nb !== a ? ' → <em>' + fmtStat(k, nb) + '</em>' : '') + '</div>';
+          return '<div><span>' + (STAT_FMT[k] || [k])[0] + '</span> ' + fmtStat(k, a) + (nb != null && nb !== a ? ' → <em>' + fmtStat(k, nb) + '</em>' : '') + '</div>' + real(k, a, nb);
         }).join('');
         var btn = max ? '<span class="flc-price max">MAX</span>' :
           '<button data-act="upg" data-id="' + u.id + '" data-key="upg-' + u.id + '"' + (P.credits < p || gated ? ' aria-disabled="true"' : '') + '>' + (gated ? 'Level ' + req : 'Buy') + '</button>';
-        return '<div class="flc-card"><h3>' + u.name + '<small>LV ' + l + '/5</small></h3><div class="flc-pips">' + pips + '</div><p>' + u.desc + '</p><div class="flc-fx">' + fx + '</div>' +
+        var nreq = max ? '' : gated ? '<span class="fli-req">Needs pilot level ' + req + ' (you: ' + P.level + ')</span>' :
+          (l < 4 && Math.max(LV_REQ[l + 1], u.minLevel || 0) > P.level ? '<span class="fli-req" style="color:var(--dim)">Level ' + (l + 2) + ' needs pilot level ' + Math.max(LV_REQ[l + 1], u.minLevel || 0) + '</span>' : '');
+        return gh + '<div class="flc-card"><h3>' + u.name + '<small>LV ' + l + '/5</small></h3><div class="flc-pips">' + pips + '</div><p>' + u.desc + '</p><div class="flc-fx">' + fx +
+          (u.feel ? '<span class="fli-feel">In flight: ' + u.feel + '</span>' : '') + '</div>' + nreq +
           '<div class="flc-row">' + (max ? '' : priceHtml(p, P.credits >= p)) + btn + '</div></div>';
       }).join('') + '</div>';
     }
@@ -15381,13 +15416,17 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       h += '<div class="flc-sec">' + esc(spec ? spec.name : P.ac) + ' · ' + sts.open.length + ' of ' + sts.all.length + ' pylons open' +
         (sts.open.length < sts.all.length ? ' · buy Hardpoints to open more' : '') + '</div>';
       // jet top view with pylon markers
-      h += '<div class="flc-lo"><div class="flc-jet">' + jetSvg(delta);
+      // real top view of this jet (hangaricons.js) when every pylon has a known point, else the generic drawing
+      var HI = FL.hangarIcons, TV = HI ? HI.topView(P.ac) : null, tvp = null;
+      if (TV) { var tpts = sts.all.map(function (st) { var q = TV.pos(st.id); return q ? { id: st.id, x: q.x, y: q.y } : null; }); if (tpts.length && tpts.every(Boolean)) tvp = HI.spread(tpts, 460, 386, 17); }
+      h += '<div class="flc-lo"><div class="flc-jet' + (tvp ? ' fli-real' : '') + '" data-fli-top="' + esc(P.ac) + '">' + (tvp ? '<img src="' + TV.url + '" alt="">' + HI.leaders(tvp) : jetSvg(delta));
       sts.all.forEach(function (st) {
-        var p = stXY(st, delta), w = st.open ? FL.WEAPONS[eq.pyl[st.id]] : null, e = lo.filter(function (x) { return x.slot === st.id; })[0];
-        var t = e ? e.type : '', cls = 'flc-pm' + (t ? ' t-' + t : '') + (!st.open ? ' lock' : !e ? ' empty' : '') + (st.id === selSlot ? ' sel' : '');
-        var inner = !st.open ? '<b>+</b>' : e ? '<b>' + (e.type === 'rocket' || e.type === 'gunpod' ? e.ammo : e.count) + '</b><i>' + esc(TYPE_CODE[t] || '') + '</i>' : '<b>—</b>';
+        var p = tvp ? null : stXY(st, delta), w = st.open ? FL.WEAPONS[eq.pyl[st.id]] : null, e = lo.filter(function (x) { return x.slot === st.id; })[0];
+        var t = e ? e.type : '', ico = e && HI ? FL.weaponIcon(e.id, { vertical: true, cls: 'fli-pv' }) : '', cls = 'flc-pm' + (t ? ' t-' + t : '') + (!st.open ? ' lock' : !e ? ' empty' : '') + (st.id === selSlot ? ' sel' : '') + (ico ? ' has-i' : '');
+        var inner = !st.open ? '<b>+</b>' : e ? ico + '<b>' + (e.type === 'rocket' || e.type === 'gunpod' ? e.ammo : e.count) + '</b><i>' + esc(TYPE_CODE[t] || '') + '</i>' : '<b>—</b>';
         var lab = 'Pylon ' + st.id + ' (' + KIND_NAME[st.kind] + '): ' + (!st.open ? 'closed' : e ? esc(w.name) + ' ×' + e.count : 'empty');
-        h += '<button class="' + cls + '" style="left:' + (p.x / 2) + '%;top:' + ((p.y - 32) / 1.68).toFixed(2) + '%" data-act="slot" data-id="' + st.id + '" data-key="slot-' + st.id + '" aria-label="' + lab + '" title="' + lab + '">' +
+        var pos = tvp ? 'left:' + tvp[st.id].x + '%;top:' + tvp[st.id].y + '%' : 'left:' + (p.x / 2) + '%;top:' + ((p.y - 32) / 1.68).toFixed(2) + '%';
+        h += '<button class="' + cls + '" style="' + pos + '" data-act="slot" data-id="' + st.id + '" data-key="slot-' + st.id + '" aria-label="' + lab + '" title="' + lab + '">' +
           '<small>' + st.id + '</small>' + inner + '</button>';
       });
       h += '</div>';
@@ -15401,7 +15440,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         WEAPON_LIST.concat(extraWeapons()).filter(function (w) { return (w.type !== 'gun' || isPod(w)) && P.ownedW[w.id]; }).forEach(function (w) {
           var on = eq.pyl[selSlot] === w.id, why = whyNot(sel, w), inf = why ? null : pickInfo(sel, w, s);
           h += '<button class="flc-chip' + (on ? ' on' : '') + (why ? ' no' : '') + '" data-act="pick" data-id="' + w.id + '" data-key="pick-' + w.id + '"' + (why ? ' disabled' : '') + (on ? ' aria-pressed="true"' : '') + '>' +
-            '<b>' + esc(shortName(w)) + '</b>' + (why ? '<em>' + why + '</em>' : '<span>' + (TYPE_CODE[storeType(w)] || '') + ' · ' + inf.txt + ' · ' + kg(inf.kg) + '</span>') + '</button>';
+            (FL.weaponIcon ? FL.weaponIcon(w, { cls: 'fli-wi' }) : '') + '<b>' + esc(shortName(w)) + '</b>' + (why ? '<em>' + why + '</em>' : '<span>' + (TYPE_CODE[storeType(w)] || '') + ' · ' + inf.txt + ' · ' + kg(inf.kg) + '</span>') + '</button>';
         });
         h += '<button class="flc-chip' + (eq.pyl[selSlot] ? '' : ' on') + '" data-act="pick" data-id="" data-key="pick-none"><b>Empty</b><span>0 kg</span></button></div>';
       }
@@ -15412,6 +15451,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       // catalog
       var groups = [['gun', 'Guns'], ['missile', 'Missiles'], ['rocket', 'Rockets and pods'], ['bomb', 'Bombs'], ['special', 'Special weapons'], ['tank', 'Fuel']];
       var allW = WEAPON_LIST.concat(extraWeapons());
+      if (FL.hangarIcons && FL.hangarIcons.legendHtml) h += FL.hangarIcons.legendHtml();
       groups.forEach(function (g) {
         var list = allW.filter(function (w) { return g[0] === 'special' ? (w.type === 'beam' || w.type === 'rail') : g[0] === 'rocket' ? (w.type === 'rocket' || isPod(w)) : g[0] === 'gun' ? (w.type === 'gun' && !isPod(w)) : w.type === g[0]; });
         if (!list.length) return;
@@ -15433,7 +15473,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
             var here = eq.pyl[selSlot] === w.id;
             btn = '<button data-act="pick" data-id="' + w.id + '" data-key="w-' + w.id + '"' + (here || !canSel ? ' disabled' : '') + '>' + (here ? 'On ' + selSlot : !canSel ? 'Not on ' + selSlot : 'Load on ' + selSlot + (P.mirror && mirId ? '+' + mirId : '')) + '</button>';
           }
-          h += '<div class="flc-card' + (eqd ? ' on' : '') + '"><h3>' + esc(w.name) + '<small>' + esc((TYPE_CODE[storeType(w)] || w.type).toUpperCase()) + '</small></h3><div class="flc-tags">' +
+          h += '<div class="flc-card' + (eqd ? ' on' : '') + '">' + (FL.weaponIcon ? FL.weaponIcon(w, { cls: 'fli-w fli-wc' }) : '') + '<h3>' + esc(w.name) + '<small>' + esc((TYPE_CODE[storeType(w)] || w.type).toUpperCase()) + '</small></h3><div class="flc-tags">' +
             tags.map(function (t) { return '<span>' + esc(t) + '</span>'; }).join('') + '</div><p>' + esc(w.desc || '') + '</p><div class="flc-fx">' + info + '</div><div class="flc-row">' +
             (own ? '<span class="flc-price max">Owned</span>' : priceHtml(w.price || 0, P.credits >= (w.price || 0))) + btn + '</div></div>';
         });
@@ -15496,7 +15536,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     }
     function htmlAircraft() {
       var list = acList(), bars = acBars(list);
-      return htmlMastery(P.ac) + '<div class="flc-sec">Jets</div><div class="flc-grid">' + list.map(function (a, i) {
+      var HI = FL.hangarIcons;
+      return (HI ? HI.previewHtml(P.ac, 'Flying now') : '') + htmlMastery(P.ac) + '<div class="flc-sec">Jets' + (HI ? ' · point at a jet to see it big' : '') + '</div><div class="flc-grid">' + list.map(function (a, i) {
         var inf = acInfo(a, i), own = P.ownedAc.indexOf(a.id) >= 0, cur = P.ac === a.id, gated = P.level < inf.level, s = a.stats || derive(a);
         var sc10 = score10(a, list);
         var sb = ['speed', 'agility', 'firepower', 'toughness'].map(function (k) {
@@ -15511,7 +15552,9 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         var lay = buildLayout(a, inf.hardpoints), pmax = 0; lay.groups.forEach(function (g) { pmax += g.st.length; });
         var mh = '<div class="flc-mast"><div class="flc-ring' + (ml >= 10 ? ' max' : '') + '" style="--p:' + Math.round(mp * 100) + '" title="Mastery ' + ml + '"><b>' + ml + '</b></div>' +
           '<dl><dt>Mastery</dt><dd>' + ml + ' / 10</dd><dt>Next</dt><dd>' + (nx ? esc(short(nx.name, 18)) : 'done') + '</dd><dt>Specials</dt><dd>' + esc(short(ms[5].name, 18)) + '</dd><dd></dd><dd>' + esc(short(ms[10].name, 18)) + '</dd></dl></div>';
-        return '<div class="flc-card' + (cur ? ' on' : '') + '"><h3>' + esc(a.name || a.id) + '<small>' + esc(a.nation || '') + ' · ' + inf.hardpoints + '–' + pmax + ' pylons</small></h3>' +
+        var stTxt = own ? (cur ? 'Flying now' : 'Owned') : gated ? 'Needs pilot level ' + inf.level : fmtN(inf.price) + ' cr';
+        return '<div class="flc-card' + (cur ? ' on' : '') + (!own && gated ? ' lockd' : '') + '" data-fli-ac="' + esc(a.id) + '" data-fli-st="' + esc(stTxt) + '">' + (HI ? HI.thumbHtml(a.id) : '') +
+          '<h3>' + esc(a.name || a.id) + '<small>' + esc(a.nation || '') + ' · ' + inf.hardpoints + '–' + pmax + ' pylons</small></h3>' +
           (a.desc || a.blurb ? '<p>' + esc(a.desc || a.blurb) + '</p>' : '') + mh + (sb ? '<div class="flc-stat">' + sb + '</div>' : '') +
           '<div class="flc-row">' + (own ? '<span class="flc-price max">' + (cur ? 'Flying' : 'Owned') + '</span>' : priceHtml(inf.price, P.credits >= inf.price)) + btn + '</div></div>';
       }).join('') + '</div>';
@@ -15550,6 +15593,14 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       h += '</div><div class="flc-det" id="flcDet"></div></div>';
       return h;
     }
+    var SK_LBL = { rateMul: ['Roll and pitch', ''], topSpeedMul: ['Top speed', ''], driftKeep: ['Speed kept in drift', '%'], cobraFuel: ['Afterburner after Cobra', '%'], cobraKeep: ['Speed back after Cobra', '%'],
+      massMul: ['Weight', ''], armorMul: ['Damage taken', ''], gunDamageMul: ['Gun damage', ''], gunBurstAdd: ['Burst to overheat', ' s'], aimAssist: ['Aim assist', '%'], gunRateMul: ['Fire rate', ''],
+      gunKillCash: ['Credits per gun kill', ' cr'], gunKillHeal: ['Health per gun kill', ' HP'], lockTime: ['Lock time', ''], missileDamageMul: ['Missile damage', ''], missileFuseMul: ['Fuse radius', ''],
+      missileSpeedMul: ['Missile speed', ''], missileRangeMul: ['Missile range', ''], multiLock: ['Salvo locks', ''], reserveAAM: ['Reserve missiles', ''], bombDamageMul: ['Bomb damage', ''],
+      bombBlastMul: ['Bomb blast', ''], rocketDamageMul: ['Rocket damage', ''], podAmmoAdd: ['Rockets per pod', ''], rocketSalvoAdd: ['Rockets per salvo', ''], bombRackAdd: ['Bombs per pylon', ''],
+      agmRangeMul: ['Ground missile range', ''], agmLockMul: ['Ground lock time', ''], flares: ['Flares', ''], flareEff: ['Decoy chance', ''], repairPerSec: ['Repair', ' HP/s'],
+      autoFlare: ['Auto flares', 'on'], extinguisher: ['Fire extinguisher', 'on'], creditMul: ['Credits', ''], xpMul: ['XP', ''], comboWindow: ['Chain time', ' s'], chainCash: ['Credits per chain kill', ' cr'],
+      killFuel: ['Afterburner per kill', '%'], stuntCash: ['Credits per stunt kill', ' cr'] };
     function showSkill(id) {
       if (!el || tab !== 'skills') return;
       var det = el.querySelector('#flcDet'); if (!det) return;
@@ -15562,6 +15613,11 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       det.innerHTML = '<span class="flc-lab">' + esc(bn) + ' · row ' + (s.tier + 1) + (s.tier === 2 ? ' · choose one' : '') + '</span><h3>' + esc(s.name) + '</h3>' +
         '<p>' + esc(s.desc) + (s.max > 1 ? ' Each rank.' : '') + '</p>' +
         '<div class="flc-fx"><span>Rank</span> ' + ss.r + ' / ' + s.max + '</div>' +
+        s.mods.map(function (m) {   // visible numbers: total from this skill now -> after one more rank
+          var lb = SK_LBL[m.stat] || [m.stat, ''], f = function (r) { var v = m.v * r; return m.op === '*' || lb[1] === '%' ? (v >= 0 ? '+' : '') + Math.round(v * 100) + '%' : lb[1] === 'on' ? (v > 0 ? 'on' : 'off') : (v >= 0 ? '+' : '') + (Math.round(v * 100) / 100) + lb[1]; };
+          return '<div class="flc-fx"><span>' + esc(lb[0]) + '</span> ' + (ss.r ? f(ss.r) : 'none') + (ss.r < s.max ? ' → <em>' + f(ss.r + 1) + '</em>' : '') + '</div>';
+        }).join('') +
+        (s.excl.length ? '<div class="flc-fx"><span>Or instead</span> ' + s.excl.map(function (q) { return esc(SK[q].name) + ': ' + esc(SK[q].desc.replace(/^Choose this [^.]*\. /, '')); }).join(' ') + '</div>' : '') +
         '<div class="flc-fx"><span>Cost</span> ' + s.cost + ' point' + (s.cost > 1 ? 's' : '') + ' per rank</div>' +
         (s.need ? '<div class="flc-fx"><span>Needs</span> ' + (ss.reqOk ? '<em>' : '') + s.need + ' points in ' + esc(bn) + (ss.reqOk ? '</em>' : '') + ' (now ' + ss.spent + ')</div>' : '') +
         '<div class="flc-fx"><span>Skill points</span> <em>' + P.sp + '</em></div>' +
@@ -16300,7 +16356,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       if (inverted && oAlive && how !== 'crash') { add += 500; popup('INVERTED +500'); }
       if (noe && oAlive && how !== 'crash') { add += 300; popup('NAP OF THE EARTH +300'); }
       combo = comboT > 0 ? combo + 1 : 1;
-      comboT = C.comboWindow;
+      comboT = LO.comboWindow || C.comboWindow;   // campaign skill Kill chain: +3 s
       if (combo > bestCombo) bestCombo = combo;
       score += add * combo;
       if (combo >= 2) popup('x' + combo + ' COMBO');
@@ -16314,7 +16370,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     }
     function addScore(points, label) {
       if (client) return;
-      combo = comboT > 0 ? combo + 1 : 1; comboT = C.comboWindow; if (combo > bestCombo) bestCombo = combo;
+      combo = comboT > 0 ? combo + 1 : 1; comboT = LO.comboWindow || C.comboWindow; if (combo > bestCombo) bestCombo = combo;
       score += points * combo;
       popup((label || 'BONUS') + ' +' + points);
       if (combo >= 2) popup('x' + combo + ' COMBO');
@@ -18835,7 +18891,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     function setLoadout(lo) {
       lo = lo || {};
       var keys = ['lockTime', 'missileSpeed', 'missileG', 'missiles', 'gunDamageMul', 'gunHeatMul', 'flares', 'armorMul', 'bombs', 'seekerCone',
-                  'lockRange', 'multiLock', 'repairPerSec', 'detectMul', 'flareEff', 'damageMul',
+                  'lockRange', 'multiLock', 'repairPerSec', 'detectMul', 'flareEff', 'damageMul', 'comboWindow',
                   'aimAssist', 'bombAimAssist', 'gunSpreadMul', 'gunRangeMul', 'gunGroundMul'];
       for (var i = 0; i < keys.length; i++) if (lo[keys[i]] != null && isFinite(+lo[keys[i]])) LO[keys[i]] = +lo[keys[i]];
       if (lo.weapons !== undefined) LO.weapons = lo.weapons;
@@ -30382,6 +30438,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       ['VS', (vs >= 0 ? '+' : '−') + Math.abs(Math.round(vs)), HC],
       ['AGL', String(Math.round(st.agl)), st.agl < 150 ? AMB : HC]]);
     hx.globalAlpha = 1;
+    HS.tapeBox = [cx - off - tw / 2 - 14 * u, cx - off + tw / 2 + 8 * u, cx + off - tw / 2 - 8 * u, cx + off + tw / 2 + 14 * u, my - th / 2 - 44 * u, ry + 3 * 18 * u + 4 * u];
 
     // ---- centre symbology
     if (!crashed) {
@@ -30946,6 +31003,29 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     hx.fillStyle = 'rgba(255,255,255,.14)'; hx.fillRect(x - w / 2, y - h / 2, w, h);
     hx.fillStyle = c; hx.fillRect(x - w / 2, y - h / 2, w * k, h);
   }
+  // label placement: every label tries right, left, then below its symbol and skips when all three hit
+  // an obstacle (tapes, text stacks, other target symbols, other labels)
+  var OBS = [], LBQ = [];
+  function obsHit(x, y, w, h) {
+    if (x < 4 || x + w > W - 4 || y < 4 || y + h > H - 4) return true;
+    for (var i = 0; i < OBS.length; i += 4) if (x < OBS[i] + OBS[i + 2] && x + w > OBS[i] && y < OBS[i + 1] + OBS[i + 3] && y + h > OBS[i + 1]) return true;
+    return false;
+  }
+  function obsAdd(x, y, w, h) { OBS.push(x, y, w, h); }
+  function obsBase(u) {
+    OBS.length = 0;
+    var tb = HS.tapeBox; if (tb) { obsAdd(tb[0], tb[4], tb[1] - tb[0], tb[5] - tb[4]); obsAdd(tb[2], tb[4], tb[3] - tb[2], tb[5] - tb[4]); }
+    if (HS.upBottom > HS.upTop) obsAdd(W / 2 - 230 * u, HS.upTop, 460 * u, HS.upBottom - HS.upTop);
+    if (HS.lowBot > HS.lowTop) obsAdd(W / 2 - 150 * u, HS.lowTop, 300 * u, HS.lowBot - HS.lowTop);
+  }
+  // place a block of lines (w x h) beside a symbol of half-size s at (x, y); returns {x, y, al} or null
+  function placeLabel(x, y, s, w, h, gapX) {
+    var g = gapX || 5 * hu, c;
+    c = [x + s + g, y - h / 2, 'left']; if (!obsHit(c[0], c[1], w, h)) return { x: c[0], y: c[1], al: 'left', w: w, h: h };
+    c = [x - s - g - w, y - h / 2]; if (!obsHit(c[0], c[1], w, h)) return { x: c[0] + w, y: c[1], al: 'right', w: w, h: h };
+    c = [x - w / 2, y + s + g + 2 * hu]; if (!obsHit(c[0], c[1], w, h)) return { x: c[0] + w / 2, y: c[1], al: 'center', w: w, h: h };
+    return null;
+  }
   function showHp(t) { return t.hp01 != null && (t.hp01 < 0.999 || (t.maxHp || 0) >= 300); }
   function drawCombat(u, ch, n, rSeek, dt) {
     var mn = Math.min(W, H), cxs = W / 2, cys = H / 2, i;
@@ -30960,7 +31040,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     }
     // contacts: near = small corner brackets + side label; far = dot only. Designated one is drawn below.
     var tg = ch.targets || [], ringR = mn * 0.34, pG = new Path2D(), pA = new Path2D(), dG = new Path2D(), dA = new Path2D(), aG = new Path2D(), aA = new Path2D(), aR = new Path2D();
-    var nlab = 0, edge = 24 * u; HPQ.length = 0;
+    var nlab = 0, edge = 24 * u; HPQ.length = 0; LBQ.length = 0; obsBase(u);
     for (i = 0; i < tg.length; i++) {
       var t = tg[i], p = projTo(t.pos, TPj[i] || (TPj[i] = {}));
       var isD = !!(desig && t.designated);
@@ -30982,10 +31062,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         brackets(path, p.x, p.y, s, s * 0.55);
         if (!air) { path.moveTo(p.x - s * 0.6, p.y + s + 4 * u); path.lineTo(p.x + s * 0.6, p.y + s + 4 * u); }
         if (showHp(t)) HPQ.push(p.x, p.y + s + (air ? 5 : 9) * u, Math.max(18 * u, s * 2), t.hp01);
-        var free = true;
-        for (var j = 0; j < i; j++) { var q = TPj[j]; if (q.lab && Math.abs(q.x - p.x) < 70 * u && Math.abs(q.y - p.y) < 18 * u) { free = false; break; } }
-        p.lab = free && nlab < 8;
-        if (p.lab) { nlab++; text((t.ace ? '\u2605 ' + String(t.ace).toUpperCase() : tagOf(t.kind)) + ' ' + (t.dist / 1000).toFixed(1), p.x + s + 5 * u, p.y, 11 * u, t.ace ? AMB : tc); }
+        obsAdd(p.x - s - 1 * u, p.y - s - 1 * u, 2 * s + 2 * u, 2 * s + (air ? 2 : 6) * u + (showHp(t) ? 8 * u : 0));
+        if (nlab < 8) { nlab++; LBQ.push({ x: p.x, y: p.y, s: s, t: (t.ace ? '\u2605 ' + String(t.ace).toUpperCase() : tagOf(t.kind)) + ' ' + (t.dist / 1000).toFixed(1), c: t.ace ? AMB : tc, d: t.dist }); }
       } else if (t.dist < 15000 && !isD) {
         var dx = p.x - cxs, dy = p.y - cys; if (p.behind) { dx = -dx; dy = -dy; }
         var ang = Math.atan2(dy, dx);
@@ -31022,17 +31100,24 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
           text('LOCK', dp.x + (hasLS ? u : 0), py + ph / 2 + 0.5 * u, 10.5 * u, INK, 'center', DISP, '800');
           if (hasLS) hx.letterSpacing = '0px';
         } else if (kL > 0.01) text('LOCKING', dp.x, dp.y - bs - 9 * u, 10.5 * u, AMB, 'center');
-        var lc = locked ? RED : WHITE, lx2 = dp.x + bs + 7 * u;
-        text((acePick(ch, lk) || (lk.kind ? tagOf(lk.kind) : 'TGT')), lx2, dp.y - 6 * u, 12 * u, lc);
+        var lc = locked ? RED : WHITE;
         var vc = 0; for (i = 0; i < tg.length; i++) if (tg[i].designated) vc = closingKmh(tg[i]);
-        text((lk.dist / 1000).toFixed(1) + ' KM  ' + (vc >= 0 ? '+' : '−') + Math.abs(Math.round(vc / 10) * 10), lx2, dp.y + 8 * u, 10.5 * u, locked ? RED : HCdim);
+        // label block: name / distance + closure / warning / more targets — beside the box, side chosen to stay clear
+        var L1 = acePick(ch, lk) || (lk.kind ? tagOf(lk.kind) : 'TGT'), L2 = (lk.dist / 1000).toFixed(1) + ' KM  ' + (vc >= 0 ? '+' : '\u2212') + Math.abs(Math.round(vc / 10) * 10);
+        var L3 = locked && lk.weaponOK === false ? (lk.aspectOK === false ? 'GET BEHIND IT' : 'OUT OF RANGE') : '', L4 = (lk.candidates || 0) > 1 ? '\u25C0 \u25B6 MORE' : '';
+        font(12 * u, MONO); var lw = hx.measureText(L1).width; font(11 * u, MONO); lw = Math.max(lw, hx.measureText(L2).width, L3 ? hx.measureText(L3).width : 0, L4 ? hx.measureText(L4).width : 0);
+        var lh = (28 + (L3 ? 14 : 0) + (L4 ? 13 : 0)) * u;
+        obsAdd(dp.x - bs - 2 * u, dp.y - bs - (locked ? 22 : 18) * u, 2 * bs + 4 * u, 2 * bs + (locked ? 22 : 18) * u + 24 * u);
+        var pl = placeLabel(dp.x, dp.y - bs + lh / 2 + 2 * u, bs, lw, lh, 7 * u) || { x: dp.x + bs + 7 * u, y: dp.y - bs + 2 * u, al: 'left', w: lw, h: lh };
+        obsAdd(pl.al === 'left' ? pl.x : pl.al === 'right' ? pl.x - lw : pl.x - lw / 2, pl.y, lw, lh);
+        var ly = pl.y + 6 * u;
+        text(L1, pl.x, ly, 12 * u, lc, pl.al); ly += 14 * u;
+        text(L2, pl.x, ly, 10.5 * u, locked ? RED : HCdim, pl.al); ly += 14 * u;
+        if (L3) { text(L3, pl.x, ly, 11 * u, AMB, pl.al); ly += 14 * u; }
+        if (L4) text(L4, pl.x, ly, 10 * u, HCdim, pl.al);
         var yW2 = yb + (locked || kL <= 0.01 ? 4 : 12) * u;
         var dT = null; for (i = 0; i < tg.length; i++) if (tg[i].designated) dT = tg[i];
-        if (dT && dT.hp01 != null && showHp(dT)) { var sbh = hx.shadowBlur; hx.shadowBlur = 0; hpBar(dp.x, yW2 - 3 * u, bs * 2, dT.hp01, u); hx.shadowBlur = sbh; yW2 += 9 * u; }
-        // warnings and the target-switch hint sit right of the box, under the label (never over the nose marks)
-        var yR = dp.y + 22 * u;
-        if (locked && lk.weaponOK === false) { text(lk.aspectOK === false ? 'GET BEHIND IT' : 'OUT OF RANGE', lx2, yR, 11 * u, AMB, 'left'); yR += 14 * u; }
-        if ((lk.candidates || 0) > 1) text('◀ ▶ MORE', lx2, yR, 10 * u, HCdim, 'left');
+        if (dT && dT.hp01 != null && showHp(dT)) { var sbh = hx.shadowBlur; hx.shadowBlur = 0; hpBar(dp.x, yW2 - 3 * u, bs * 2, dT.hp01, u); hx.shadowBlur = sbh; }
       } else {
         // designated target off screen: big arrow at the edge
         var ddx2 = dp.x - cxs, ddy2 = dp.y - cys; if (dp.behind) { ddx2 = -ddx2; ddy2 = -ddy2; }
@@ -31040,6 +31125,15 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         chevron(ap, cxs + Math.cos(aa) * mn * 0.4, cys + Math.sin(aa) * mn * 0.4, aa, 13 * u);
         stroke2(ap, locked ? RED : WHITE, 2.4);
       }
+    }
+    // contact labels, nearest first, each placed clear of everything placed before it
+    LBQ.sort(function (a, b) { return a.d - b.d; });
+    for (i = 0; i < LBQ.length; i++) {
+      var lq = LBQ[i]; font(11 * u, MONO); var lqw = hx.measureText(lq.t).width, lqh = 12 * u;
+      var lp = placeLabel(lq.x, lq.y, lq.s, lqw, lqh);
+      if (!lp) continue;
+      obsAdd(lp.al === 'left' ? lp.x : lp.al === 'right' ? lp.x - lqw : lp.x - lqw / 2, lp.y, lqw, lqh);
+      text(lq.t, lp.x, lp.y + lqh / 2, 11 * u, lq.c, lp.al);
     }
     // incoming missiles: red double chevrons around the centre, pointing at each missile
     var inc = ch.incoming || [];
@@ -31606,7 +31700,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     if (tc) {
       var tb = Math.round(H - yb + 8), tw2 = Math.round(Math.min(480, band.w));
       if (tb !== LAYC.tutB) { LAYC.tutB = tb; tc.style.bottom = tb + 'px'; tc.style.marginBottom = '0px'; }
-      if (tw2 !== LAYC.tutW) { LAYC.tutW = tw2; tc.style.maxWidth = tw2 + 'px'; tc.style.left = cl + 'px'; }
+      if (tw2 !== LAYC.tutW) { LAYC.tutW = tw2; tc.style.maxWidth = tw2 + 'px'; }
+      if (cl !== LAYC.tutL) { LAYC.tutL = cl; tc.style.left = cl + 'px'; }
       if (domVis(tc) && tutorial && tutorial.current && tutorial.current()) yb = Math.min(yb, tc.getBoundingClientRect().top);
     }
     if (!crashed) yb = drawBoss(u, ch, dt, yb - gap, band);
@@ -32102,7 +32197,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793152630', updShown = false;
+  var BUILD = '1793152947', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
