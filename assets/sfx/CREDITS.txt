@@ -1,0 +1,24 @@
+Flanker over LAX - sound effect samples
+=======================================
+All files in this folder are CC0 1.0 (public domain dedication).
+https://creativecommons.org/publicdomain/zero/1.0/
+No attribution is required; it is given here as thanks and as a record.
+Each file was trimmed, high-passed, faded, peak-normalised, mixed to mono and encoded to MP3 (2026-10-28).
+The license was checked on each source page (OpenGameArt "License(s): CC0") on 2026-10-28.
+
+file            source (OpenGameArt.org)                                         author               original file
+exp_near1.mp3   https://opengameart.org/content/chunky-explosion                 joth                 Chunky Explosion.mp3 (0-4.6 s)
+exp_near2.mp3   https://opengameart.org/content/battle-at-sea                    thimras              cannon_hit_1.ogg (0-4.4 s)
+exp_small.mp3   https://opengameart.org/content/tiny-naval-battle-sounds-set     qubodup (I. Gabovitch) ExplosionMetal.wav (v2; README: CC0, from US military / public domain recordings)
+exp_mid.mp3     https://opengameart.org/content/battle-at-sea                    thimras              cannon_fire_1.ogg (0-3.2 s)
+exp_far.mp3     https://opengameart.org/content/muffled-distant-explosion        NenadSimic           NenadSimic - Muffled Distant Explosion.wav (0-3.6 s)
+exp_water.mp3   https://opengameart.org/content/tiny-naval-battle-sounds-set     qubodup (I. Gabovitch) WaterSurfaceExplosion04.wav
+thunder.mp3     https://opengameart.org/content/100-cc0-sfx-2                    rubberduck           sfx100v2_thunder_01.ogg (0.6-5.2 s)
+flare.mp3       https://opengameart.org/content/flare-ignition                   qubodup              ignition.flac
+msl_motor.mp3   https://opengameart.org/content/rocket-launch                    qubodup              launch.7z / launch.wav (1.15-3.45 s)
+gun_round.mp3   https://opengameart.org/content/war-on-water-sndfx               yd                   sndfx.zip / Guns/gun3Machinegun.ogg
+gun_heavy.mp3   https://opengameart.org/content/25-cc0-bang-firework-sfx         rubberduck           25-CC0-bang-sfx.zip / shot_01.ogg
+bomb_rel.mp3    https://opengameart.org/content/100-cc0-sfx                      rubberduck           100-CC0-SFX_0.zip / slam_01.ogg
+
+Not found as CC0 (still synthesized in audio.js): bomb falling whistle, jet flyby, aircraft cannon bursts
+(the cannon loops are built at load time from gun_round / gun_heavy plus synthesis).
