@@ -2198,8 +2198,10 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     }
     const idx = roads.length ? makeSegIndex(roads.map((r) => r.P), 1000, 140) : null;
     // grading: pull terrain to the road profile under the road, embankments blend out
+    const bfl = (ctx.bases || []).map((b) => b.spec._flat).filter((f) => f);
     function grade(e, n, h) {
       if (!idx) return h;
+      for (let i = 0; i < bfl.length; i++) if (flatMask(bfl[i], e, n) > 0.999) return h;
       const d = idx.query(e, n); if (SQ.p < 0) return h;
       const r = roads[SQ.p], f = SQ.s / ROAD_STEP, k = Math.min(Math.floor(f), r.Y.length - 2), t = f - k, y = r.Y[k] + (r.Y[k + 1] - r.Y[k]) * t - 0.35;
       const core = r.hw + 3, bl = clamp(18 + Math.abs(h - y) * 1.3, 18, 130);
@@ -2498,6 +2500,18 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       coast = def.coast || (ocean.length ? ocean.concat([ocean[0]]) : []);
     }
     ctx.mark('waterPolys');
+    // ---- largest open-sea circle (no land/stacks within r) for ships / the carrier
+    let openSea = null;
+    if (!def.noWater) {
+      const bg = TR.base, NVb = bg.NV, D = new Float32Array(NVb * NVb), BIG = 1e9;
+      for (let k = 0; k < D.length; k++) D[k] = bg.H[k] < -12 ? BIG : 0;
+      const c1 = bg.cell, c2 = bg.cell * Math.SQRT2;
+      for (let y = 0; y < NVb; y++) for (let x = 0; x < NVb; x++) { const k = y * NVb + x; if (!D[k]) continue; let v = D[k]; if (x > 0) v = Math.min(v, D[k - 1] + c1); if (y > 0) { v = Math.min(v, D[k - NVb] + c1); if (x > 0) v = Math.min(v, D[k - NVb - 1] + c2); if (x < NVb - 1) v = Math.min(v, D[k - NVb + 1] + c2); } D[k] = v; }
+      for (let y = NVb - 1; y >= 0; y--) for (let x = NVb - 1; x >= 0; x--) { const k = y * NVb + x; if (!D[k]) continue; let v = D[k]; if (x < NVb - 1) v = Math.min(v, D[k + 1] + c1); if (y < NVb - 1) { v = Math.min(v, D[k + NVb] + c1); if (x < NVb - 1) v = Math.min(v, D[k + NVb + 1] + c2); if (x > 0) v = Math.min(v, D[k + NVb - 1] + c2); } D[k] = v; }
+      let bk = -1, bd = 0;
+      for (let y = 20; y < NVb - 20; y++) for (let x = 20; x < NVb - 20; x++) { const k = y * NVb + x, e = -48000 + x * bg.cell, n = 48000 - y * bg.cell, d = Math.min(D[k], 44000 - Math.abs(e), 44000 - Math.abs(n)); if (d > bd) { bd = d; bk = k; } }
+      if (bk >= 0 && bd > 1500) openSea = { e: Math.round(-48000 + (bk % NVb) * bg.cell), n: Math.round(48000 - Math.floor(bk / NVb) * bg.cell), r: Math.round(Math.min(bd - 500, 15000)) };
+    }
 
     // ---- line of sight
     function lineOfSight(a, b) {
@@ -2535,6 +2549,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       clouds: CL.clouds.concat(PL ? PL.clouds : []),
       towers: EX.towers || [],
       ocean: ocean, coast: coast, waterPolys: waterPolys,
+      openSea: EX.openSea || openSea,
       seaLanes: (EX.seaLanes || def.seaLanes || []).reduce(function (acc, L) { let cur = []; for (const p of L) { if (isWater(p[0], p[1]) && sampleH(p[0], p[1]) < -8) cur.push(p); else { if (cur.length > 1) acc.push(cur); cur = []; } } if (cur.length > 1) acc.push(cur); return acc; }, []),
       roads: RD.roads,
       runways: runways.map((r) => ({ e: r.e, n: r.n, hdgDeg: r.hdgDeg, len: r.len, w: r.w, nameW: r.nameW, nameE: r.nameE })),
@@ -3161,14 +3176,18 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     for (const f of FING) { const a = f[3] * DEG; f.ec = coastC(f[0]); f.dE = -Math.cos(a); f.dN = Math.sin(a); f.lE = Math.sin(a); f.lN = Math.cos(a); }
     const ISL = { e: coastC(9000) - 15500, n: 9000, r: 3300 };
     const STACKS = [];
-    { const R = makeRng(4321); for (let k = 0; k < 22; k++) { const n = -44000 + R() * 88000, off = 180 + R() * 800; STACKS.push([coastC(n) - off, n, 35 + R() * 60, 45 + R() * 95]); } }
+    { const R = makeRng(4321); for (let k = 0; k < 22; k++) { const n = -44000 + R() * 88000, off = 180 + R() * 800; STACKS.push([coastC(n) - off, n, 40 + R() * 70, 90 + R() * 150]); } }
     for (let k = 0; k < 4; k++) { const a = k * 1.7 + 0.4; STACKS.push([ISL.e + Math.cos(a) * (ISL.r + 300), ISL.n + Math.sin(a) * (ISL.r + 300), 40 + k * 10, 60 + k * 15]); }
     function chan(e, n, sc, seed) {
       const wx = e / sc + 1.4 * fbm(e / (sc * 1.7) + 5.2, n / (sc * 1.7) + 1.3, 3, seed), wy = n / sc + 1.4 * fbm(e / (sc * 1.7) - 3.7, n / (sc * 1.7) + 9.1, 3, seed + 2);
       return Math.abs(2 * fbm(wx, wy, 3, seed + 4) - 1) * sc * 0.9;
     }
     function plateau(e, n, dx) {
-      let P = 125 + 115 * fbm(e / 6000 + 3, n / 6000, 3, 411);
+      // tall sheer cliffs (150-400 m): south high plateau, north lower moor with beaches; gorges cut from the plateau to the sea
+      const zoneK = sstep(-20000, 25000, n);
+      let P = 330 - 140 * zoneK + 110 * (fbm(e / 6000 + 3, n / 6000, 3, 411) - 0.5) + 60 * (fbm(e / 2500, n / 2500, 2, 419) - 0.5);
+      const gz = chan(e, n + 3000, 7500, 481);
+      P -= (P * 0.55) * (1 - sstep(60, 420, gz)) * sstep(300, 2500, dx) * (1 - sstep(16000, 26000, dx));
       const k = sstep(1500, 9000, dx);
       if (k > 0) {
         P += k * (50 + 300 * Math.pow(ridged(e / 5200 + 1, n / 5200 + 2, 4, 413), 1.6) * fbm(e / 14000, n / 14000, 2, 415) * 1.6);
@@ -9820,8 +9839,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     up.setAttribute('normal', full.attributes.normal); lo.setAttribute('normal', full.attributes.normal);
     return { up: up, lo: lo };
   }
-  defCamo('carTop', ['#3c4550', '#343c46', '#46505b', '#2d343d'], 111, 46, { splinter: true, n: 6, r: 0.12, panels: 150, panelCol: 'rgba(8,12,16,0.5)', metal: 0.45, rough: 0.5, grime: 4000, grimeA: 0.08 });
-  defCamo('carBot', ['#9aa2aa', '#9199a1', '#a7aeb5'], 112, 40, { n: 4, r: 0.16, panels: 130, panelCol: 'rgba(30,36,42,0.4)', metal: 0.6, rough: 0.38, grime: 3000, grimeA: 0.06 });
+  defCamo('carTop', ['#3c4550', '#343c46', '#46505b', '#2d343d'], 111, 46, { splinter: true, n: 6, r: 0.12, panels: 70, panelCol: 'rgba(8,12,16,0.32)', metal: 0.45, rough: 0.5, grime: 3000, grimeA: 0.06 });
+  defCamo('carBot', ['#9aa2aa', '#9199a1', '#a7aeb5'], 112, 40, { n: 4, r: 0.16, panels: 50, panelCol: 'rgba(30,36,42,0.22)', metal: 0.6, rough: 0.38, grime: 2000, grimeA: 0.05 });
   emis('engGlow', 0x38b4ff, 1.8); NO_SHADOW.engGlow = 1;
   emis('ledgeAmber', 0xffb040, 2.4); NO_SHADOW.ledgeAmber = 1;
   // engines on the trailing edge: 4 per side (variant 1: 3 per side), far apart along the span
@@ -17349,6 +17368,9 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       var fire = new THREE.Sprite(fireMat); fire.scale.set(10, 10, 1); fire.visible = false; ent.model.group.add(fire); ent._fire = fire;
       // boss sub-targets (carrier engines / turrets): +5 m hit radius so rounds, missiles and blasts count within 5 m of the part
       regTarget(ent, cat, def.lockRange || regDefaultLock(cat), (def.radius || (cat === 'air' ? 10 : 14)) + (def.subTarget ? 5 : 0), def.label || kind.toUpperCase(), o.group);
+      // long parts (carrier engine nacelles ~36 m): gun hits use a capsule along local Z (half length, radius) + 5 m tolerance
+      var capL = def.hitLen != null ? +def.hitLen : (kind === 'carrier_engine' ? 17 : 0), capR = def.hitRad != null ? +def.hitRad : (kind === 'carrier_engine' ? 6 : 0);
+      if (capL > 0) { ent.capL = capL; ent.capR = capR + (def.subTarget ? 5 : 0); ent.hitR = Math.max(ent.hitR, Math.min(capL, capR + 12)); }
       ent.cat = cat;
       if (parent) parent.children.push(ent);
       ctx.world = world; ctx.time = time; ctx.dt = 0;
@@ -18131,7 +18153,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         }
       }
     }
-    var lagP = new THREE.Vector3();
+    var lagP = new THREE.Vector3(), capAx = new THREE.Vector3(), capP = new THREE.Vector3(), capTmp = new THREE.Vector3();
     function updateBullets(h) {
       var i, j, bl;
       for (i = pBul.n - 1; i >= 0; i--) {
@@ -18142,6 +18164,12 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
           var e = tgts[j];
           if (!e.alive) continue;
           var r = e.hitR, ep = lag > 0 ? histAt(e, time - lag, lagP) : e.aim;
+          if (e.capL && e.q) {                                  // capsule part: test against the nearest point on its axis
+            if (bl.pos.distanceToSquared(ep) > (e.capL + e.capR + 40) * (e.capL + e.capR + 40)) continue;
+            capAx.set(0, 0, 1).applyQuaternion(e.q);
+            var cpj = clamp(capTmp.subVectors(bl.pos, ep).dot(capAx), -e.capL, e.capL);
+            ep = capP.copy(ep).addScaledVector(capAx, cpj); r = e.capR;
+          }
           if (relSegDistSq(bl.prev, bl.pos, ep, e.vel, h) < r * r) {
             hit = true;
             var cl = bl.cls != null ? bl.cls : 1;
