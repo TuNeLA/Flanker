@@ -1546,7 +1546,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       uRockA: { value: P.rockA || 0.28 }, uRockB: { value: P.rockB || 0.5 },
       uSnowH: { value: P.snowH === undefined ? 1e6 : P.snowH }, uSnowF: { value: P.snowF || 60 }, uSnowCol: { value: v3(P.snow || 0xeef3f8) }, uSnowSlope: { value: P.snowSlope || 0.62 },
       uSandH: { value: P.sandH || 0 }, uSandCol: { value: v3(P.sand || 0xcdbb94) },
-      uFaceN: { value: P.faceN === undefined ? 1 : P.faceN }, uAux: { value: ctx.def.urban ? 0 : 1 }, uIce: { value: v3(P.ice || 0xa9bccb) }, uRockTint: { value: P.rockTint || 0 }
+      uFaceN: { value: P.faceN === undefined ? 1 : P.faceN }, uAux: { value: ctx.def.urban ? 0 : 1 }, uIce: { value: v3(P.ice || 0xa9bccb) }, uRockTint: { value: P.rockTint || 0 }, uBump: { value: P.bump === undefined ? 0.5 : P.bump }
     };
     ctx.terrainU = TU;
     const mat = new THREE.MeshStandardMaterial({ vertexColors: true, map: ctx.detailTex, roughness: P.roughness || 0.95, metalness: 0 });
@@ -1561,7 +1561,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         '#include <common>', 'varying float vUrban; varying vec3 vWN;',
         'uniform sampler2D uRockMap; uniform sampler2D uStrataMap; uniform float uStrataOn; uniform float uStrataSpan; uniform float uStrataOff;',
         'uniform float uRockOn; uniform vec3 uRock1; uniform vec3 uRock2; uniform float uRockA; uniform float uRockB;',
-        'uniform float uSnowH; uniform float uSnowF; uniform vec3 uSnowCol; uniform float uSnowSlope; uniform float uSandH; uniform vec3 uSandCol; uniform float uFaceN; uniform float uAux; uniform vec3 uIce; uniform float uRockTint;',
+        'uniform float uSnowH; uniform float uSnowF; uniform vec3 uSnowCol; uniform float uSnowSlope; uniform float uSandH; uniform vec3 uSandCol; uniform float uFaceN; uniform float uAux; uniform vec3 uIce; uniform float uRockTint; uniform float uBump;',
         'vec3 gFN;'].join('\n'))
         .replace('#include <map_fragment>', [
           '#ifdef USE_MAP',
@@ -1586,7 +1586,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
           '  vec3 an = abs(vWN); an /= (an.x + an.y + an.z);',
           '  float rS = 1.0 / 70.0;',
           '  float rkA = texture2D(uRockMap, vec2(vFW.z, vFW.y * 1.6) * rS).r * an.x + texture2D(uRockMap, vFW.xz * rS).r * an.y + texture2D(uRockMap, vec2(vFW.x, vFW.y * 1.6) * rS).r * an.z;',
-          '  float rkB = texture2D(uRockMap, vec2(vFW.z + vFW.x * 0.7, vFW.y * 1.3) * rS * 5.3).r;',
+          '  float rkB = texture2D(uRockMap, vec2(vFW.z, vFW.y) * rS * 5.3).r * an.x + texture2D(uRockMap, vFW.xz * rS * 5.3).r * an.y + texture2D(uRockMap, vec2(vFW.x, vFW.y) * rS * 5.3).r * an.z;',
           '  rkB = mix(rkB, 0.5, smoothstep(600.0, 2500.0, camD));',
           '  vec3 rock = mix(uRock1, uRock2, rkA) * (0.72 + 0.56 * rkB);',
           '  rock = mix(rock, col * (0.62 + 0.55 * rkA) * (0.8 + 0.4 * rkB), uRockTint);',
@@ -1608,6 +1608,12 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
           '#ifdef USE_MAP',
           '  vec3 fNv_ = normalize((viewMatrix * vec4(gFN, 0.0)).xyz);',
           '  normal = normalize(mix(normal, fNv_, (1.0 - smoothstep(0.5, 0.82, gFN.y)) * uFaceN));',
+          '  // bump from the triplanar rock texture on rock faces (ledges, slabs, cracks)',
+          '  float bh_ = (rkA * 9.0 + rkB * 3.0) * rockK * uBump;',
+          '  vec3 dpx_ = dFdx(vFW), dpy_ = dFdy(vFW); float dbx_ = dFdx(bh_), dby_ = dFdy(bh_);',
+          '  vec3 Nw_ = normalize(vWN), r1_ = cross(dpy_, Nw_), r2_ = cross(Nw_, dpx_); float det_ = dot(dpx_, r1_);',
+          '  vec3 Nb_ = normalize(abs(det_) * Nw_ - sign(det_) * (dbx_ * r1_ + dby_ * r2_) + 1e-6);',
+          '  normal = normalize(normal + (viewMatrix * vec4(Nb_ - Nw_, 0.0)).xyz);',
           '#endif'].join('\n'));
     };
     mat.customProgramCacheKey = function () { return 'fl-terrain2'; };
@@ -3083,6 +3089,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       towers: EX.towers || [],
       ocean: ocean, coast: coast, waterPolys: waterPolys,
       openSea: EX.openSea || openSea,
+      caves: (EX && EX.caves) || [],
       seaLanes: (EX.seaLanes || def.seaLanes || []).reduce(function (acc, L) { let cur = []; for (const p of L) { if (isWater(p[0], p[1]) && sampleH(p[0], p[1]) < -8) cur.push(p); else { if (cur.length > 1) acc.push(cur); cur = []; } } if (cur.length > 1) acc.push(cur); return acc; }, []),
       roads: RD.roads,
       runways: runways.map((r) => ({ e: r.e, n: r.n, hdgDeg: r.hdgDeg, len: r.len, w: r.w, nameW: r.nameW, nameE: r.nameE })),
@@ -3722,7 +3729,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
           const ang = Math.abs(((th + Math.PI) % (2 * Math.PI)) - Math.PI);   // 0 = east (back of the horseshoe), PI = west (open side)
           const crest = (1080 + 220 * ridged(th * 3 + 1, 0.5, 3, 437)) * (1 - sstep(2.3, 2.75, ang));
           const R0 = 3300 + 300 * Math.sin(th * 3), d = Math.abs(dr - R0) + 140 * (fbm(e / 400, n / 400, 2, 439) - 0.5);
-          const cu2 = crest * Math.pow(Math.max(0, 1 - d / 1500), 0.6) + 90 * (ridged(e / 180, n / 180, 2, 441) - 0.4) * sstep(500, 800, crest * (1 - d / 1500));
+          const kx = Math.max(0, 1 - d / 1600), serr = 170 * Math.pow(ridged(e / 230 + 3, n / 230, 3, 441), 2) * sstep(0.45, 0.8, kx), cor = 220 * (1 - sstep(0.05, 0.3, Math.abs(2 * fbm(e / 900, n / 900, 3, 443) - 1))) * sstep(0.15, 0.5, kx) * (1 - sstep(0.75, 0.95, kx));
+          const cu2 = crest * (0.25 + 0.75 * Math.pow(kx, 1.35)) * sstep(0, 0.12, kx) + serr - cor;
           P = Math.max(P, cu2);
         }
         const v = chan(e, n, 6500, 421);
@@ -3848,10 +3856,15 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         { tile: 480, cell: 16, select: (e0, n0, e1, n1) => { const e = (e0 + e1) / 2, n = (n0 + n1) / 2; for (const T of TUN) if (Math.hypot(e - T.ox, n - T.on) < Math.max(T.s1 - T.s0, 2 * T.E) * 0.5 + 520) return true; return false; } }],
       color: function (e, n, h, il, curv, o, cell) {
         if (h < 0) { mix3(o, cSeabed, cWet, sstep(-30, -4, h)); mix3(o, o, cBasalt, 1 - sstep(0.75, 0.92, il)); return 0; }
-        mix3(o, cMoor, cMoor2, fbm(e / 800, n / 800, 3, 451));
-        mix3(o, o, cHeath, sstep(0.5, 0.7, fbm(e / 1600 + 7, n / 1600, 2, 453)) * 0.85);
+        mix3(o, cMoor, cMoor2, fbm(e / 300, n / 300, 3, 451));
+        mix3(o, o, cHeath, sstep(0.45, 0.75, fbm(e / 700 + 7, n / 700, 3, 453)) * 0.75 * (1 - sstep(250, 450, h)));
         mix3(o, o, cBog, sstep(4, 25, curv) * 0.5);
         mix3(o, o, cScree, sstep(550, 800, h) * 0.8);
+        { // Black Cuillin + other high Skye ground: dark gabbro and lighter scree, no grass above ~400 m
+          const hk = sstep(330, 470, h + 60 * (fbm(e / 250, n / 250, 2, 455) - 0.5)) * (1 - zS(n)) * (1 - zN(n));
+          if (hk > 0) { mix3(tmpC, cGabbro, cScree, sstep(0.45, 0.62, fbm(e / 160, n / 160, 3, 457)) * 0.85); mix3(o, o, tmpC, hk); }
+        }
+        { const d2 = 0.85 + 0.3 * vnoise(e / 70, n / 70, 459); o[0] *= d2; o[1] *= d2; o[2] *= d2; }
         // rock colour per region (the terrain shader tints cliff rock with this colour)
         const rk = 1 - sstep(0.62, 0.8, il), kS = zS(n), kN = zN(n);
         if (rk > 0) { tmpC[0] = cBasalt[0] * kS + cGabbro[0] * (1 - kS - kN) + cRed[0] * kN; tmpC[1] = cBasalt[1] * kS + cGabbro[1] * (1 - kS - kN) + cRed[1] * kN; tmpC[2] = cBasalt[2] * kS + cGabbro[2] * (1 - kS - kN) + cRed[2] * kN;
@@ -3884,7 +3897,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         { e: coastC(-34000) + 5000, n: -34000, r: 380, count: 22, style: 'irish', seed: 505, name: 'Bushmills' }],
       roads: function (ctx) {
         const nodes = [ctx.bases[0].gateOut, harbor, [coastC(-9000) + 6000, -9000], [coastC(14000) + 9000, 14000], [coastC(32500) + 2400, 32500], ctx.bases[1].gateOut, [coastC(-34000) + 5000, -34000]];
-        return { nodes: nodes, links: [[0, 2, 'hwy'], [2, 1, 'road'], [0, 3, 'hwy'], [3, 4, 'road'], [4, 5, 'road'], [1, 6, 'road']], bridgeK: 0 };
+        return { nodes: nodes, links: [[0, 2, 'hwy'], [2, 1, 'road'], [0, 3, 'hwy'], [3, 4, 'road'], [4, 5, 'road'], [1, 6, 'road']], bridgeK: 0, block: (e, n) => Math.hypot(e - coastC(8500) - 12600, n - 8500) < 5300 };
       },
       traffic: 140,
       veg: [
@@ -4062,7 +4075,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
             views: (function () { const T5 = TUN[5], hy = HOY, cu = coastC(4000) + 12000, fl = falls[0], fc = falls[3];
               return { overview: [-30000, -30000, 1800, coastC(0), 0, 200], causeway: causeway ? [causeway[0] - 700, causeway[1] - 500, 120, causeway[0], causeway[1], 0] : null,
                 oldman: [hy.e - 1300, hy.n - 500, 120, hy.e, hy.n, 90], kilda: [-44000, 30000, 300, -35500, 37000, 150], fingal: [T5.ox - T5.ux * 600, T5.on - T5.uy * 600, 20, T5.ox, T5.on, 15],
-                cuillin: [cu - 9000, 1000, 700, cu, 5000, 700], kiltrock: [fl.e - 900, fl.n - 600, 120, fl.e, fl.n, 60], coruisk: [fc.e - 2500, fc.n - 1500, 300, fc.e, fc.n, 100], donan: donan ? [donan[0] - 500, donan[1] - 600, 90, donan[0], donan[1], 10] : null,
+                cuillin: [coastC(8500) + 7000, 7300, 350, coastC(8500) + 12600, 8500, 750], cuillin2: [coastC(8500) + 14500, 2500, 900, coastC(8500) + 12600, 8800, 700], kiltrock: [fl.e - 900, fl.n - 600, 120, fl.e, fl.n, 60], coruisk: [fc.e - 2500, fc.n - 1500, 300, fc.e, fc.n, 100], donan: donan ? [donan[0] - 500, donan[1] - 600, 90, donan[0], donan[1], 10] : null,
                 cave_in: i1.concat(i2), arch: a1.concat(a2) }; })() }
         };
       }
@@ -4682,7 +4695,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     const cJ1 = lin(0x2a4d20), cJ2 = lin(0x426a2a), cPaddy = lin(0x7f9a3e), cSand = lin(0xcfc3a0), cSea = lin(0x6a7a62), cLime = lin(0x9f9886);
     const def = {
       name: 'Ha Long Bay', region: 'Quang Ninh, Vietnam', N: 400,
-      sky: { sunAz: 215, sunEl: 26, fog: 0xc5d0cc, fogD: 0.0000135, hfogA: 0.000045, hfogB: 1 / 380, zenith: [0.07, 0.13, 0.3], glow: [1.0, 0.85, 0.6], glowW: 0.3, sunCol: [1.0, 0.92, 0.78], disk: 24,
+      sky: { sunAz: 215, sunEl: 26, fog: 0xc5d0cc, fogD: 0.0000112, hfogA: 0.00002, hfogB: 1 / 380, zenith: [0.07, 0.13, 0.3], glow: [1.0, 0.85, 0.6], glowW: 0.3, sunCol: [1.0, 0.92, 0.78], disk: 24,
         sunHex: 0xfff0d4, sunI: 2.3, hemiSky: 0xbfd2dc, hemiGround: 0x4a5a3a, hemiI: 0.62, white: 0xe2e8e6, envGround: [0.08, 0.12, 0.08] },
       ground: { rockOn: 1, rock1: 0x7a7466, rock2: 0xb3ab98, rockA: 0.38, rockB: 0.58, sandH: 3, sand: 0xd8cca8, faceN: 1 },
       water: { color: 0x0c3530, shallow: 0x23705c, foam: 0.3, shallowK: 0.45, roughness: 0.14, normalScale: 0.3 },
@@ -4708,7 +4721,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       },
       traffic: 110,
       veg: [
-        { kind: 'jungle', per: 560, farThin: 3, scale: [0.7, 1.4], cap: 9000, test: (e, n, h, sl) => h > 4 && sl < 1.4 ? 0.9 : 0 },
+        { kind: 'jungle', per: 420, farThin: 3, scale: [0.7, 1.4], cap: 9000, test: (e, n, h, sl) => h > 4 && sl < 1.4 ? 0.9 : 0 },
         { kind: 'palm', per: 90, farThin: 2, scale: [0.8, 1.2], cap: 2500, test: (e, n, h, sl) => h > 1 && h < 25 && sl < 0.4 ? 0.7 : 0 },
         { kind: 'bush', per: 200, scale: [0.6, 1.3], cap: 3000, shadow: false, test: (e, n, h, sl) => h > 3 && sl > 0.5 && sl < 1.6 ? 0.6 : 0 }],
       clouds: { seed: 951, cumulus: 45, cuBase: [900, 1400], cuSize: 1.0, lit: [1.1, 1.08, 1.02], shadow: [0.5, 0.55, 0.58], opacity: 0.85,
@@ -4719,7 +4732,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     def.extras = function (ctx) {
       const sampleH = ctx.sampleH, F = [], CELL = 4000, cells = new Map();
       const cellOf = (e, n) => { const k = Math.floor(e / CELL) + ',' + Math.floor(n / CELL); let c = cells.get(k); if (!c) cells.set(k, c = { hi: new Builder(), lo: new Builder(), e: (Math.floor(e / CELL) + 0.5) * CELL, n: (Math.floor(n / CELL) + 0.5) * CELL }); return c; };
-      for (const T of TW) { const c = cellOf(T[0], T[1]); buildKarst(c.hi, c.lo, F, T[0], T[1], T[2], T[3], T[4] % 997 + 1); }
+      for (const T of TW) { const c = cellOf(T[0], T[1]); buildKarst(c.hi, c.lo, F, T[0], T[1], T[2], T[3], T[4] % 997 + 1, null, { angNoise: 0.4, crown: 1.6, K: T[2] > 120 ? 14 : 10, maxRings: 10 }); }
       // rock bridges over the lagoon entrances
       const rb = new Builder(), cR = lin(0x9a9384), cG = lin(0x2f5a24);
       const arches = ARCHS.map((S) => Object.assign({ name: S.name, lagoon: S.lagoon }, buildArch(rb, F, S, cR, cG)));
@@ -4767,7 +4780,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       return {
         solids: makeSolidsGrid(F, 500), seaLanes: lanes,
         update: function (dt, cam) {
-          const ce = cam.position.x, cn = -cam.position.z, hiR = cam.position.y > 2500 ? 0 : 3000;
+          const ce = cam.position.x, cn = -cam.position.z, hiR = cam.position.y > 2500 ? 0 : 2500;
           for (const m of meshes) { const d = Math.max(Math.abs(m.e - ce), Math.abs(m.n - cn)) - CELL / 2; const near = d < (m.near ? hiR + 400 : hiR); if (near !== m.near) { m.near = near; m.hi.visible = near; } }
         },
         debug: { towers: TW.length, cells: meshes.length, junks: nj, arches: arches.map((a) => ({ name: a.name, e: Math.round(a.e), n: Math.round(a.n), under: Math.round(a.under) })),
@@ -4895,14 +4908,14 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       { e: 13000, n: 15200, r: 420, count: 40, style: 'alpine', church: true, harbor: true, seed: 1028, name: 'Brienz' },
       { e: 8000, n: -30900, r: 650, count: 70, style: 'alpine', church: true, seed: 1029, name: 'Sierre' },
       { e: -14000, n: -29400, r: 600, count: 60, style: 'alpine', church: true, seed: 1030, name: 'Martigny' }];
-    const cMeadow = lin(0x5d7a32), cMeadow2 = lin(0x7a8a3e), cForest = lin(0x2c4428), cAlp = lin(0x8a8a5a), cScree = lin(0x8a857c), cLakeBed = lin(0x6a6a5a), cIceU = lin(0xc8d4dc);
+    const cMeadow = lin(0x3f5a22), cMeadow2 = lin(0x5a6a2e), cForest = lin(0x1f3320), cAlp = lin(0x6e6e4c), cScree = lin(0x77736b), cLakeBed = lin(0x6a6a5a), cIceU = lin(0xc8d4dc);
     const def = {
-      name: 'Swiss Alps', region: 'Bernese Oberland, Switzerland', N: 400, noWater: true, lodK: 0.04,
+      name: 'Swiss Alps', region: 'Bernese Oberland, Switzerland', N: 400, noWater: true, lodK: 0.07,
       sky: { sunAz: 200, sunEl: 34, fog: 0xbcd0e2, fogD: 0.0000072, hfogA: 0.000008, hfogB: 1 / 1500, zenith: [0.02, 0.09, 0.36], glow: [0.95, 0.85, 0.7], glowW: 0.18, sunCol: [1.0, 0.95, 0.88], disk: 32,
         sunHex: 0xfff4e6, sunI: 2.8, hemiSky: 0xadc8e8, hemiGround: 0x5a6a48, hemiI: 0.5, white: 0xeef2f6, envGround: [0.1, 0.12, 0.09] },
-      ground: { rockOn: 1, rock1: 0x55524c, rock2: 0x9a958a, rockA: 0.36, rockB: 0.56, snowH: 2750, snowF: 160, snow: 0xf4f7fa, snowSlope: 0.6, faceN: 0.7, ice: 0xb6cad8 },
+      ground: { rockOn: 1, rock1: 0x403d39, rock2: 0x86827a, rockA: 0.3, rockB: 0.48, snowH: 2750, snowF: 160, snow: 0xf4f7fa, snowSlope: 0.6, faceN: 0.7, ice: 0xb6cad8 },
       bases: [BASE, EBASE], raw: raw, aux: () => lastIce,
-      levels: [{ tile: 1920, cell: 48, max: 230, dilate: 40, score: (e0, n0, e1, n1, g) => {
+      levels: [{ tile: 1920, cell: 48, max: 120, dilate: 40, score: (e0, n0, e1, n1, g) => {
         let lo = 1e9, hi = -1e9;
         for (let i = 0; i <= 4; i++) for (let j = 0; j <= 4; j++) { const h = triH(g.H, g.NV, (e0 + i * 480 + 48000) / g.cell, (48000 - (n0 + j * 480)) / g.cell); lo = Math.min(lo, h); hi = Math.max(hi, h); }
         const e = (e0 + e1) / 2, n = (n0 + n1) / 2;
@@ -4914,7 +4927,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         mix3(o, cMeadow, cMeadow2, sstep(0.4, 0.7, fbm(e / 700, n / 700, 3, 1041)));
         const forest = sstep(0.45, 0.6, fbm(e / 1100 + 3, n / 1100, 3, 1043)) * sstep(650, 900, h) * (1 - sstep(1700, 1950, h)) * sstep(0.55, 0.8, il);
         mix3(o, o, cForest, forest);
-        mix3(o, o, cAlp, sstep(1900, 2300, h) * 0.8);
+        mix3(o, o, cAlp, sstep(1700, 2100, h) * 0.8);
+        { const d2 = 0.82 + 0.36 * vnoise(e / 90, n / 90, 1047); o[0] *= d2; o[1] *= d2; o[2] *= d2; }
         mix3(o, o, cScree, sstep(2250, 2600, h));
         if (h < LAKE - 2) mix3(o, o, cLakeBed, 1);
         if (aux > 0) mix3(o, o, cIceU, aux * 0.4);
@@ -4928,7 +4942,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       },
       traffic: 120,
       veg: [
-        { kind: 'spruce', per: 620, farThin: 3, scale: [0.8, 1.4], cap: 9000, test: (e, n, h, sl) => h > 620 && h < 1950 && sl < 1.1 ? (0.1 + 0.9 * forestK(e, n, 3, 0.65)) * (1 - sstep(1750, 1950, h)) : 0 },
+        { kind: 'spruce', per: 450, farThin: 3, scale: [0.8, 1.4], cap: 9000, test: (e, n, h, sl) => h > 620 && h < 1950 && sl < 1.1 ? (0.1 + 0.9 * forestK(e, n, 3, 0.65)) * (1 - sstep(1750, 1950, h)) : 0 },
         { kind: 'broad', per: 60, scale: [0.6, 1.0], cap: 1500, test: (e, n, h, sl) => h > 500 && h < 1100 && sl < 0.35 ? 0.4 : 0 },
         { kind: 'boulder', per: 50, scale: [0.6, 2.4], cap: 2000, shadow: false, test: (e, n, h, sl) => h > 1800 && sl < 1.0 ? 0.6 : 0 }],
       clouds: { seed: 1051, cumulus: 40, cuBase: [3300, 3900], cuSize: 1.2, lit: [1.18, 1.15, 1.12], shadow: [0.46, 0.52, 0.62], opacity: 0.92, cling: true,
@@ -4983,7 +4997,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       return {
         solids: makeSolids(F),
         debug: { falls: falls.length, stations: stations.map((s) => s.map(Math.round)),
-          views: { valley: [lv[0], lv[1], 1000, lv2[0], lv2[1], 1100], eiger: [6000, 9500, 1900, 8000, -4600, 2600], jungfrau: [-4000, -1000, 3300, 6500, -9500, 3300], aletsch: [3000, -30000, 2500, 7000, -16000, 2200],
+          views: { valley: [lv[0], lv[1], 1000, lv2[0], lv2[1], 1100], eiger: [9500, 3200, 2000, 8000, -4600, 2900], jungfrau: [2000, -3000, 2700, 5800, -9800, 3400], aletsch: [3000, -30000, 2500, 7000, -16000, 2200],
             lakes: [-6000, 20000, 1500, 0, 15000, 600], murren: [mur[0] + 2000, mur[1] - 2500, 1900, mur[0], mur[1], 1600], overview: [-20000, -30000, 4500, 5000, -5000, 2200] } }
       };
     };
@@ -5091,12 +5105,12 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     const BASE = { name: 'Romsdal Air Station', e: -33600, n: -17200, hdg: 2, len: 2900, w: 45, seed: 41, blend: 600, minH: 8, q: 0.5 };
     const EBASE = { name: 'Lesja airfield', e: BASIN[0], n: BASIN[1], hdg: 40, len: 1900, w: 40, seed: 42, blend: 450, mini: true, enemy: true, minH: 300, q: 0.4 };
     const flats = TOWNS.map((t) => ({ e: t.e, n: t.n, hdg: 0, x0: -t.r * 0.6, x1: t.r * 0.6, z0: -t.r * 0.6, z1: t.r * 0.6, blend: t.r * 0.6, minH: 4, q: 0.3 }));
-    const cLow = lin(0x4a4a3c), cLowSnow = lin(0xd3d9df), cMid = lin(0x6a6a62), cSea = lin(0x2a3a3a), cShore = lin(0x5a564c), cSnowUnder = lin(0xa9b2ba);
+    const cHeath = lin(0x3b3a2c), cGrass = lin(0x55573a), cField = lin(0x6b6a45), cLow = lin(0x4a4a3c), cLowSnow = lin(0xd3d9df), cMid = lin(0x6a6a62), cSea = lin(0x2a3a3a), cShore = lin(0x5a564c), cSnowUnder = lin(0xa9b2ba);
     const def = {
       name: 'Norway Winter Fjords', region: 'Møre og Romsdal / Sogn, Norway', N: 400, lodK: 0.05,
       sky: { sunAz: 205, sunEl: 7, fog: 0xaab6c2, fogD: 0.0000115, hfogA: 0.00003, hfogB: 1 / 520, zenith: [0.10, 0.14, 0.22], glow: [0.9, 0.55, 0.35], glowW: 0.3, sunCol: [1.0, 0.8, 0.6], disk: 18,
         sunHex: 0xffd9b0, sunI: 1.6, hemiSky: 0xb9c8da, hemiGround: 0x5a6068, hemiI: 0.55, white: 0xdfe4ea, envGround: [0.18, 0.2, 0.23] },
-      ground: { rockOn: 1, rock1: 0x34373b, rock2: 0x63666a, rockA: 0.22, rockB: 0.42, snowH: 160, snowF: 50, snow: 0xeef3f8, snowSlope: 0.64, faceN: 0.12, ice: 0xa7bfcf },
+      ground: { rockOn: 1, rock1: 0x27292c, rock2: 0x55585b, rockA: 0.2, rockB: 0.4, snowH: 1000, snowF: 160, snow: 0xeef3f8, snowSlope: 0.62, faceN: 0.1, bump: 1.0, ice: 0xa7bfcf },
       water: { color: 0x0a1a22, shallow: 0x1f3a40, foam: 0.35, shallowK: 0.35, roughness: 0.18 },
       bases: [BASE, EBASE], flats: flats,
       raw: raw,
@@ -5106,9 +5120,13 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         { tile: 384, cell: 32, select: (e0, n0, e1, n1) => { const e = (e0 + e1) / 2, n = (n0 + n1) / 2; const d = vIdx.query(e, n); return SQ.p === 0 && SQ.s > 4000 && SQ.s < 9500 && d > 300 && d < 800; } }],
       color: function (e, n, h, il, curv, o, cell, k, aux) {
         if (h < 0) { mix3(o, cSea, cShore, sstep(-25, -1, h)); return 0; }
-        mix3(o, cLow, cLowSnow, 0.35 + 0.5 * sstep(0.4, 0.6, fbm(e / 500, n / 500, 3, 261)));
-        mix3(o, o, cMid, sstep(250, 600, h) * 0.5);
-        mix3(o, o, cSnowUnder, sstep(700, 1100, h));
+        // low ground: dark heath / bog / pasture with patchy snow; fields near the villages; snow cover thickens with height
+        mix3(o, cHeath, cGrass, sstep(0.4, 0.62, fbm(e / 700, n / 700, 3, 261)));
+        let fieldK = 0; for (const T of TOWNS) { const d = Math.hypot(e - T.e, n - T.n); if (d < T.r * 3) fieldK = Math.max(fieldK, 1 - sstep(T.r * 1.2, T.r * 3, d)); }
+        mix3(o, o, cField, fieldK * (1 - sstep(80, 200, h)) * 0.8);
+        mix3(o, o, cMid, sstep(300, 700, h) * 0.6);
+        mix3(o, o, cLowSnow, 0.15 + 0.35 * sstep(0.55, 0.7, fbm(e / 260, n / 260, 2, 263)) * (1 - fieldK * 0.6) + 0.5 * sstep(500, 1000, h));
+        mix3(o, o, cSnowUnder, sstep(900, 1300, h));
         mix3(o, o, cShore, (1 - sstep(1, 5, h)) * 0.8);
         return aux || 0;
       },
@@ -5138,10 +5156,11 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       },
       traffic: 140,
       veg: [
-        { kind: 'snowpine', per: 420, farThin: 2, scale: [0.7, 1.25], cap: 9000, test: (e, n, h, sl) => h > 4 && h < 480 && sl < 0.8 ? forestK(e, n, 3, 0.75) * (1 - sstep(330, 480, h)) : 0 },
-        { kind: 'spruce', per: 260, farThin: 2, scale: [0.7, 1.1], cap: 6000, test: (e, n, h, sl) => h > 4 && h < 300 && sl < 0.6 ? forestK(e + 900, n, 5, 0.5) : 0 },
-        { kind: 'birch', per: 120, farThin: 3, scale: [0.7, 1.1], cap: 3000, test: (e, n, h, sl) => h > 3 && h < 250 && sl < 0.4 ? 0.5 * (1 - forestK(e, n, 3, 0.75)) : 0 },
-        { kind: 'rock', per: 40, scale: [0.6, 2.2], cap: 2000, shadow: false, test: (e, n, h, sl) => h > 2 && sl < 1.2 ? 0.5 : 0 }],
+        { kind: 'snowpine', per: 300, farThin: 2, scale: [0.7, 1.25], cap: 7000, test: (e, n, h, sl) => h > 250 && h < 650 && sl < 0.9 ? forestK(e, n, 3, 0.7) * (1 - sstep(500, 650, h)) : 0 },
+        { kind: 'pine', per: 300, farThin: 2, scale: [0.7, 1.2], cap: 7000, test: (e, n, h, sl) => h > 4 && h < 320 && sl < 0.9 ? forestK(e + 2000, n, 7, 0.7) : 0 },
+        { kind: 'spruce', per: 300, farThin: 2, scale: [0.7, 1.1], cap: 7000, test: (e, n, h, sl) => h > 4 && h < 450 && sl < 0.8 ? forestK(e + 900, n, 5, 0.6) : 0 },
+        { kind: 'birch', per: 160, farThin: 3, scale: [0.7, 1.1], cap: 4000, test: (e, n, h, sl) => h > 3 && h < 400 && sl < 0.7 ? 0.6 * forestK(e - 700, n + 300, 9, 0.45) : 0 },
+        { kind: 'boulder', per: 160, scale: [0.6, 2.6], cap: 5000, shadow: false, test: (e, n, h, sl) => h > 2 && sl > 0.25 && sl < 0.8 ? 0.7 : 0.05 }],
       clouds: {
         seed: 811, cumulus: 40, cuBase: [2400, 3000], cuSize: 1.5, cling: true, lit: [0.92, 0.9, 0.9], shadow: [0.42, 0.45, 0.5], opacity: 0.94,
         banks: [[-12000, 1000, 9000, 5000, 600, 1150], [12000, -20000, 9000, 5000, 600, 1500], [26000, 10000, 10000, 6000, 700, 1400], [-2000, 30000, 9000, 5000, 600, 1250],
@@ -5189,11 +5208,12 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   // Paine Grande, the Valle del Francés cirque; Grey Glacier calving into Lago Grey from the ice field in the west;
   // golden steppe in the east (home: Cerro Castillo). North: the Fitz Roy group with the needle of Cerro Torre (enemy: El Chaltén).
   MAPDEFS.patagonia = function () {
-    const PK = [{ e: -4600, n: 600, H: 2884, R: 3300, faces: 4, rot: 0.3, steep: 1.2, base: 900, name: 'Paine Grande' },
-      { e: -700, n: -1700, H: 2600, R: 2400, faces: 3, rot: 1.2, base: 900, name: 'Cuernos del Paine' }, { e: 2700, n: -900, H: 2640, R: 2600, faces: 3, rot: 0.5, base: 900, name: 'Almirante Nieto' },
-      { e: 4400, n: 2900, H: 1950, R: 2600, faces: 4, rot: 0.2, base: 700, rough: 60, name: 'Torres base' }, { e: 300, n: 3500, H: 2500, R: 2600, faces: 3, rot: 0.9, base: 900, name: 'Paine Chico' },
-      { e: 1500, n: 30000, H: 2200, R: 4200, faces: 4, rot: 0.6, base: 900, rough: 80, name: 'Fitz Roy base' }, { e: -3400, n: 29400, H: 1900, R: 3000, faces: 3, rot: 0.1, base: 900, rough: 80, name: 'Cerro Torre base' },
-      { e: -9000, n: 31000, H: 2600, R: 3500, faces: 3, rot: 1.0, base: 1300, name: 'Cordón Adela' }];
+    const PK = [{ e: -4600, n: 600, H: 2884, R: 2100, faces: 4, rot: 0.3, steep: 1.2, base: 250, name: 'Paine Grande' },
+      { e: -700, n: -1700, H: 2600, R: 1700, faces: 3, rot: 1.2, base: 250, name: 'Cuernos del Paine' }, { e: 2700, n: -900, H: 2640, R: 1800, faces: 3, rot: 0.5, base: 300, name: 'Almirante Nieto' },
+      { e: 4400, n: 2900, H: 2200, R: 2100, faces: 4, rot: 0.2, base: 400, rough: 80, name: 'Torres base' }, { e: 300, n: 3500, H: 2500, R: 1900, faces: 3, rot: 0.9, base: 350, name: 'Paine Chico' },
+      { e: 1500, n: 30000, H: 2500, R: 2700, faces: 4, rot: 0.6, base: 500, rough: 90, name: 'Fitz Roy base' }, { e: -3400, n: 29400, H: 2200, R: 2100, faces: 3, rot: 0.1, base: 500, rough: 90, name: 'Cerro Torre base' },
+      { e: -9000, n: 31000, H: 2600, R: 2600, faces: 3, rot: 1.0, base: 900, name: 'Cordón Adela' }];
+    for (const P of PK) { P.facet = 0.6; P.warp = 0.2; P.pw = 0.8; }
     // lakes: [e, n, rx, ry, angle, level, colour, name]
     const LAKES = [[-3600, -6600, 2600, 1500, 0.2, 70, 0x2fb2b6, 'Lago Pehoé'], [4300, -5600, 5200, 1500, 0.08, 70, 0x37a5ae, 'Lago Nordenskjöld'], [-9800, -2600, 1500, 7200, 1.48, 70, 0x8fb2bb, 'Lago Grey'],
       [9500, -11000, 3500, 2200, -0.3, 70, 0x2f9faa, 'Lago Sarmiento'], [-500, -10400, 2600, 1500, 0.4, 70, 0x3aa2a8, 'Lago del Toro'], [18000, 25500, 9000, 3200, 0.15, 250, 0x5aa0b5, 'Lago Viedma']];
@@ -5237,19 +5257,19 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       }
       return h;
     }
-    const BASE = { name: 'Cerro Castillo Air Station', e: 21000, n: -14500, hdg: 150, len: 2600, w: 45, seed: 111, blend: 650, minH: 150, q: 0.45 };
+    const BASE = { name: 'Cerro Castillo Air Station', e: 9000, n: -16500, hdg: 120, len: 2600, w: 45, seed: 111, blend: 650, minH: 150, q: 0.45 };
     const EBASE = { name: 'El Chaltén airstrip', e: 9800, n: 20800, hdg: 35, len: 1800, w: 40, seed: 112, blend: 500, mini: true, enemy: true, minH: 280, q: 0.4 };
-    const TOWNS = [{ e: 17500, n: -16000, r: 380, count: 26, style: 'desert', church: true, seed: 1131, name: 'Cerro Castillo' }, { e: 7000, n: 26500, r: 450, count: 40, style: 'nordic', church: true, seed: 1132, name: 'El Chaltén' },
+    const TOWNS = [{ e: 13500, n: -17500, r: 380, count: 26, style: 'desert', church: true, seed: 1131, name: 'Cerro Castillo' }, { e: 7000, n: 26500, r: 450, count: 40, style: 'nordic', church: true, seed: 1132, name: 'El Chaltén' },
       { e: 1300, n: -8500, r: 200, count: 10, style: 'nordic', seed: 1133, name: 'Pudeto' }, { e: 14000, n: -6000, r: 260, count: 14, style: 'desert', seed: 1134, name: 'Estancia Cerro Guido' }];
-    const cSteppe = lin(0xae9658), cSteppe2 = lin(0x8d8a4e), cLenga = lin(0x3c5426), cRockG = lin(0x6a665e), cIceU = lin(0xc4d6e0), cBed = lin(0x7a7a6a), cCap = lin(0x2e2824);
+    const cSteppe = lin(0x9a8550), cSteppe2 = lin(0x7a7a44), cLenga = lin(0x3c5426), cRockG = lin(0x6a665e), cIceU = lin(0xc4d6e0), cBed = lin(0x7a7a6a), cCap = lin(0x2e2824);
     const def = {
-      name: 'Patagonia', region: 'Torres del Paine & Fitz Roy, Chile/Argentina', N: 400, noWater: true, lodK: 0.04,
-      sky: { sunAz: 300, sunEl: 24, fog: 0xc0cfdc, fogD: 0.0000068, hfogA: 0.000007, hfogB: 1 / 1200, zenith: [0.03, 0.1, 0.34], glow: [1.0, 0.82, 0.6], glowW: 0.24, sunCol: [1.0, 0.92, 0.8], disk: 30,
+      name: 'Patagonia', region: 'Torres del Paine & Fitz Roy, Chile/Argentina', N: 400, noWater: true, lodK: 0.068,
+      sky: { sunAz: 115, sunEl: 21, fog: 0xc0cfdc, fogD: 0.0000068, hfogA: 0.000007, hfogB: 1 / 1200, zenith: [0.03, 0.1, 0.34], glow: [1.0, 0.82, 0.6], glowW: 0.24, sunCol: [1.0, 0.92, 0.8], disk: 30,
         sunHex: 0xfff0dc, sunI: 2.7, hemiSky: 0xb0c8e2, hemiGround: 0x6a6040, hemiI: 0.5, white: 0xeef2f6, envGround: [0.13, 0.12, 0.08] },
       ground: { rockOn: 1, rock1: 0x4e4a46, rock2: 0x9b948a, rockA: 0.35, rockB: 0.55, snowH: 1550, snowF: 140, snow: 0xf3f6fa, snowSlope: 0.58, faceN: 0.7, ice: 0xa9c4d4 },
       bases: [BASE, EBASE], raw: raw, aux: () => lastIce,
       flats: TOWNS.map((t) => ({ e: t.e, n: t.n, hdg: 0, x0: -t.r * 0.8, x1: t.r * 0.8, z0: -t.r * 0.8, z1: t.r * 0.8, blend: 220, minH: 60, q: 0.4 })),
-      levels: [{ tile: 1920, cell: 48, max: 220, dilate: 40, score: (e0, n0, e1, n1, g) => {
+      levels: [{ tile: 1920, cell: 48, max: 130, dilate: 40, score: (e0, n0, e1, n1, g) => {
         let lo = 1e9, hi = -1e9;
         for (let i = 0; i <= 4; i++) for (let j = 0; j <= 4; j++) { const h = triH(g.H, g.NV, (e0 + i * 480 + 48000) / g.cell, (48000 - (n0 + j * 480)) / g.cell); lo = Math.min(lo, h); hi = Math.max(hi, h); }
         const e = (e0 + e1) / 2, n = (n0 + n1) / 2; if (Math.hypot(e - BASE.e, n - BASE.n) < 2500) return 2e5;
@@ -5265,7 +5285,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       },
       zones: [], towns: TOWNS,
       roads: function (ctx) {
-        const nodes = [ctx.bases[0].gateOut, [17500, -16000], [14000, -6000], [1300, -8500], ctx.bases[1].gateOut, [7000, 26500]];
+        const nodes = [ctx.bases[0].gateOut, [13500, -17500], [14000, -6000], [1300, -8500], ctx.bases[1].gateOut, [7000, 26500]];
         return { nodes: nodes, links: [[0, 1, 'road'], [1, 2, 'road'], [2, 3, 'road'], [4, 5, 'road']], bridgeK: 0, maxGrade: 0.12 };
       },
       traffic: 40,
@@ -5279,10 +5299,11 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     };
     def.extras = function (ctx) {
       const sampleH = ctx.sampleH, F = [];
-      for (const L of LAKES) { const r = Math.max(L[2], L[3]) * 1.4 + 600; buildLake(ctx, sampleH, [L[0] - r, L[0] + r, L[1] - r, L[1] + r], L[5], L[6], 100); }
+      { const done = new Set(); for (const L of LAKES) { const r = Math.max(L[2], L[3]) * 1.4 + 600, S = 100; const lb = [Math.floor((L[0] - r) / S) * S, Math.ceil((L[0] + r) / S) * S, Math.floor((L[1] - r) / S) * S, Math.ceil((L[1] + r) / S) * S];
+        const keep = (e, n) => { const k = e + ',' + n; if (done.has(k)) return false; done.add(k); return true; }; buildLake(ctx, sampleH, lb, L[5], L[6], S, keep); } }
       // granite spires (meshes + solids): the Torres, Fitz Roy, Cerro Torre group
       const hi = new Builder();
-      const GR = { lime: lin(0xc8b9a4), dark: lin(0x6f655a), wet: lin(0x4a4440), green: lin(0xf2f5f8), green2: lin(0xdfe6ec) };
+      const GR = { lime: lin(0xb0a28e), dark: lin(0x52483e), wet: lin(0x4a4440), green: lin(0xf2f5f8), green2: lin(0xdfe6ec) };
       const SP = [[4050, 2550, 210, 2850, 0.42, GR, 'Torre Sur'], [4420, 2880, 190, 2800, 0.45, GR, 'Torre Central'], [4760, 3230, 170, 2700, 0.5, GR, 'Torre Norte'],
         [1500, 30000, 560, 3405, 0.55, GR, 'Fitz Roy'], [-3400, 29400, 190, 3128, 0.72, GR, 'Cerro Torre'], [-3000, 30100, 140, 2850, 0.7, GR, 'Torre Egger'], [-2650, 30700, 130, 2720, 0.68, GR, 'Standhardt'],
         [3100, 29500, 200, 3000, 0.6, GR, 'Aguja Poincenot'], [-200, 30700, 180, 2850, 0.62, GR, 'Aguja Mermoz'], [5800, 1900, 160, 2350, 0.55, GR, 'Fortaleza']];
@@ -5307,7 +5328,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       return {
         solids: makeSolids(F),
         debug: { spires: spires,
-          views: { torres: [9000, -3000, 1500, 4400, 2900, 2300], paine: [6000, -12000, 900, -1000, 0, 1800], frances: [-2500, -7500, 500, -2200, 0, 1100], grey: [-6000, -9000, 600, -11000, 6000, 600],
+          views: { torres: [8500, -3500, 1300, 4400, 2900, 2200], lakes: [6000, -12000, 400, -1000, -1000, 1200], paine: [6000, -12000, 900, -1000, 0, 1800], frances: [-2500, -7500, 500, -2200, 0, 1100], grey: [-6000, -9000, 600, -11000, 6000, 600],
             cerrotorre: [3000, 21000, 1600, -3400, 29400, 2500], fitzroy: [12000, 24000, 1200, 1500, 30000, 2500], overview: [26000, -26000, 4000, 0, 2000, 1200] } }
       };
     };
@@ -5361,13 +5382,13 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     const TOWNS = [{ e: -36500, n: -8700, r: 300, count: 26, style: 'desert', seed: 1231, name: 'Askole' }, { e: -45000, n: -12600, r: 260, count: 18, style: 'desert', seed: 1232, name: 'Hoto' }];
     const cGrav = lin(0x8a7c6a), cBrown = lin(0x6e5a48), cIceU = lin(0xd2dde4), cMor = lin(0x4a443e), cOasis = lin(0x5a6a34);
     const def = {
-      name: 'Karakoram', region: 'Baltoro glacier, Pakistan (heights scaled)', N: 400, noWater: true, lodK: 0.04,
+      name: 'Karakoram', region: 'Baltoro glacier, Pakistan (heights scaled)', N: 400, noWater: true, lodK: 0.07,
       sky: { sunAz: 160, sunEl: 32, fog: 0xb8c8de, fogD: 0.0000055, hfogA: 0.000004, hfogB: 1 / 2000, zenith: [0.01, 0.05, 0.3], glow: [0.95, 0.88, 0.75], glowW: 0.16, sunCol: [1.0, 0.96, 0.9], disk: 34,
         sunHex: 0xfff6ea, sunI: 3.0, hemiSky: 0xa8c0e8, hemiGround: 0x6a5e50, hemiI: 0.45, white: 0xf0f4f8, envGround: [0.14, 0.12, 0.1] },
       ground: { rockOn: 1, rock1: 0x4e4238, rock2: 0x9a8670, rockA: 0.33, rockB: 0.52, snowH: 2700, snowF: 180, snow: 0xf6f8fb, snowSlope: 0.56, faceN: 0.7, ice: 0xc6d6e2 },
       bases: [BASE, EBASE], raw: raw, aux: () => lastIce,
       flats: TOWNS.map((t) => ({ e: t.e, n: t.n, hdg: 0, x0: -t.r * 0.8, x1: t.r * 0.8, z0: -t.r * 0.8, z1: t.r * 0.8, blend: 220, minH: 200, q: 0.4 })),
-      levels: [{ tile: 1920, cell: 48, max: 240, dilate: 40, score: (e0, n0, e1, n1, g) => {
+      levels: [{ tile: 1920, cell: 48, max: 130, dilate: 40, score: (e0, n0, e1, n1, g) => {
         let lo = 1e9, hi = -1e9;
         for (let i = 0; i <= 4; i++) for (let j = 0; j <= 4; j++) { const h = triH(g.H, g.NV, (e0 + i * 480 + 48000) / g.cell, (48000 - (n0 + j * 480)) / g.cell); lo = Math.min(lo, h); hi = Math.max(hi, h); }
         const e = (e0 + e1) / 2, n = (n0 + n1) / 2; if (Math.hypot(e - BASE.e, n - BASE.n) < 2500) return 2e5;
@@ -5881,7 +5902,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   }
   // karst tower (Ha Long style): limestone column with fluted, streaked walls, a sea notch at the waterline and a jungle cap.
   // hi/lo: Builders for the near and far LOD meshes (lo may be null). Adds a solid. Returns top height.
-  const KARST_C = { lime: lin(0x9a9486), dark: lin(0x46423a), wet: lin(0x34322d), green: lin(0x24461a), green2: lin(0x3a6024), vines: 1 };
+  const KARST_C = { lime: lin(0x858074), dark: lin(0x3c3a33), wet: lin(0x2e2c28), green: lin(0x22421a), green2: lin(0x365a22), vines: 1 };
   function karstRadius(R0, H, y, tp, nt) { const t = Math.max(0, y) / H; return R0 * (1 - tp * Math.pow(t, tp > 0.3 ? 1.3 : 2)) * (1 - nt * Math.exp(-Math.pow((y - 2) / 5, 2))); }
   // opts: {y0 (base height), taper (0.22 karst .. 0.75 needle), notch (sea notch depth), dome (cap height factor), bury}
   function buildKarst(hi, lo, F, e, n, R0, H, seed, cols, opts) {
@@ -5894,10 +5915,12 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     if (nt > 0) prof.splice(1, 0, [kr(1), 1], [kr(4), 4]);
     for (let j = 1; j <= 4; j++) { const th = j / 4 * Math.PI / 2; prof.push([rTop * Math.cos(th) * (j === 4 ? 0.02 : 1), yW + dome * Math.sin(th)]); }
     const fl = 5 + Math.floor(hash2(seed, 3, 7) * 5);
-    const kf = (cp, sp, y, ph) => 1 + 0.24 * (fbm(cp * 1.5 + seed, sp * 1.5 + y / (R0 * 1.6), 3, 811) - 0.5) + 0.05 * Math.sin(ph * fl + seed + y / 40);
+    const AN = O.angNoise === undefined ? 0.24 : O.angNoise;
+    const kf = (cp, sp, y, ph) => 1 + AN * (fbm(cp * 1.5 + seed, sp * 1.5 + y / (R0 * 1.6), 3, 811) - 0.5) + AN * 0.5 * (vnoise(cp * 3.1 + seed, sp * 3.1, 817) - 0.5) + 0.05 * Math.sin(ph * fl + seed + y / 40);
     const sweep = (b, K, P, flute) => {
       const g = gridGeo(K, P.length - 1, (i, j) => { const ph = i / K * Math.PI * 2, cp = Math.cos(ph), sp = Math.sin(ph), q = P[j], k = flute ? kf(cp, sp, q[1], ph) : 1 + 0.2 * (fbm(cp * 1.5 + seed, sp * 1.5, 2, 811) - 0.5);
-        return [e + cp * q[0] * k, q[1] + Y0, -n + sp * q[0] * k, ph * R0 / 30, q[1] / 30]; });
+        const yy = q[1] > yW - 1 && O.crown ? q[1] + O.crown * dome * (fbm(cp * 2.2 + seed, sp * 2.2, 2, 819) - 0.35) * Math.min(1, (q[1] - yW + dome * 0.3) / dome) : q[1];
+        return [e + cp * q[0] * k, yy + Y0, -n + sp * q[0] * k, ph * R0 / 30, q[1] / 30]; });
       const base = b.nv; b.geo(g, new THREE.Matrix4(), C.lime);
       const Nn = g.attributes.normal;
       for (let i = 0; i < Nn.count; i++) {
@@ -5907,7 +5930,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         if (C.band) mix3(o, o, C.band, sstep(C.bandY - 20, C.bandY + 20, y + Y0 + 30 * (vnoise(x / 60, z / 60, 5) - 0.5)));
         if (nt > 0) mix3(o, o, C.wet, 1 - sstep(1, 7, y));
         let gr = sstep(0.35, 0.65, ny + 0.25 * (vnoise(x / 25, z / 25 + y / 30, seed) - 0.5)) * sstep(8, 30, y);
-        if (C.vines) gr = Math.max(gr, sstep(0.58, 0.7, fbm(Math.atan2(z + n, x - e) * 3 + seed, y / 70, 2, 815)) * sstep(6, 25, y) * 0.9);
+        if (C.vines) gr = Math.max(gr, sstep(0.52, 0.66, fbm(Math.atan2(z + n, x - e) * 3 + seed, y / 70, 2, 815)) * sstep(6, 25, y) * 0.95, sstep(0.55, 0.85, y / (yW + 1)) * 0.85);
         mix3(o, o, vnoise(x / 40, z / 40, 3) > 0.5 ? C.green : C.green2, gr);
         b.c[v * 3] = o[0]; b.c[v * 3 + 1] = o[1]; b.c[v * 3 + 2] = o[2];
       }
@@ -5954,10 +5977,12 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     return (x < 1 ? P.H - (P.H - B) * Math.pow(x, P.pw || 0.9) : B - (x - 1) * 5000) + (P.rough === undefined ? 110 : P.rough) * (ridged(e / 800 + 3, n / 800, 3, 1011) - 0.4) * sstep(0.05, 0.4, x);
   }
   // flat lake water surface (quads where the terrain dips below `level` inside a box), returns the mesh
-  function buildLake(ctx, sampleH, box, level, colHex, step) {
+  function buildLake(ctx, sampleH, box, level, colHex, step, keep) {
     const lb = new Builder(), lc = lin(colHex), S = step || 120;
     for (let n = box[2]; n < box[3]; n += S) for (let e = box[0]; e < box[1]; e += S) {
-      if (sampleH(e + S / 2, n + S / 2) > level + 1 && sampleH(e, n) > level + 1 && sampleH(e + S, n + S) > level + 1 && sampleH(e + S, n) > level + 1 && sampleH(e, n + S) > level + 1) continue;
+      const hc0 = sampleH(e + S / 2, n + S / 2); if (hc0 > level + 120) continue;
+      if (hc0 > level + 1 && sampleH(e, n) > level + 1 && sampleH(e + S, n + S) > level + 1 && sampleH(e + S, n) > level + 1 && sampleH(e, n + S) > level + 1) continue;
+      if (keep && !keep(e, n)) continue;
       const i = lb.vert(e, level, -n, 0, 1, 0, 0, 0, lc[0], lc[1], lc[2]); lb.vert(e + S, level, -n, 0, 1, 0, 1, 0, lc[0], lc[1], lc[2]); lb.vert(e + S, level, -(n + S), 0, 1, 0, 1, 1, lc[0], lc[1], lc[2]); lb.vert(e, level, -(n + S), 0, 1, 0, 0, 1, lc[0], lc[1], lc[2]);
       lb.ix.push(i, i + 1, i + 2, i, i + 2, i + 3);
     }
@@ -16097,7 +16122,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
     // tilt, nose down, sink faster and faster
     d.ang += d.dirSign * d.spd / d.R * dt * Math.max(0, 1 - d.dieT / 8);
     tA.copy(ent.vel).setY(0); if (tA.lengthSq() < 1) fwdOf(ent, tA).setY(0); tA.normalize();
-    d.vy = Math.max(d.vy - 3.2 * dt, -95);
+    d.vy = Math.max(d.vy - 9 * dt, -170);   // falls ~2.8 km in ~20 s (was ~40 s)
     var hs = Math.max(45, d.spd * (1 - d.dieT / 60));
     ent.vel.copy(tA).multiplyScalar(hs); ent.vel.y = d.vy;
     ent.pos.addScaledVector(ent.vel, dt);
@@ -37958,7 +37983,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
     hx.globalAlpha = dimA;
     drawLowerLeft(u, bl, bb);
     keyHintTick(dt, ch);
-    HS.wpL = W - ins.r;
+    HS.wpL = W - ins.r; HS.wpTop = H;
     if (combat.active || ch.missiles < HS.mslMax) drawWeapons(u, ch, br, bb);
     hx.globalAlpha = 1;
 
@@ -39176,7 +39201,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
     if (ga >= 0) text(String(ga), R, y3 + 0.5 * u, 16 * u, ga === 0 ? RED : gk < 0.2 ? AMB : HC, 'right', DISP, '700');
     else text(hot ? 'HOT' : 'RDY', R, y3 + 0.5 * u, 12 * u, hot ? RED : HCdim, 'right', DISP, '700');
     // button hints: full strip on wide screens, glyphs only on narrow ones
-    HS.wpL = R - 188 * u;
+    HS.wpL = R - 188 * u; HS.wpTop = b - (pods ? 112 : 92) * u - (Math.min(wl.length, 6) - 1) * 17 * u - 10 * u;
     if (dev !== 'touch') {
       if (wide) { drawKeyStrip(u, R - 196 * u, y3, dev); if (KH.a > 0.01) HS.wpL = R - 196 * u - 112 * u; }
       else {
@@ -39227,7 +39252,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
       if (H > W) { lo = { cb: ib, gapL: tl, gapR: tr }; if (lo.gapR - lo.gapL < 300) lo = { cb: H - (bb - 80 * u) + 8, gapL: llR, gapR: wpL }; }
       else lo = { cb: ib, gapL: Math.max(tl, llR), gapR: Math.min(tr, wpL) };
     }
-    if (lo.gapR - lo.gapL < 300) lo = { cb: H - (HS.llTop || bb - 80 * u) + 8, gapL: ins.l + 16, gapR: W - ins.r - 16 };
+    if (lo.gapR - lo.gapL < 300) lo = { cb: H - Math.min(HS.llTop || bb - 80 * u, HS.wpTop || H) + 8, gapL: ins.l + 16, gapR: W - ins.r - 16 };
     lo.w = Math.max(200, lo.gapR - lo.gapL - 16); lo.cx = (lo.gapL + lo.gapR) / 2;
     return lo;
   }
@@ -39436,6 +39461,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
     world.sun.position.copy(st.pos).addScaledVector(world.sunDir, 400);
     world.sun.target.position.copy(st.pos); world.sun.target.updateMatrixWorld();
     if (started) warmTick(rdt);
+    if (WJ) warmJob();
     gpuBegin();
     if (hangar3d && hangar3d.update(rdt)) hangar3d.render(rdt);
     else if (post && post.enabled) post.render(dt, postParams(dt));
@@ -39773,7 +39799,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793163191', updShown = false;
+  var BUILD = '1793165955', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
@@ -39898,55 +39924,144 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
     if (Array.isArray(m)) { for (var i = 0; i < m.length; i++) if (m[i] && !props.get(m[i]).currentProgram) { warmList.push(o); return; } }
     else if (m && !props.get(m).currentProgram) warmList.push(o);
   }
-  function needsWarm() { warmList.length = 0; scene.traverse(warmCollect); return warmList.length > 0; }
-  // boot: one hidden copy of every enemy kind (bosses too) and every jet (full + teammate 'low' LOD), then one frame
-  // with every pooled object shown and frustum culling off (debris, wrecks, fx), so the main-pass and the shadow-depth
-  // programs all link before play. Warm copies leave the scene; only their geometry is freed (materials keep the programs).
-  function warmBoot() {
-    // test builds (software GL: each program JITs for ~0.5 s at its first draw) keep the short warm-up, unless ?warm
-    if (window.FLK_DEV && !window.FLK_WARM && !/[?&]warm\b/.test(location.search)) { warmShaders('boot'); return; }
-    var t0 = performance.now(), ri = renderer.info, n0 = ri.programs ? ri.programs.length : 0, nb = 0, i;
-    var g = new T.Group(); g.name = 'shaderWarm';
-    var K = FL.ENEMY_KINDS || {};
+  function needsWarm() {
+    var wm = WJ && WJ.model; if (wm) scene.remove(wm);       // the sliced boot job owns its half-compiled warm copy
+    warmList.length = 0; scene.traverse(warmCollect);
+    if (wm) scene.add(wm);
+    return warmList.length > 0;
+  }
+  // ---- boot shader warm-up, NON-blocking: the menu shows first, then the job runs in slices from frame() (menu ~10 ms,
+  // flight ~4 ms per frame; one program link cannot be split, so a long link makes the next frames skip).
+  // Order: scene pools / fx / own jet, the lit materials again with the jet hidden (crash: its lights go out and the
+  // light count is part of every lit program key), own jet 'low', air kinds, ground / sea kinds, other jets, bosses,
+  // then one frame with a tiny copy of each shadow-depth variant so the depth programs link too.
+  // Warm copies carry no lights, stay hidden (compile ignores visibility), and leave the scene when done; only their
+  // geometry is freed (the materials keep the programs). r128 links each program inside compile() (getUniforms), so
+  // KHR_parallel_shader_compile cannot overlap the links; it is used to wait for completion before the shadow frame.
+  var WJ = null;
+  var KHR = (function () { try { return renderer.extensions.get('KHR_parallel_shader_compile'); } catch (e) { return null; } })();
+  function needsLights(m) { return !!m && (m.isMeshStandardMaterial || m.isMeshPhongMaterial || m.isMeshLambertMaterial || m.isMeshToonMaterial || m.isShadowMaterial || (m.isShaderMaterial && m.lights === true)); }
+  function warmStart() {
+    if (window.FLK_DEV && !window.FLK_WARM && !/[?&]warm\b/.test(location.search)) { warmShaders('boot'); return; }   // test builds: software GL
+    WJ = { q: [], objs: null, oi: 0, model: null, t0: performance.now(), busy: 0, n0: renderer.info.programs ? renderer.info.programs.length : 0,
+      models: 0, skip: 0, reps: {}, repG: null, repN: 0, seenMat: new Set() };
+    var q = WJ.q, K = FL.ENEMY_KINDS || {}, air = [], gnd = [], boss = [], jets = [];
+    q.push({ k: 'scene' });
+    var own = aircraftId;
+    if (FL.buildAircraft) {
+      q.push({ k: 'model', name: own + ' low', make: function () { return FL.buildAircraft(own, { light: false, lod: 'low' }); } });
+      (FL.AIRCRAFT || []).forEach(function (a) {
+        if (a.id !== own) jets.push({ k: 'model', name: a.id, make: function () { return FL.buildAircraft(a.id); } });
+        if (a.id !== own) jets.push({ k: 'model', name: a.id + ' low', make: function () { return FL.buildAircraft(a.id, { light: false, lod: 'low' }); } });
+      });
+    }
     Object.keys(K).forEach(function (k) {
       var d = K[k]; if (!d || typeof d.build !== 'function') return;
-      try { var m = d.build(0); if (m && m.group) { g.add(m.group); nb++; } } catch (e) {}
+      var it = { k: 'model', name: k, make: function () { return d.build(0); } };
+      (d.boss || d.noWaves ? boss : d.category === 'air' ? air : gnd).push(it);
     });
-    if (FL.buildAircraft) (FL.AIRCRAFT || []).forEach(function (a) {
-      [null, { light: false, lod: 'low' }].forEach(function (o) { try { var m = o ? FL.buildAircraft(a.id, o) : FL.buildAircraft(a.id); if (m && m.group) { g.add(m.group); nb++; } } catch (e) {} });
+    WJ.q = q.concat(air, gnd, jets, boss, [{ k: 'shadow' }]);
+    glog('shader pre-warm: ' + (WJ.q.length - 2) + ' models queued' + (KHR ? ' (parallel compile ext)' : ''));
+  }
+  // objects of root (or the scene) whose materials are new to this job -> list (one object per distinct material set)
+  function warmObjs(root) {
+    var out = [], seen = WJ.seenMat;
+    (root || scene).traverse(function (o) {
+      if (!(o.isMesh || o.isPoints || o.isLine || o.isSprite)) return;
+      // the program key also depends on the object (instancing, skinning, morphs, tangents): material + those flags
+      var ms = Array.isArray(o.material) ? o.material : [o.material], add = false, ga = o.geometry && o.geometry.attributes;
+      var fl = (o.isInstancedMesh ? 'I' : '') + (o.instanceColor ? 'C' : '') + (o.isSkinnedMesh ? 'S' : '') + (o.morphTargetInfluences ? 'M' : '') + (ga && ga.tangent ? 'T' : '') + (ga && ga.color ? 'V' : '');
+      for (var i = 0; i < ms.length; i++) { var mk = ms[i] && ms[i].uuid + fl; if (mk && !seen.has(mk)) { seen.add(mk); add = true; } }
+      if (add) out.push(o);
+      if (o.isMesh && o.castShadow && !o.isSkinnedMesh && o.geometry) warmRep(o);
     });
-    var tB = performance.now();
-    g.position.copy(st.pos); scene.add(g); g.updateMatrixWorld(true);
-    // the light count is part of every lit program key: warm copies bring no lights, and force-shown pools must not
-    // switch on lights that are hidden in play (else every program compiles for a light setup the game never uses)
-    var gl0 = []; g.traverse(function (o) { if (o.isLight) gl0.push(o); });
-    for (i = 0; i < gl0.length; i++) if (gl0[i].parent) gl0[i].parent.remove(gl0[i]);
-    var litOn = new Set(); scene.traverseVisible(function (o) { if (o.isLight) litOn.add(o); });
-    var hid = [], cul = [], dark = [];
-    scene.traverse(function (o) {
-      if (!o.visible) { hid.push(o); o.visible = true; }
-      if (o.frustumCulled && (o.isMesh || o.isPoints || o.isLine || o.isSprite)) { cul.push(o); o.frustumCulled = false; }
-    });
-    scene.traverse(function (o) { if (o.isLight && !litOn.has(o) && o.visible) { dark.push(o); o.visible = false; } });
-    var tC = 0;
-    try {
-      warmShaders('boot'); tC = performance.now();
-      world.sun.position.copy(st.pos).addScaledVector(world.sunDir, 400); world.sun.target.position.copy(st.pos); world.sun.target.updateMatrixWorld();
-      if (post && post.enabled) post.render(0, postParams(0)); else renderer.render(scene, camera);
-    } catch (e) { glog('shader pre-warm frame failed: ' + e.message); }
-    for (i = 0; i < dark.length; i++) dark[i].visible = true;
-    for (i = 0; i < hid.length; i++) hid[i].visible = false;
-    for (i = 0; i < cul.length; i++) cul[i].frustumCulled = true;
-    // the player jet is hidden after a crash: its lights go out, so the lit programs need that light count too
-    if (plane && plane.group && plane.group.visible) {
-      plane.group.visible = false;
-      try { warmShaders('boot, jet hidden'); } finally { plane.group.visible = true; }
-    }
+    return out;
+  }
+  // one representative per shadow-depth program variant (defines that change the depth material: side, alpha-tested map)
+  function warmRep(o) {
+    var m = Array.isArray(o.material) ? o.material[0] : o.material; if (!m) return;
+    var key = (m.side | 0) + '_' + (m.shadowSide == null ? 'n' : m.shadowSide) + '_' + !!(m.map && m.alphaTest > 0) + '_' + !!(m.alphaMap && m.alphaTest > 0) + '_' + !!(m.displacementMap) + '_' + !!o.morphTargetInfluences;
+    if (WJ.reps[key]) return;
+    var r = new T.Mesh(o.geometry, o.material); r.castShadow = true; r.frustumCulled = false; r.scale.setScalar(0.001);
+    if (o.morphTargetInfluences) { r.morphTargetInfluences = o.morphTargetInfluences.slice(); r.morphTargetDictionary = o.morphTargetDictionary; }
+    WJ.reps[key] = r; WJ.repN++;
+  }
+  function warmOne(o, hidden) {
+    warmList.length = 0; warmList.push(o);
+    var pv = plane && plane.group ? plane.group.visible : false;
+    if (hidden && plane && plane.group) plane.group.visible = false;
+    scene.traverse = warmEach;
+    try { if (post && post.compile) post.compile(scene, camera); else renderer.compile(scene, camera); }
+    catch (e) {} finally { delete scene.traverse; if (plane && plane.group) plane.group.visible = pv; warmList.length = 0; }
+  }
+  function warmModelDone() {
+    var g = WJ.model; WJ.model = null; if (!g) return;
     scene.remove(g);
-    g.traverse(function (o) { if (o.geometry && o.geometry.dispose) o.geometry.dispose(); });
-    var n1 = ri.programs ? ri.programs.length : 0;
-    glog('shader pre-warm (boot set): ' + nb + ' models, ' + (n1 - n0) + ' programs, ' + Math.round(performance.now() - t0) + ' ms (build ' + Math.round(tB - t0) +
-      ', compile ' + Math.round((tC || tB) - tB) + ', frame ' + Math.round(performance.now() - (tC || tB)) + ')');
+    g.traverse(function (o) { if (o.geometry && o.geometry.dispose && !o.userData.warmKeep) o.geometry.dispose(); });
+  }
+  function warmJob() {
+    if (!WJ) return;
+    if (WJ.skip > 0) { WJ.skip--; return; }
+    var inMenu = !started || paused || (campaign && campaign.hangarOpen), budget = inMenu ? 10 : 4;
+    var t0 = performance.now(), last = 0;
+    while (performance.now() - t0 < budget) {
+      if (WJ.objs && WJ.oi < WJ.objs.length * 2) {
+        // pass 1: as is; pass 2: lit materials again with the jet hidden
+        var n = WJ.objs.length, i = WJ.oi++, o = WJ.objs[i % n], ta = performance.now();
+        if (i < n) warmOne(o, false);
+        else { var m0 = Array.isArray(o.material) ? o.material[0] : o.material; if (needsLights(m0) && plane && plane.group && plane.group.visible) warmOne(o, true); }
+        last = performance.now() - ta;
+        continue;
+      }
+      if (WJ.objs) { WJ.objs = null; warmModelDone(); }
+      var it = WJ.q.shift();
+      if (!it) { warmEnd(); return; }
+      if (it.k === 'scene') { WJ.objs = warmObjs(null); WJ.oi = 0; continue; }
+      if (it.k === 'model') {
+        var tb = performance.now(), md = null;
+        try { md = it.make(); } catch (e) { md = null; }
+        last = performance.now() - tb;
+        if (!md || !md.group) continue;
+        var g = md.group, lights = [];
+        g.traverse(function (x) { if (x.isLight) lights.push(x); });
+        for (var li = 0; li < lights.length; li++) if (lights[li].parent) lights[li].parent.remove(lights[li]);
+        g.visible = false; scene.add(g); g.updateMatrixWorld(true);
+        WJ.model = g; WJ.models++; WJ.objs = warmObjs(g); WJ.oi = 0;
+        g.traverse(function (x) { if (x.geometry) for (var k in WJ.reps) if (WJ.reps[k].geometry === x.geometry) x.userData.warmKeep = true; });
+        continue;
+      }
+      if (it.k === 'shadow') {
+        if (KHR && !warmLinked()) { WJ.q.unshift(it); return; }                 // driver still compiling: try next frame
+        if (!WJ.repG) {
+          if (campaign && campaign.hangarOpen) { WJ.q.unshift(it); return; }   // the main scene is not drawn in the hangar
+          var rg = WJ.repG = new T.Group(); rg.name = 'shaderWarmDepth';
+          for (var rk in WJ.reps) rg.add(WJ.reps[rk]);
+          rg.position.copy(st.pos); scene.add(rg);                              // drawn (tiny) into this frame's shadow map
+          WJ.q.unshift({ k: 'shadowEnd' });
+          return;
+        }
+      }
+      if (it.k === 'shadowEnd') {
+        if (WJ.repG) { scene.remove(WJ.repG); WJ.repG.traverse(function (o) { if (o.geometry && o.geometry.dispose) o.geometry.dispose(); }); WJ.repG = null; }
+        continue;
+      }
+    }
+    WJ.busy += performance.now() - t0;
+    if (!inMenu && last > budget) WJ.skip = Math.min(30, Math.ceil(last / budget));   // one long link: keep the average near the budget
+  }
+  function warmLinked() {
+    try {
+      var gl = renderer.getContext(), ps = renderer.info.programs || [];
+      for (var i = 0; i < ps.length; i++) if (ps[i].program && !gl.getProgramParameter(ps[i].program, KHR.COMPLETION_STATUS_KHR)) return false;
+    } catch (e) {}
+    return true;
+  }
+  function warmEnd() {
+    var n1 = renderer.info.programs ? renderer.info.programs.length : 0;
+    glog('shader pre-warm done: ' + WJ.models + ' models, ' + WJ.repN + ' depth variants, ' + (n1 - WJ.n0) + ' programs, ' +
+      Math.round(WJ.busy) + ' ms work over ' + ((performance.now() - WJ.t0) / 1000).toFixed(1) + ' s');
+    window.__flankerWarm = { done: true, programs: n1 - WJ.n0, models: WJ.models, busyMs: Math.round(WJ.busy) };
+    WJ = null;
   }
   function warmTick(dt) {
     warmT += dt; if (warmT < 0.25) return; warmT = 0;
@@ -40111,7 +40226,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
       renderMaps(); syncLever();
       // pre-warm: compile the shaders of every pooled, still hidden object now (explosion debris, wrecks, fx sprites,
       // teammate jets…), so the first crash / kill / join does not stall a frame on shader compiles
-      warmBoot();
+      warmStart();
       $('loading').hidden = true;
       window.__flanker = {
         phys: phys, combat: combat, world: function () { return world; }, camera: camera, start: startGame, campaign: function () { return campaign; }, carrier: function () { return carrier; }, weather: function () { return weather; }, setResMode: setResMode, resMode: function () { return resMode; },
