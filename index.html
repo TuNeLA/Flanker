@@ -4572,7 +4572,7 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
     const RIVER = 760, RIM = 2215;
     // ---- stratigraphic profile: x = 0 river ... 1 rim. Segment kind: 0 linear (cliff), 1 talus (steepens toward the
     // cliff above), 2 ledges (Supai stair steps)
-    const SX = [0, 0.016, 0.03, 0.082, 0.087, 0.30, 0.37, 0.395, 0.70, 0.915, 0.927, 0.962, 0.972, 1.0];
+    const SX = [0, 0.012, 0.022, 0.065, 0.069, 0.36, 0.42, 0.44, 0.66, 0.84, 0.852, 0.9, 0.91, 1.0];
     const SH = [RIVER - 8, RIVER - 3, 795, 1080, 1140, 1232, 1335, 1565, 1825, 1960, 2085, 2140, RIM - 10, RIM];
     const SKIND = [0, 0, 0, 0, 1, 1, 0, 2, 1, 0, 1, 0, 0];
     function strat(x) {
@@ -4582,7 +4582,7 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
       let t = (x - SX[i - 1]) / (SX[i] - SX[i - 1]);
       const k = SKIND[i - 1];
       if (k === 1) t = Math.pow(t, 1.8);
-      else if (k === 2) { const f = t * 6, fi = Math.floor(f), ft = f - fi; t = (fi + Math.pow(sstep(0, 1, ft), 2.6)) / 6; }
+      else if (k === 2) { const f = t * 7, fi = Math.floor(f), ft = f - fi; t = (fi + Math.pow(sstep(0, 1, ft), 3.4)) / 7; }
       return SH[i - 1] + (SH[i] - SH[i - 1]) * t;
     }
     // ---- main canyon (river centre line), W -> E; Marble Canyon (narrow) at the east end
@@ -4590,7 +4590,7 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
     const MLEN = (MAIN.length - 1) * 250;
     const mIdx = makeSegIndex([MAIN], 1500, 12000), mFar = makeSegIndex([MAIN], 4000, 22000);
     // rim half width varies in space (not along the river), so river loops never give seams
-    const halfW = (e, n) => (5300 + 4200 * fbm(e / 15000 + 3, n / 15000, 2, 661)) * (1 - 0.55 * sstep(28000, 36000, e));
+    const halfW = (e, n) => (5900 + 4600 * fbm(e / 15000 + 3, n / 15000, 2, 661)) * (1 - 0.55 * sstep(28000, 36000, e));
     const perpAt = (s, f) => { const k = clamp(Math.floor(s / 250), 1, MAIN.length - 2), a = MAIN[k - 1], b = MAIN[k + 1], dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy); return [MAIN[k][0] - dy / l * f, MAIN[k][1] + dx / l * f, Math.atan2(dx / l, -dy / l)]; };
     // ---- side canyons: primaries from the river through the walls into the plateau, secondaries off the primaries.
     // Each: floor erosion level x0 (mouth) .. x1 (head, above the rim), rising with fr^k; half width w tapering to the head.
@@ -4673,14 +4673,14 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
         for (let i = 0; i + 1 < M.length; i++) {
           if (M[i + 1] - M[i] < 2400 || M[i] > MLEN * 0.86) continue;
           const sm = (M[i] + M[i + 1]) / 2 + (R() - 0.5) * 600, p0 = MAIN[Math.floor(sm / 250)], W = halfW(p0[0], p0[1]);
-          const f = 0.3 + R() * 0.32, p = perpAt(sm, side * W * f);
-          const cap = f > 0.5 ? (R() < 0.5 ? 1.0 : 0.927) : f > 0.4 ? (R() < 0.6 ? 0.927 : 0.70) : (R() < 0.5 ? 0.70 : 0.395);
+          const f = 0.36 + R() * 0.3, p = perpAt(sm, side * W * f);
+          const cap = f > 0.5 ? (R() < 0.5 ? 1.0 : 0.852) : f > 0.42 ? (R() < 0.6 ? 0.852 : 0.66) : (R() < 0.5 ? 0.66 : 0.44);
           add(p[0], p[1], cap, 250 + R() * 650 * cap, 1700 + R() * 1100, p[2], 0.4 + R() * 0.3);
         }
       }
       for (let k = 0, tries = 0; k < 16 && tries < 400; tries++) {   // small buttes on the Tonto platform
         const sm = 1500 + R() * (MLEN * 0.84 - 1500), p0 = MAIN[Math.floor(sm / 250)], W = halfW(p0[0], p0[1]), p = perpAt(sm, (R() < 0.5 ? -1 : 1) * W * (0.16 + R() * 0.14));
-        if (add(p[0], p[1], R() < 0.6 ? 0.395 : 0.70, 60 + R() * 200, 1500 + R() * 900, R() * Math.PI, 0.5 + R() * 0.4)) k++;
+        if (add(p[0], p[1], R() < 0.6 ? 0.44 : 0.66, 60 + R() * 200, 1500 + R() * 900, R() * Math.PI, 0.5 + R() * 0.4)) k++;
       }
     }
     // ---- plateau features: a few mesas (Red Butte / Cedar Mountain), volcanic hills (San Francisco field), Kaibab dome
@@ -4713,6 +4713,7 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
     function xField(e, n) {
       const dm = mIdx.query(e, n);
       let x = dm / halfW(e, n);
+      const tLim = x + 6 * Math.max(0, x - 0.069);   // temples never fill the inner gorge (the river stays open)
       const we = e + 1300 * (fbm(e / 6100 + 11, n / 6100, 3, 663) - 0.5), wn = n + 1300 * (fbm(e / 6100, n / 6100 + 5, 3, 665) - 0.5);
       x = xSide(we, wn, x);
       for (let i = 0; i < TEMPLES.length; i++) {
@@ -4720,7 +4721,7 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
         const ca = T[6], sa = T[7], lx = de * ca + dn * sa, ly = (-de * sa + dn * ca) / T[9], dd = Math.sqrt(lx * lx + ly * ly);
         const lob = 0.66 + 0.6 * ridged(lx / (dd + 1) * 1.9 + T[5], ly / (dd + 1) * 1.9, 3, 655) + 0.24 * (fbm(de / 520, dn / 520, 2, 657) - 0.5);
         const xb = T[3] - Math.max(0, dd * lob - T[2]) / T[4];
-        if (xb > x) x = xb;
+        if (xb > x) x = Math.max(x, Math.min(xb, tLim));
       }
       return x;
     }
@@ -4745,7 +4746,7 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
       lastX = x;
       let h = strat(x);
       // Vishnu schist: rough fluted inner gorge walls
-      if (x > 0.02 && x < 0.09) h += 30 * sstep(0.02, 0.04, x) * (1 - sstep(0.075, 0.087, x)) * (ridged(e / 240, n / 240, 2, 667) - 0.4);
+      if (x > 0.015 && x < 0.07) h += 30 * sstep(0.015, 0.03, x) * (1 - sstep(0.056, 0.069, x)) * (ridged(e / 240, n / 240, 2, 667) - 0.4);
       // talus roughness on the slopes
       if (x > 0.09 && x < 1) h += (5 * (fbm(e / 90, n / 90, 2, 669) - 0.5) + 30 * (ridged((0.8 * e - 0.6 * n) / 250, (0.6 * e + 0.8 * n) / 250, 2, 671) - 0.45) * sstep(0.3, 0.4, x) * (1 - sstep(0.93, 0.99, x))) * sstep(0.09, 0.15, x);
       const pk = sstep(0.97, 1.12, x);
@@ -4784,15 +4785,15 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
     }
     const slIdx = makeSegIndex(SLOTS.map((b) => b.P), 1000, 200), slFar = makeSegIndex(SLOTS.map((b) => b.P), 2000, 3000);
     // ---- airbases on the plateau, well away from the rim
-    const BASE = { name: 'Kaibab Air Station', e: -26000, n: 33000, hdg: 112, len: 3100, w: 45, seed: 71, blend: 700, minH: 1500, q: 0.5 };
-    const EBASE = { name: 'Moenkopi compound', e: 30000, n: -30000, hdg: 20, len: 1800, w: 40, seed: 72, blend: 500, mini: true, enemy: true, minH: 1500, q: 0.5 };
+    const BASE = { name: 'Kaibab Air Station', e: -24000, n: 23000, hdg: 112, len: 3100, w: 45, seed: 71, blend: 700, minH: 1500, q: 0.5 };
+    const EBASE = { name: 'Moenkopi compound', e: 30000, n: -21000, hdg: 20, len: 1800, w: 40, seed: 72, blend: 500, mini: true, enemy: true, minH: 1500, q: 0.5 };
     const baseOk = (B) => { for (let i = -2; i <= 2; i++) for (let j = -2; j <= 2; j++) if (xNear(B.e + i * 1200, B.n + j * 1200) < 1.45) return false;
       return !(MOUNTS.some((m) => Math.hypot(m[0] - B.e, m[1] - B.n) < m[2] + 2500) || slFar.query(B.e, B.n) < 2600 || MESAS.some((m) => Math.hypot(m[0] - B.e, m[1] - B.n) < m[2] + 3000)); };
     for (const B of [BASE, EBASE]) { const e0 = B.e, n0 = B.n; for (let k = 0; k < 120 && !baseOk(B); k++) { const r = 900 * (1 + k * 0.35), a = k * 2.4; B.e = clamp(e0 + r * Math.cos(a), -42000, 42000); B.n = clamp(n0 + r * Math.sin(a), -42000, 42000); } }
     // ---- colours
     const L = (h) => lin(h);
     const LAY = [[RIVER + 3, L(0xa08c6c)], [1080, L(0x332c2c)], [1140, L(0x6e4a34)], [1236, L(0x7a7c5e)], [1335, L(0x8c7c68)], [1565, L(0xa44e30)],
-      [1700, L(0x86402c)], [1825, L(0x9a5a3c)], [1960, L(0x9c4028)], [2085, L(0xd8c6a0)], [2140, L(0xb49a76)], [9000, L(0xcabca0)]];
+      [1700, L(0x7c3a28)], [1825, L(0x8c5034)], [1960, L(0x8e3a24)], [2085, L(0xd8c6a0)], [2140, L(0xb49a76)], [9000, L(0xcabca0)]];
     const cSand = L(0xa89474), cTonto = L(0x7c7e62), cEsp = L(0x8e5a40), cSoil = L(0x9a8a70), cSoilR = L(0x8e5e44), cSoilD = L(0x6e604a), cScree = L(0x7a5646), tmp = [0, 0, 0];
     function layerCol(h, o, e, n) {
       let i = 0; while (i < LAY.length - 1 && h > LAY[i][0]) i++;
@@ -4815,7 +4816,7 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
       sky: { sunAz: 236, sunEl: 24, fog: 0xc6d2dc, fogD: 0.0000098, hfogA: 0.0000055, hfogB: 1 / 1700, zenith: [0.028, 0.12, 0.43], skyExp: 0.42,
         glow: [0.5, 0.4, 0.27], glowW: 0.3, sunCol: [1.0, 0.92, 0.78], disk: 22, band: [0.05, 0.035, 0.015],
         sunHex: 0xffeed8, sunI: 1.9, hemiSky: 0x9ab4da, hemiGround: 0x8a5a42, hemiI: 0.5, white: 0xe4e7ea, envGround: [0.21, 0.13, 0.09] },
-      ground: { rockOn: 1, rockTint: 1, rock1: 0x8a4a2e, rock2: 0xc07a4a, rockA: 0.12, rockB: 0.26, faceN: 0.5, bump: 1.6, strataFn: (h, o) => layerCol(h, o, 0, 0), strataOff: -700, strataSpan: 2560 },
+      ground: { rockOn: 1, rockTint: 1, rock1: 0x8a4a2e, rock2: 0xc07a4a, rockA: 0.12, rockB: 0.26, faceN: 0.5, bump: 0.8, strataFn: (h, o) => layerCol(h, o, 0, 0), strataOff: -700, strataSpan: 2560 },
       bases: [BASE, EBASE], raw: raw,
       aux: () => lastPlat,
       levels: [
@@ -4997,6 +4998,12 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
         '  float fol_ = texture2D(uRockMap, vec2(vFW.x * 0.7 + vFW.z * 0.7, vFW.y * 0.25) / 60.0).r;',
         '  vec3 sc_ = mix(uSchist, uGranite, smoothstep(0.6, 0.68, fol_ + (rkA - 0.5) * 0.2)) * (0.7 + 0.6 * rkB) * mix(0.8 + 0.4 * rkC_, 1.0, nf_);',
         '  rock = mix(rock, sc_, sch_);',
+        '  // cavity / edge term from the height map: dark cliff feet and gullies, bright rims (cliffs get no vertex colour)',
+        '  vec2 hu_ = (vec2(vFW.x, -vFW.z) + 48000.0) / 96000.0; float hs1_ = 200.0 / 96000.0, hs2_ = 650.0 / 96000.0;',
+        '  float a1_ = (texture2D(uHMap, hu_ + vec2(hs1_, 0.0)).r + texture2D(uHMap, hu_ - vec2(hs1_, 0.0)).r + texture2D(uHMap, hu_ + vec2(0.0, hs1_)).r + texture2D(uHMap, hu_ - vec2(0.0, hs1_)).r) * 0.25 * uHM.y + uHM.x;',
+        '  float a2_ = (texture2D(uHMap, hu_ + vec2(hs2_, hs2_)).r + texture2D(uHMap, hu_ - vec2(hs2_, hs2_)).r + texture2D(uHMap, hu_ + vec2(-hs2_, hs2_)).r + texture2D(uHMap, hu_ - vec2(-hs2_, hs2_)).r) * 0.25 * uHM.y + uHM.x;',
+        '  float ao_ = 1.0 - clamp((a1_ - vFW.y) / 230.0, -0.1, 0.3) - clamp((a2_ - vFW.y) / 900.0, 0.0, 0.22);',
+        '  rock *= ao_; col *= ao_;',
         '  vec2 wp_ = vec2(vFW.x, -vFW.z);',
         '  vec2 mu_ = (wp_ + 48000.0) / 96000.0; float inM_ = step(0.0, mu_.x) * step(mu_.x, 1.0) * step(0.0, mu_.y) * step(mu_.y, 1.0);',
         '  vec4 gm_ = mix(vec4(0.5), texture2D(uGMask, mu_), inM_);',
@@ -5666,7 +5673,7 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
       { e: 26700, n: 5000, r: 140, count: 10, style: 'alpine', seed: 1033, name: 'Guttannen' }, { e: 4700, n: 7900, r: 160, count: 12, style: 'alpine', seed: 1034, name: 'Grund' },
       { e: -14000, n: -29400, r: 420, count: 36, style: 'alpine', church: true, seed: 1030, name: 'Martigny' }];
     const fMask = (e, n, h) => forestK(e, n, 3, 0.85) * sstep(640, 780, h) * (1 - sstep(1700, 1850, h + 80 * (fbm(e / 700, n / 700, 2, 1045) - 0.5)));
-    const cMeadow = lin(0x33501d), cMeadow2 = lin(0x4a5c28), cMeadowD = lin(0x28401a), cForest = lin(0x16261a), cAlp = lin(0x6e6e4c), cScree = lin(0x77736b), cLakeBed = lin(0x6a6a5a), cIceU = lin(0xc8d4dc);
+    const cMeadow = lin(0x33501d), cMeadow2 = lin(0x4a5c28), cMeadowD = lin(0x28401a), cForest = lin(0x12291a), cAlp = lin(0x6e6e4c), cScree = lin(0x77736b), cLakeBed = lin(0x6a6a5a), cIceU = lin(0xc8d4dc);
     const def = {
       name: 'Swiss Alps', region: 'Bernese Oberland, Switzerland', N: 400, noWater: true, lodK: 0.045,
       sky: { sunAz: 200, sunEl: 34, fog: 0xbcd0e2, fogD: 0.0000072, hfogA: 0.000008, hfogB: 1 / 1500, zenith: [0.02, 0.09, 0.36], glow: [0.95, 0.85, 0.7], glowW: 0.18, sunCol: [1.0, 0.95, 0.88], disk: 32,
@@ -5703,7 +5710,7 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
       },
       traffic: 120,
       veg: [
-        { kind: 'spruce', per: 1100, farThin: 4, scale: [0.8, 1.5], cap: 12000, test: (e, n, h, sl) => sl < 1.15 ? 0.04 * (1 - sstep(1850, 2050, h)) + 0.96 * fMask(e, n, h) * sstep(0.05, 0.16, sl + 0.3 * sstep(0.6, 0.7, forestK(e, n, 9, 0.3))) : 0 },
+        { kind: 'spruce', per: 1100, farThin: 4, scale: [1.2, 2.0], cap: 12000, test: (e, n, h, sl) => sl < 1.15 ? 0.04 * (1 - sstep(1850, 2050, h)) + 0.96 * fMask(e, n, h) * sstep(0.05, 0.16, sl + 0.3 * sstep(0.6, 0.7, forestK(e, n, 9, 0.3))) : 0 },
         { kind: 'broad', per: 60, scale: [0.6, 1.0], cap: 1500, test: (e, n, h, sl) => h > 500 && h < 1100 && sl < 0.35 ? 0.4 : 0 },
         { kind: 'boulder', per: 50, scale: [0.6, 2.4], cap: 2000, shadow: false, test: (e, n, h, sl) => h > 1800 && sl < 1.0 ? 0.6 : 0 }],
       clouds: { seed: 1051, cumulus: 40, cuBase: [3300, 3900], cuSize: 1.2, lit: [1.18, 1.15, 1.12], shadow: [0.46, 0.52, 0.62], opacity: 0.92, cling: true,
@@ -5722,7 +5729,7 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
         } }
       if (lb.nv) { const lm = new THREE.Mesh(lb.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.06, metalness: 0.1, envMapIntensity: 1.2 })); lm.name = 'lakes'; lm.receiveShadow = true; ctx.add(lm); }
       // ---- rivers: Weisse Lütschine (Lauterbrunnen + gorge), Schwarze Lütschine (Grindelwald), Aare (Haslital -> Brienz)
-      { const rv = new Builder(), rc = lin(0x3e6e72);
+      { const rv = new Builder(), rc = lin(0x2c4c4e);
         const ribbon = (P, w0, w1, from, to) => { let tot = 0; const L = []; for (let i = 0; i < P.length - 1; i++) { const l = Math.hypot(P[i + 1][0] - P[i][0], P[i + 1][1] - P[i][1]); L.push(l); tot += l; }
           let prev = null; for (let s = from * tot; s <= to * tot; s += 30) { let r = s, i = 0; while (i < L.length - 1 && r > L[i]) { r -= L[i]; i++; } const t = Math.min(1, r / L[i]), dx = (P[i + 1][0] - P[i][0]) / L[i], dy = (P[i + 1][1] - P[i][1]) / L[i];
             const mo = 30 * Math.sin(s / 380), mE = P[i][0] + dx * L[i] * t - dy * mo, mN = P[i][1] + dy * L[i] * t + dx * mo;
@@ -5731,7 +5738,7 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
             const a = rv.vert(mE - dy * w, y, -(mN + dx * w), 0, 1, 0, 0, s / 20, rc[0], rc[1], rc[2]), b = rv.vert(mE + dy * w, y, -(mN - dx * w), 0, 1, 0, 1, s / 20, rc[0], rc[1], rc[2]);
             if (prev) rv.ix.push(prev[0], prev[1], b, prev[0], b, a); prev = [a, b]; } };
         ribbon(LB, 7, 10, 0.02, 1); ribbon(LU, 10, 12, 0, 1); ribbon(GW, 9, 7, 0.02, 1); ribbon(HS.slice().reverse(), 16, 22, 0, 0.97);
-        if (rv.nv) { const rm = new THREE.Mesh(rv.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.15, metalness: 0.1, envMapIntensity: 1.1, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2 })); rm.name = 'rivers'; rm.receiveShadow = true; ctx.add(rm); } }
+        if (rv.nv) { const rm = new THREE.Mesh(rv.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.35, metalness: 0.05, envMapIntensity: 0.7, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2 })); rm.name = 'rivers'; rm.receiveShadow = true; ctx.add(rm); } }
       // ---- Lauterbrunnen waterfalls (Staubbach 297 m, Mürrenbach, Trümmelbach, Spissbach ...)
       const wf = new Builder(), falls = [];
       for (const [fr, side, w] of [[0.66, 1, 10], [0.55, -1, 7], [0.36, 1, 12], [0.30, -1, 9], [0.47, 1, 6], [0.2, 1, 8], [0.78, -1, 6], [0.12, -1, 8]]) {
@@ -6133,7 +6140,7 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
       { e: 17500, n: -13500, r: 110, count: 6, style: 'nordic', seed: 1135, name: 'Estancia La Peninsula' }, { e: 21000, n: -1500, r: 110, count: 7, style: 'nordic', seed: 1136, name: 'Estancia Laguna Amarga' },
       { e: 18500, n: 7500, r: 100, count: 6, style: 'nordic', seed: 1137, name: 'Estancia La Leona' }, { e: 4500, n: -21000, r: 110, count: 6, style: 'nordic', seed: 1138, name: 'Estancia Las Chinas' }, { e: 23000, n: 13000, r: 100, count: 5, style: 'nordic', seed: 1139, name: 'Estancia Cerro Fraile' }];
     const lenga = (e, n, h) => forestK(e, n, 7, 0.6) * sstep(110, 220, h) * (1 - sstep(780, 950, h)) * (1 - sstep(3000, 8500, e + 0.15 * n));
-    const cSteppe = lin(0x9a8550), cSteppe2 = lin(0x7a7a44), cTus = lin(0x6a6438), cStraw = lin(0xb39c66), cMal = lin(0x8a7a5a), cLenga = lin(0x3c5426), cRockG = lin(0x6a665e), cIceU = lin(0xc4d6e0), cBed = lin(0x7a7a6a), cCap = lin(0x2e2824);
+    const cSteppe = lin(0x8c7c4c), cSteppe2 = lin(0x6c6c3a), cTus = lin(0x55522c), cStraw = lin(0xb39c66), cMal = lin(0x8a7a5a), cLenga = lin(0x3c5426), cRockG = lin(0x6a665e), cIceU = lin(0xc4d6e0), cBed = lin(0x7a7a6a), cCap = lin(0x2e2824);
     const def = {
       name: 'Patagonia', region: 'Torres del Paine & Fitz Roy, Chile/Argentina', N: 400, noWater: true, lodK: 0.05,
       sky: { sunAz: 115, sunEl: 21, fog: 0xc0cfdc, fogD: 0.0000068, hfogA: 0.000007, hfogB: 1 / 1200, zenith: [0.03, 0.1, 0.34], glow: [1.0, 0.82, 0.6], glowW: 0.24, sunCol: [1.0, 0.92, 0.8], disk: 30,
@@ -6142,7 +6149,7 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
         alpine: { light: 0x6c6761, mid: 0x4a4642, dark: 0x252321, rust: 0x5e4a3c, veg: 0x4a5230, vegTop: 900, wet: 0.9, rustK: 0.4, gullySnow: 0.9 } },
       bases: [BASE, EBASE], raw: raw, aux: () => lastIce,
       flats: TOWNS.map((t) => ({ e: t.e, n: t.n, hdg: 0, x0: -t.r * 0.8, x1: t.r * 0.8, z0: -t.r * 0.8, z1: t.r * 0.8, blend: 220, minH: 60, q: 0.4 })),
-      levels: [{ tile: 1920, cell: 48, max: 100, dilate: 40, score: (e0, n0, e1, n1, g) => {
+      levels: [{ tile: 1920, cell: 48, max: 90, dilate: 40, score: (e0, n0, e1, n1, g) => {
         let lo = 1e9, hi = -1e9;
         for (let i = 0; i <= 4; i++) for (let j = 0; j <= 4; j++) { const h = triH(g.H, g.NV, (e0 + i * 480 + 48000) / g.cell, (48000 - (n0 + j * 480)) / g.cell); lo = Math.min(lo, h); hi = Math.max(hi, h); }
         const e = (e0 + e1) / 2, n = (n0 + n1) / 2; if (Math.hypot(e - BASE.e, n - BASE.n) < 2500) return 2e5;
@@ -6150,7 +6157,7 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
       color: function (e, n, h, il, curv, o, cell, k, aux) {
         mix3(o, cSteppe, cSteppe2, sstep(0.35, 0.7, fbm(e / 900, n / 900, 3, 1141)));
         // coirón tussock mosaic: dark olive clumps, pale straw flats, bare gravel 'mallín' edges, wind-scoured hollows
-        mix3(o, o, cTus, sstep(0.48, 0.7, fbm(e / 650, n / 650, 3, 1146)) * 0.8);
+        mix3(o, o, cTus, sstep(0.45, 0.68, fbm(e / 650, n / 650, 3, 1146)) * 0.9);
         mix3(o, o, cStraw, sstep(0.55, 0.75, fbm(e / 1600 + 4, n / 1600, 2, 1147)) * 0.6);
         mix3(o, o, cMal, sstep(0.62, 0.8, vnoise(e / 420, n / 420, 1148)) * 0.4);
         { const d2 = 0.84 + 0.32 * vnoise(e / 300, n / 300, 1149); o[0] *= d2; o[1] *= d2; o[2] *= d2; }
@@ -6336,7 +6343,7 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
     const ISL = [[-5300, 15600, 3200, 1500, 0.15, 30, 'Ilha do Governador'], [-1500, 13000, 900, 600, 0.3, 12, 'Ilha do Fundão'], [8200, 20000, 900, 600, 0.6, 60, 'Paquetá'], [1500, -8600, 400, 250, 0.4, 70, 'Cagarras'], [5200, -11500, 350, 250, 0, 40, 'Ilha Rasa']];
     // granite domes / monoliths: [e, n, r, H, profile p, name]
     // [e, n, r, H, shape (0 bullet .. 1 table), name]
-    const DOMES = [[4420, 120, 420, 70, 0.3, 'Pão de Açúcar foot'], [3850, 300, 380, 220, 0.3, 'Morro da Urca'], [-1030, 220, 650, 330, 0.3, 'Corcovado shoulder'], [-4200, -4150, 560, 260, 0.3, 'Dois Irmãos foot'],
+    const DOMES = [[4420, 120, 300, 55, 0.3, 'Pão de Açúcar foot'], [3850, 300, 380, 220, 0.3, 'Morro da Urca'], [-1030, 220, 650, 330, 0.3, 'Corcovado shoulder'], [-4200, -4150, 560, 260, 0.3, 'Dois Irmãos foot'],
       [-8620, -5250, 750, 844, 1, 'Pedra da Gávea'], [1600, -2400, 330, 240, 0.3, 'Morro do Cantagalo'],
       [3300, -900, 300, 250, 0.3, 'Morro de São João'], [11000, -1600, 420, 270, 0.2, 'Morro do Costão'], [-2600, 1300, 480, 440, 0.2, 'Morro do Sumaré'], [9900, 2400, 400, 230, 0.2, 'Morro do Morcego']];
     // granite monoliths built as meshes (smooth bullet silhouettes at any distance): [e, n, R0, top height, taper, lean e, lean n, dome, name]
@@ -6486,7 +6493,7 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
       const GRAN = { lime: lin(0x8c867b), dark: lin(0x4c4842), wet: lin(0x3a3632), green: lin(0x24461a), green2: lin(0x3a6024), streaks: 1, tufts: 1 }, MT = {};
       const GRANB = Object.assign({}, GRAN, { tufts: 0, lime: lin(0xa29c92) });
       // shaped monoliths: elliptic cross-section, profile s(t), one side kept vertical (anchor), lean -> Sugarloaf thumb, Corcovado fin
-      const MS = [{ nm: 'Pão de Açúcar', e: 4420, n: 120, top: 396, rx: 235, ry: 140, ang: 0.55, lean: [0.12, -0.07], anchor: [0.8, -0.6], seed: 31,
+      const MS = [{ nm: 'Pão de Açúcar', e: 4420, n: 120, top: 396, rx: 195, ry: 135, ang: 0.55, lean: [0.16, -0.09], anchor: [0.8, -0.6], seed: 31,
           prof: (t) => Math.pow(Math.max(0, 1 - Math.pow(t, 4.5)), 0.38) * (1 + 0.3 * (1 - sstep(0, 0.12, t))), forest: 0.06 },
         { nm: 'Corcovado', e: -1030, n: 220, top: 710, rx: 430, ry: 160, ang: 0.25, lean: [0, 0], anchor: [0.15, -1], seed: 37,
           prof: (t) => Math.pow(Math.max(0, 1 - t), 0.62) * (1 + 0.35 * (1 - sstep(0, 0.3, t))), forest: 0.38 }];
@@ -43551,7 +43558,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793178714', updShown = false;
+  var BUILD = '1793180333', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
