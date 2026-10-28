@@ -1177,7 +1177,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   FL.MAPS = [
     { id: 'lax', name: 'Los Angeles', region: 'California, USA', blurb: 'Open city sprawl between the Pacific and the San Gabriel Mountains, with enemy-held LAX in the middle.', timeOfDay: 'afternoon' },
     { id: 'fjords', name: 'Norway Winter Fjords', region: 'Nordland, Norway', blurb: 'Snowbound peaks and a maze of narrow, dark fjords: hug the walls and stay below the ridgelines.', timeOfDay: 'overcast' },
-    { id: 'cliffs', name: 'Sea Cliffs', region: 'County Clare, Ireland', blurb: 'Sheer Atlantic cliffs with sea stacks, arches and sea caves you can fly straight through.', timeOfDay: 'afternoon' },
+    { id: 'cliffs', name: 'Highland Cliffs', region: 'Scotland & Antrim coast', blurb: 'Sheer Atlantic cliffs, sea stacks, Fingal\'s Cave and the Giant\'s Causeway, the jagged Cuillin and long sea lochs.', timeOfDay: 'evening' },
     { id: 'canyon', name: 'Desert Canyon', region: 'Colorado Plateau, USA', blurb: 'A 40 km winding red-rock canyon at sunset: pop up, shoot, drop back in.', timeOfDay: 'sunset' },
     { id: 'volcano', name: 'Virgin Islands', region: 'British Virgin Islands, Caribbean', blurb: 'Dozens of steep jungle islands, turquoise reefs, sea arches to fly through, a pirate cove and an erupting volcano.', timeOfDay: 'afternoon' }];
 
@@ -3847,7 +3847,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
           if (g) { let lo = 1e9, hi = -1e9; for (let i = 0; i <= 4; i++) for (let j = 0; j <= 4; j++) { const hh = triH(g.H, g.NV, (e0 + i * 480 + 48000) / g.cell, (48000 - (n0 + j * 480)) / g.cell); lo = Math.min(lo, hh); hi = Math.max(hi, hh); } if (hi - lo > 300) s = Math.max(s, (hi - lo) * 0.8); } for (const T of TUN) if (Math.hypot(e - T.ox, n - T.on) < 2600) return 1e6; for (const [a, b] of [[e0, n0], [e1, n0], [e0, n1], [e1, n1], [e, n]]) { const d = Math.abs(a - coastC(b)); if (d < 2400) s = Math.max(s, 3000 - d); if (Math.abs(Math.hypot(a - ISL.e, b - ISL.n) - ISL.r) < 1500) s = Math.max(s, 900); } return s; } },
         { tile: 480, cell: 16, select: (e0, n0, e1, n1) => { const e = (e0 + e1) / 2, n = (n0 + n1) / 2; for (const T of TUN) if (Math.hypot(e - T.ox, n - T.on) < Math.max(T.s1 - T.s0, 2 * T.E) * 0.5 + 520) return true; return false; } }],
       color: function (e, n, h, il, curv, o, cell) {
-        if (h < 0) { mix3(o, cSeabed, cWet, sstep(-30, -4, h)); return 0; }
+        if (h < 0) { mix3(o, cSeabed, cWet, sstep(-30, -4, h)); mix3(o, o, cBasalt, 1 - sstep(0.75, 0.92, il)); return 0; }
         mix3(o, cMoor, cMoor2, fbm(e / 800, n / 800, 3, 451));
         mix3(o, o, cHeath, sstep(0.5, 0.7, fbm(e / 1600 + 7, n / 1600, 2, 453)) * 0.85);
         mix3(o, o, cBog, sstep(4, 25, curv) * 0.5);
@@ -4343,7 +4343,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       // Great Camanoe, Guana, Scrub
       C(7000, 10300, 900, 330, { el: 1.3, ang: 0.8 }), C(2500, 11600, 1000, 400, { el: 1.2, ang: 1.1 }), C(10200, 9900, 600, 190),
       // The Pitons (Gros + Petit + low saddle)
-      C(-3300, 13300, 1150, 920, { p: 0.62, cliff: 50, jag: 0.3, shelf: 300 }), C(-900, 14700, 780, 780, { p: 0.6, cliff: 50, jag: 0.3, shelf: 300 }), C(-2100, 14000, 900, 170, { p: 1.4 }),
+      C(-3300, 13300, 820, 960, { p: 1.08, cliff: 60, jag: 0.15, shelf: 250, ridge: 0.3, ridgeS: 500, keep: 1 }), C(-1000, 14600, 600, 830, { p: 1.1, cliff: 60, jag: 0.15, shelf: 250, ridge: 0.3, ridgeS: 450, keep: 1 }), C(-2100, 14000, 900, 170, { p: 1.4 }),
       // Jost Van Dyke, Little JVD, Sandy Spit, Thatch islands
       C(-21500, 12800, 1500, 540, { el: 1.8, ang: 0.1 }), C(-18200, 13300, 1000, 380), C(-15800, 13700, 600, 170),
       C(-16200, 11000, 140, 3, { flat: 1, shelf: 450, cliff: 0, rib: 0, jag: 0.2 }), C(-22200, 6200, 800, 300, { el: 1.5, ang: 0.3 }), C(-24300, 7600, 600, 220),
@@ -4380,8 +4380,9 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       const q1 = Math.pow((e + 2000) / 37000, 2) + Math.pow((n - 3000) / 26000, 2), q2 = Math.pow((e - 23500) / 9000, 2) + Math.pow((n - 24000) / 5500, 2), q = Math.min(q1, q2);
       return -36 - 22 * fbm(e / 9000, n / 9000, 2, 723) - 900 * sstep(0.85, 1.5, q);
     };
-    for (const c of CONES) { if (!c.p) c.p = 0.8; if (!c.flat && c.H > 60) { c.H *= c.p < 0.84 && c.H > 700 ? 1.05 : 1.3; c.cliff = (c.cliff === undefined ? 25 : c.cliff) * 1.6; } }
-    const isl0 = makeIslandField(CONES, { mods: MODS0, bank: bank, ribScale: 900, ribK: 0.34 });
+    for (const c of CONES) { if (!c.p) c.p = 0.8; if (!c.flat && c.H > 60 && !c.keep) { c.H *= 1.3; c.cliff = (c.cliff === undefined ? 25 : c.cliff) * 1.6; if (c.H > 330) { c.ridge = 0.7; c.ridgeS = 1100 + c.r * 0.3; } } }
+    const FOPT = { bank: bank, ribScale: 900, ribK: 0.3, ravine: 0.45, ravineScale: 1400, wind: [1, 0] };
+    const isl0 = makeIslandField(CONES, Object.assign({ mods: MODS0 }, FOPT));
     // harbour towns: a cove offshore + a low coastal plain, placed where the coast really is
     const TOWNS = [], MODS = MODS0.slice();
     const TDEF = [['Road Town', -5500, 6100, -95, 520, 70, true], ['Cane Garden Bay', -11000, 6000, 90, 320, 26, false], ['Soper\'s Hole', -17600, 4300, 200, 300, 22, false],
@@ -4395,7 +4396,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     });
     TOWNS.push({ e: -11950, n: -7700, r: 220, count: 12, style: 'tropical', harbor: true, farms: 0, seed: 806, name: 'Pirates\' Bight', noFlat: true });
     TOWNS.push({ e: 26600, n: 25000, r: 300, count: 20, style: 'tropical', harbor: true, seed: 809, name: 'The Settlement' });
-    const isl = makeIslandField(CONES, { mods: MODS, bank: bank, ribScale: 900, ribK: 0.34 });
+    const isl = makeIslandField(CONES, Object.assign({ mods: MODS }, FOPT));
     function raw(e, n) { const h = isl(e, n), hv = volc(e, n); return hv > h ? hv : h; }
     // Mount Brimstone: stratovolcano with a smoking crater, ribbed by gullies
     function volc(e, n) {
@@ -4413,30 +4414,31 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     }
     const BASE = { name: 'Beef Island Air Station', e: 7700, n: 6550, hdg: 75, len: 2600, w: 45, seed: 81, blend: 420, minH: 9, q: 0.5 };
     const EBASE = { name: 'Anegada garrison', e: 23300, n: 24450, hdg: 81, len: 1800, w: 40, seed: 82, blend: 500, mini: true, enemy: true, minH: 5, q: 0.5 };
-    const cJ1 = lin(0x183410), cJ2 = lin(0x2b561a), cGrass = lin(0x5d7430), cScrub = lin(0x8f8a5a), cAsh = lin(0x5e5a55), cBlack = lin(0x262422), cSand = lin(0xcfc19c), cSea = lin(0xd8cfae), cCoral = lin(0xcfc6a2);
+    const cJ1 = lin(0x183410), cJ2 = lin(0x2b561a), cGrass = lin(0x5d7430), cScrub = lin(0x8f8a5a), cAsh = lin(0x5e5a55), cBlack = lin(0x262422), cSand = lin(0xcfc19c), cSea = lin(0xd8cfae), cCoral = lin(0xcfc6a2), cWetR = lin(0x2a2622);
     const def = {
-      name: 'Virgin Islands', region: 'British Virgin Islands, Caribbean', N: 400, lodK: 0.055,
+      name: 'Virgin Islands', region: 'British Virgin Islands, Caribbean', N: 400, lodK: 0.062,
       sky: { sunAz: 235, sunEl: 38, fog: 0xb8d2e8, fogD: 0.0000085, hfogA: 0.000006, hfogB: 1 / 650, zenith: [0.025, 0.11, 0.42], glow: [0.95, 0.85, 0.65], glowW: 0.18, sunCol: [1.0, 0.95, 0.85], disk: 30,
         sunHex: 0xfff2dc, sunI: 2.7, hemiSky: 0xa9cff2, hemiGround: 0x4f6a3a, hemiI: 0.55, white: 0xe9eef4, envGround: [0.08, 0.13, 0.08] },
-      ground: { rockOn: 1, rock1: 0x352e28, rock2: 0x63584b, rockA: 0.34, rockB: 0.54, sandH: 1.6, sand: 0xd6c8a2, faceN: 1 },
+      ground: { rockOn: 1, rock1: 0x352e28, rock2: 0x63584b, rockA: 0.42, rockB: 0.6, sandH: 1.6, sand: 0xd6c8a2, faceN: 1 },
       water: { color: 0x031c3c, shallow: 0x0e9a96, foam: 0.22, shallowK: 0.9, roughness: 0.17, normalScale: 0.35 },
       bases: [BASE, EBASE], raw: raw,
-      levels: [{ tile: 1920, cell: 48, max: 205, dilate: 40, score: (e0, n0, e1, n1, g) => {
+      levels: [{ tile: 1920, cell: 48, max: 165, dilate: 40, score: (e0, n0, e1, n1, g) => {
         let lo = 1e9, hi = -1e9;
         for (let i = 0; i <= 4; i++) for (let j = 0; j <= 4; j++) { const h = triH(g.H, g.NV, (e0 + i * 480 + 48000) / g.cell, (48000 - (n0 + j * 480)) / g.cell); lo = Math.min(lo, h); hi = Math.max(hi, h); }
         const e = (e0 + e1) / 2, n = (n0 + n1) / 2;
         if (Math.hypot(e - BASE.e, n - BASE.n) < 2600) return 2e5;
         for (const a of ARCHS) if (Math.hypot(e - a.cE, n - a.cN) < 1500) return 1e6;
-        return hi > 2 ? hi - Math.max(lo, -20) + 40 : 0; } }],
+        return hi > 2 ? hi - Math.max(lo, -20) + 40 : 0; } },
+        { tile: 480, cell: 16, max: 40, score: (e0, n0, e1, n1) => { let lo = 1e9, hi = -1e9; for (let i = 0; i <= 3; i++) for (let j = 0; j <= 3; j++) { const h = raw(e0 + i * 160, n0 + j * 160); lo = Math.min(lo, h); hi = Math.max(hi, h); } return hi > 120 && hi - lo > 160 ? hi - lo : 0; } }],
       color: function (e, n, h, il, curv, o) {
-        if (h < 0) { mix3(o, cSea, cSand, sstep(-6, 0, h)); return 0; }
+        if (h < 0) { mix3(o, cSea, cSand, sstep(-6, 0, h)); mix3(o, o, cWetR, Math.max(1 - sstep(0.75, 0.92, il), sstep(3, 10, curv))); return 0; }
         const dv = Math.hypot(e - V.e, n - V.n), aneg = Math.hypot((e - 23500) / 3.4, n - 24500) < 1700 ? 1 : 0;
         mix3(o, cJ1, cJ2, sstep(0.35, 0.7, fbm(e / 600, n / 600, 3, 721)));
         mix3(o, o, cGrass, sstep(0.6, 0.75, fbm(e / 1500 + 4, n / 1500, 2, 725)) * sstep(0.97, 0.995, il) * 0.7);
         if (aneg) mix3(o, o, cScrub, 0.75);
         mix3(o, o, cAsh, sstep(500, 800, h) * (dv < V.R ? 1 : 0) + sstep(0, 1, 1 - dv / 2600) * 0.9);
         mix3(o, o, cBlack, (dv < V.R ? sstep(900, 1150, h) : 0) + (dv < V.R ? sstep(0.62, 0.7, fbm(e / 500, n / 500, 2, 727)) * 0.6 * sstep(V.R * 0.3, V.R * 0.5, dv) * (1 - sstep(V.R * 0.9, V.R, dv)) : 0));
-        mix3(o, o, aneg ? cCoral : cSand, (1 - sstep(0.8, 1.8, h + 1.0 * (curv > 0 ? 0 : 1))) * sstep(0.9, 0.97, il));
+        mix3(o, o, aneg ? cCoral : cSand, (1 - sstep(0.8, 1.8, h + 1.0 * (curv > 0 ? 0 : 1))) * sstep(0.9, 0.97, il) * (1 - sstep(2, 8, curv)));
         mix3(o, o, cJ1, (1 - sstep(0.6, 0.85, il)) * 0.5);
         return 0;
       },
@@ -4508,6 +4510,17 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
           if (h > -3 || h < -24) continue; if (sampleH(e + 25, n) > -2 || sampleH(e - 25, n) > -2 || sampleH(e, n + 25) > -2 || sampleH(e, n - 25) > -2) continue;
           buildYacht(props, e, n, Y() * 360, 0.9 + Y() * 0.5, [0xf4f4f0, 0xf4f4f0, 0x1d3a5a, 0xe8e2d0][k % 4]); k++;
         } }
+      // waterfalls down the windward (east) cliffs of the big islands
+      const wfB = new Builder(), falls = [];
+      for (const c of CONES) {
+        if (c.H < 400 || c.flat || falls.length >= 12) continue;
+        for (const a0 of [-0.35, 0.3]) {
+          const d0 = marchTo(sampleH, c.e, c.n, a0, 0, 9000, 15); if (d0 < 0) continue;
+          const te = c.e + Math.cos(a0) * (d0 - 130), tn = c.n + Math.sin(a0) * (d0 - 130), top = sampleH(te, tn); if (top < 70) continue;
+          falls.push(buildWaterfall(wfB, te, tn, top - 2, -1, 9 + top * 0.03, 90 - a0 / DEG, 10));
+        }
+      }
+      if (wfB.nv) { const wm = new THREE.Mesh(wfB.build(), new THREE.MeshBasicMaterial({ vertexColors: true, color: 0xe8f0f2, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false })); wm.name = 'waterfalls'; wm.renderOrder = 2; ctx.add(wm); }
       // lighthouse on Norman Island's south point
       { const e = -11600, n = -9900, h0 = Math.max(sampleH(e, n), 2); geoTmp(new THREE.CylinderGeometry(2.6, 3.6, 18, 12), mat4(e, h0 + 9, -n), props, lin(0xf2f0ea)); geoTmp(new THREE.CylinderGeometry(2.2, 2.2, 3, 10), mat4(e, h0 + 19.5, -n), props, lin(0xc8282a)); }
       // ---- lava: crater pool + flows down the steepest descent
@@ -4573,7 +4586,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         solids: makeSolids(F), seaLanes: lanes, plume: plume,
         update: function (dt, cam, time) { glow.intensity = 3 * (0.85 + 0.15 * Math.sin(time * 1.3) + 0.08 * Math.sin(time * 3.7)); },
         arches: arches,
-        debug: { lowView: [-1500, -900, 70, 290], craterView: [V.e - 4200, V.n - 3200, 2600, V.e, V.n, floorY + 50], arches: arches.map((a) => ({ name: a.name, e: Math.round(a.e), n: Math.round(a.n), under: Math.round(a.under), top: Math.round(a.top), L: Math.round(a.L) })), baths: baths.length,
+        debug: { falls: falls.length, lowView: [-1500, -900, 70, 290], craterView: [V.e - 4200, V.n - 3200, 2600, V.e, V.n, floorY + 50], arches: arches.map((a) => ({ name: a.name, e: Math.round(a.e), n: Math.round(a.n), under: Math.round(a.under), top: Math.round(a.top), L: Math.round(a.L) })), baths: baths.length,
           views: { overview: [-26000, -24000, 2600, -2000, 6000, 200], channel: [-16000, -1500, 120, -1800, 1400, 90], pitons: [-9000, 9000, 700, -2100, 14000, 450], bight: [-16500, -7700, 260, -12000, -7700, 40],
             arch_skull: archV(arches[0], -900), arch_piton: archV(arches[1], -1100), baths: [12900, 3300, 90, 14100, 4700, 0], volcano: [V.e - 9000, V.n + 6000, 900, V.e, V.n, 700], base: [b0.e - 2500, b0.n - 2500, 500, b0.e, b0.n, 0], bridge: archV(arches[arches.length - 1], -1400), anegada: [20000, 18000, 900, 23500, 24500, 0] } }
       };
@@ -4617,7 +4630,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       // mainland
       const dN = n - coastN(e);
       if (dN > -900) {
-        const land = -8 + 14 * sstep(-900, 0, dN) + dN * 0.003 + feng(e, n, 430) * sstep(600, 3200, dN);
+        const land = -8 + 14 * sstep(-900, 0, dN) + dN * 0.003 + feng(e, n, 620) * sstep(600, 3200, dN);
         h = Math.max(h, Math.min(land, -8 + (land + 8) * sstep(-900, -100, dN) + 1e6 * sstep(-100, 0, dN)));
       }
       // Cat Ba
@@ -4639,7 +4652,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         if (n > coastN(e) - 700 || Math.hypot((e - CB.e) / 1.25, n - CB.n) < 7300) continue;
         if (Math.hypot(e - BASE.e, n - BASE.n) < 4500 || (e > 17000 && n < -3000)) continue;
         if (Math.abs(n - (-1500 + e * 0.12)) < 450 && e < 14000) continue;   // a clear channel through the bay (east-west)
-        const r = 45 + Math.pow(R(), 1.5) * 190, H = 60 + r * (0.8 + R() * 1.0) + R() * 70;
+        const r = 45 + Math.pow(R(), 1.6) * 170, H = 80 + r * (1.5 + R() * 1.1) + R() * 60;
         if (raw(e, n) > -2) continue;
         let ok = true; const gx = Math.floor(e / 500), gy = Math.floor(n / 500);
         for (let dx = -1; dx <= 1 && ok; dx++) for (let dy = -1; dy <= 1 && ok; dy++) for (const o of (TG.get((gx + dx) + ',' + (gy + dy)) || [])) if (Math.hypot(o[0] - e, o[1] - n) < (o[2] + r) * 0.7 + 12) { ok = false; break; }
@@ -4659,7 +4672,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         TW.push([ce + Math.cos(a) * Rr, cn + Math.sin(a) * Rr, 95 + 30 * hash2(k, 1, 7), 170 + 80 * hash2(k, 2, 9), 5000 + k]);
       }
       const ga = gapA, gx = Math.cos(ga), gy = Math.sin(ga), tx = -gy, ty = gx;
-      ARCHS.push({ name: nm, kind: 'span', A: [ce + gx * Rr + tx * 120, cn + gy * Rr + ty * 120], B: [ce + gx * Rr - tx * 120, cn + gy * Rr - ty * 120], yA: 95, yB: 95, apex: 120, w0: 34, th0: 18, seed: 7 + ARCHS.length, footA: 0.8, footB: 0.8, lagoon: [ce, cn, Rr] });
+      ARCHS.push({ name: nm, kind: 'span', A: [ce + gx * Rr + tx * 120, cn + gy * Rr + ty * 120], B: [ce + gx * Rr - tx * 120, cn + gy * Rr - ty * 120], yA: 110, yB: 110, apex: 140, w0: 60, th0: 28, seed: 7 + ARCHS.length, footA: 0.8, footB: 0.8, lagoon: [ce, cn, Rr] });
     }
     const TOWNS = [
       { e: -4000, n: 18300, r: 950, count: 120, style: 'tropical', church: false, harbor: true, seed: 931, name: 'Ha Long City' },
@@ -4672,7 +4685,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       sky: { sunAz: 215, sunEl: 26, fog: 0xc5d0cc, fogD: 0.0000135, hfogA: 0.000045, hfogB: 1 / 380, zenith: [0.07, 0.13, 0.3], glow: [1.0, 0.85, 0.6], glowW: 0.3, sunCol: [1.0, 0.92, 0.78], disk: 24,
         sunHex: 0xfff0d4, sunI: 2.3, hemiSky: 0xbfd2dc, hemiGround: 0x4a5a3a, hemiI: 0.62, white: 0xe2e8e6, envGround: [0.08, 0.12, 0.08] },
       ground: { rockOn: 1, rock1: 0x7a7466, rock2: 0xb3ab98, rockA: 0.38, rockB: 0.58, sandH: 3, sand: 0xd8cca8, faceN: 1 },
-      water: { color: 0x14473f, shallow: 0x3f8f72, foam: 0.5, shallowK: 0.55, roughness: 0.1, normalScale: 0.3 },
+      water: { color: 0x0c3530, shallow: 0x23705c, foam: 0.3, shallowK: 0.45, roughness: 0.14, normalScale: 0.3 },
       bases: [BASE, EBASE], raw: raw,
       flats: TOWNS.map((t) => ({ e: t.e, n: t.n, hdg: 0, x0: -t.r * 0.8, x1: t.r * 0.8, z0: -t.r * 0.8, z1: t.r * 0.8, blend: 260, minH: 3, q: 0.3 })),
       levels: [{ tile: 1920, cell: 48, max: 150, dilate: 30, score: (e0, n0, e1, n1, g) => {
@@ -4754,7 +4767,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       return {
         solids: makeSolidsGrid(F, 500), seaLanes: lanes,
         update: function (dt, cam) {
-          const ce = cam.position.x, cn = -cam.position.z, hiR = cam.position.y > 2500 ? 0 : 5200;
+          const ce = cam.position.x, cn = -cam.position.z, hiR = cam.position.y > 2500 ? 0 : 3000;
           for (const m of meshes) { const d = Math.max(Math.abs(m.e - ce), Math.abs(m.n - cn)) - CELL / 2; const near = d < (m.near ? hiR + 400 : hiR); if (near !== m.near) { m.near = near; m.hi.visible = near; } }
         },
         debug: { towers: TW.length, cells: meshes.length, junks: nj, arches: arches.map((a) => ({ name: a.name, e: Math.round(a.e), n: Math.round(a.n), under: Math.round(a.under) })),
@@ -5019,7 +5032,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       const p = sstep(hw * 0.6, hw + 260 / k + 0.25 * Math.max(m - floor, 0) / k, d);
       let sh = 1 - Math.pow(1 - p, 1.6 + 0.4 * k);
       sh += 0.03 * Math.sin(sh * 38 + rough * 0.2) * sh * (1 - sh) * 4; // ledges / bands where snow can lie
-      return floor + (m - floor) * sh + rough * 4 * sh * (1 - sh);
+      // slope envelope (max ~55-70 deg): no knife fins between neighbouring valleys
+      return Math.min(floor + (m - floor) * sh + rough * 4 * sh * (1 - sh), floor + Math.max(0, d - hw * 0.5) * (0.7 + 0.5 * k) + rough);
     }
     function raw(e, n) {
       lastIce = 0;
@@ -5587,13 +5601,13 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     }
     const mods = opts.mods || [];
     const bank = opts.bank || (() => -60);
-    const ribS = opts.ribScale || 1100, ribK = opts.ribK === undefined ? 0.3 : opts.ribK;
+    const ribS = opts.ribScale || 1100, ribK = opts.ribK === undefined ? 0.3 : opts.ribK, WIND = opts.wind || null;
     const info = { shelf: 0, dist: 0, cone: null, land: 0 };
     const WA = opts.warp === undefined ? 600 : opts.warp, WS = opts.warpScale || 2600, RVK = opts.ravine === undefined ? 0.32 : opts.ravine, RVS = opts.ravineScale || 1700;
     function field(e0, n0) {
       const e = e0 + WA * (2 * fbm(e0 / WS, n0 / WS, 2, 751) - 1) + WA * 0.3 * (2 * vnoise(e0 / (WS * 0.27), n0 / (WS * 0.27), 753) - 1);
       const n = n0 + WA * (2 * fbm(e0 / WS + 7.3, n0 / WS - 2.1, 2, 755) - 1) + WA * 0.3 * (2 * vnoise(e0 / (WS * 0.27) - 4, n0 / (WS * 0.27) + 9, 757) - 1);
-      let best = -1e9, bc = null;
+      let best = -1e9, bc = null, bg = 0, bx = 1;
       for (let i = 0; i < cones.length; i++) {
         const c = cones[i], de = e - c.e, dn = n - c.n;
         if (de > c.limE || de < -c.limE || dn > c.limE || dn < -c.limE) continue;
@@ -5606,8 +5620,11 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         if (x < 1) {
           const inM = (1 - x) * rr;
           const g = c.flat ? sstep(0, 0.22, 1 - x) : Math.pow(1 - x, c.p);
-          const cl = c.cliff * sstep(0.42, 0.66, fbm(cT * 2.1 + c.s * 3, sT * 2.1, 2, 709));
+          let cl;
+          if (!WIND) cl = c.cliff * sstep(0.42, 0.66, fbm(cT * 2.1 + c.s * 3, sT * 2.1, 2, 709));
+          else cl = c.cliff * (0.25 + 2.2 * sstep(-0.1, 0.6, (de * WIND[0] + dn * WIND[1]) / (Math.hypot(de, dn) + 1)));   // sheer cliffs on the windward side
           val = c.H * g + cl * sstep(0, 55, inM) + 0.4;
+          if (c.ridge && val > best) { bg = c.H * g; bx = x; }
         } else val = -(x - 1) * rr;
         if (val > best) { best = val; bc = c; }
       }
@@ -5615,6 +5632,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       let h;
       if (best > 0) {
         h = best;
+        if (bc && bc.ridge && bg > 0) { const rr = ridged(e / (bc.ridgeS || 1300) + bc.s, n / (bc.ridgeS || 1300) - bc.s, 3, 719); h += bg * ((1 - bc.ridge + bc.ridge * 1.45 * Math.pow(rr, 0.8)) * (1 + 0.25 * bc.ridge * sstep(0.2, 0.7, 1 - bx)) - 1); }
         if (bc && bc.rib && ribK) h += h * ribK * bc.rib * (ridged(e / ribS + bc.s, n / ribS - bc.s, 3, 713) - 0.42) * sstep(0, 120, h);
         if (bc && bc.rib && RVK) { const ch = Math.abs(2 * fbm(e / RVS + 3.1, n / RVS - 1.7, 3, 761) - 1); h -= h * RVK * bc.rib * (1 - sstep(0.02, 0.22, ch)) * sstep(20, 160, h); }
         info.land = 1;
@@ -5863,7 +5881,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   }
   // karst tower (Ha Long style): limestone column with fluted, streaked walls, a sea notch at the waterline and a jungle cap.
   // hi/lo: Builders for the near and far LOD meshes (lo may be null). Adds a solid. Returns top height.
-  const KARST_C = { lime: lin(0xb3ab98), dark: lin(0x5f5a50), wet: lin(0x3e3b35), green: lin(0x2e5124), green2: lin(0x47702c) };
+  const KARST_C = { lime: lin(0x9a9486), dark: lin(0x46423a), wet: lin(0x34322d), green: lin(0x24461a), green2: lin(0x3a6024), vines: 1 };
   function karstRadius(R0, H, y, tp, nt) { const t = Math.max(0, y) / H; return R0 * (1 - tp * Math.pow(t, tp > 0.3 ? 1.3 : 2)) * (1 - nt * Math.exp(-Math.pow((y - 2) / 5, 2))); }
   // opts: {y0 (base height), taper (0.22 karst .. 0.75 needle), notch (sea notch depth), dome (cap height factor), bury}
   function buildKarst(hi, lo, F, e, n, R0, H, seed, cols, opts) {
@@ -5888,7 +5906,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         const o = [0, 0, 0]; mix3(o, C.lime, C.dark, st * 0.75);
         if (C.band) mix3(o, o, C.band, sstep(C.bandY - 20, C.bandY + 20, y + Y0 + 30 * (vnoise(x / 60, z / 60, 5) - 0.5)));
         if (nt > 0) mix3(o, o, C.wet, 1 - sstep(1, 7, y));
-        const gr = sstep(0.35, 0.65, ny + 0.25 * (vnoise(x / 25, z / 25 + y / 30, seed) - 0.5)) * sstep(8, 30, y);
+        let gr = sstep(0.35, 0.65, ny + 0.25 * (vnoise(x / 25, z / 25 + y / 30, seed) - 0.5)) * sstep(8, 30, y);
+        if (C.vines) gr = Math.max(gr, sstep(0.58, 0.7, fbm(Math.atan2(z + n, x - e) * 3 + seed, y / 70, 2, 815)) * sstep(6, 25, y) * 0.9);
         mix3(o, o, vnoise(x / 40, z / 40, 3) > 0.5 ? C.green : C.green2, gr);
         b.c[v * 3] = o[0]; b.c[v * 3 + 1] = o[1]; b.c[v * 3 + 2] = o[2];
       }
@@ -33913,6 +33932,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
   function cylX(r, len, s) { var g = new T.CylinderGeometry(r, r, len, s || 10); g.rotateZ(Math.PI / 2); return g; }
   function cylZ(rFront, rBack, len, s) { var g = new T.CylinderGeometry(rBack, rFront, len, s || 12); g.rotateX(Math.PI / 2); return g; }
   function sph(r, w, h) { return new T.SphereGeometry(r, w || 12, h || 8); }
+  function flat(g) { var n = g.index ? g.toNonIndexed() : g; if (n !== g) g.dispose(); n.deleteAttribute('normal'); n.computeVertexNormals(); return n; }   // hard-edged facets
   function hemi(r, w) { return new T.SphereGeometry(r, w || 16, Math.max(4, (w || 16) >> 1), 0, TAU, 0, Math.PI / 2); }
   function plan(pts, thick) {          // top-view outline [[x, z]...] extruded up by thick (y 0..thick)
     var sh = new T.Shape(); sh.moveTo(pts[0][0], -pts[0][1]);
@@ -34244,10 +34264,10 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
     SY(cylY(1.8, 2.2, 2.4, 12), SUP2, 11, 13.6, -42); SY(cylY(1.5, 1.6, 1.2, 12), SUP, 11, 15.4, -42); SY(sph(1.5, 12, 8), WHITE, 11, 16.2, -42); SY(cylZ(0.15, 0.15, 2.6, 6), DARK, 11, 16.1, -43.6);
     for (i = 0; i < 6; i++) SY(box(0.2, 0.9, 1.6), DARK, 8.05, 20.6, -50 + i * 3.4);                                            // bridge side windows
     // foremast: pyramid tower, platforms, Top Pair is the spinning head (rad1)
-    S(cylY(2.6, 6.2, 22, 4), SUP, 0, 31, -18, 0, Math.PI / 4); B(10, 0.5, 4, SUP2, 0, 34, -18); B(7, 0.5, 3, SUP2, 0, 39, -18); B(12, 0.3, 0.4, DARK, 0, 40.5, -18);
+    S(flat(cylY(2.6, 6.2, 22, 4)), SUP, 0, 31, -18, 0, Math.PI / 4); B(10, 0.5, 4, SUP2, 0, 34, -18); B(7, 0.5, 3, SUP2, 0, 39, -18); B(12, 0.3, 0.4, DARK, 0, 40.5, -18);
     // funnel block (two uptakes, black caps) and the aft tower (Top Plate head = rad)
     B(18, 7, 56, SUP, 0, 14, 8); B(12, 9, 16, SUP2, 0, 21, 6); SY(box(4.4, 3, 6.4), SUP, 3.2, 27, 6); SY(box(4.6, 0.6, 6.6), BOOT, 3.2, 28.6, 6);
-    S(cylY(2.2, 4.8, 18, 4), SUP, 0, 29, 22, 0, Math.PI / 4); B(8, 0.5, 3, SUP2, 0, 33, 22); B(9, 0.3, 0.3, DARK, 0, 36.2, 22);
+    S(flat(cylY(2.2, 4.8, 18, 4)), SUP, 0, 29, 22, 0, Math.PI / 4); B(8, 0.5, 3, SUP2, 0, 33, 22); B(9, 0.3, 0.3, DARK, 0, 36.2, 22);
     // ship's boats and davits along the midships
     for (i = 0; i < 3; i++) { SY(lathe([[-4, 0.2], [-3, 0.9], [2.6, 1.0], [4, 0.5]], 10, 0.8), i === 1 ? ORANGE : WHITE, 9.6, 18.6, 0 + i * 9); SY(box(0.3, 2.6, 0.3), DARK, 9.2, 17.2, -2 + i * 9); }
     SY(box(1.4, 1.2, 3.2), SUP2, 9.4, 18, 28); SY(cylZ(0.5, 0.5, 6, 10), DARK, 7.6, 11.6, 32);                                    // torpedo tubes
@@ -34719,7 +34739,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
   function geoRadarMtn() {
     var a = new Acc(), E = 0x7a6f58, E2 = 0x6b624e, C = 0x9a978e, O = 0x55603f, D = 0x2a2e24, W = 0xe6e8e4, G = 0x11171b, i;
     // the mountain: terraced earth mound, concrete pad, access ramp, sandbag berms
-    a.add(cylY(30, 42, 8, 14), E, 0, 4, 0); a.add(cylY(27, 30, 0.6, 14), C, 0, 8.3, 0);
+    a.add(flat(cylY(30, 42, 8, 14)), E, 0, 4, 0); a.add(cylY(27, 30, 0.6, 14), C, 0, 8.3, 0);
     a.add(box(8, 8, 22), E2, 0, 3.6, 36, -0.36);
     for (i = 0; i < 10; i++) { var an = i / 10 * TAU + 0.3; if (i === 4 || i === 5) continue; a.add(box(9, 1.4, 1.6), 0x8a7d60, Math.sin(an) * 25, 9.3, Math.cos(an) * 25, 0, an + Math.PI / 2); }
     // 92N6E Grave Stone on its 8x8 truck: twin front cabs, square array tilted back
@@ -35106,8 +35126,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
       for (i = 0; i < 4; i++) { an = i / 4 * TAU; a.add(box(5.6, 0.4, 0.3), 0xffb040, Math.sin(an) * 47.7, 6.6, Math.cos(an) * 47.7, 0, an, 0); }
       return a.geo();
     }
-    a.add(cylY(42, 48, 10, 8), C, 0, 5, 0, 0, Math.PI / 8); a.add(cylY(46.1, 46.3, 0.5, 8), C2, 0, 3.4, 0, 0, Math.PI / 8); a.add(cylY(44.2, 44.4, 0.5, 8), C2, 0, 6.6, 0, 0, Math.PI / 8);
-    a.add(cylY(38, 40, 8, 8), W, 0, 14, 0, 0, Math.PI / 8); a.add(cylY(38.6, 38.6, 0.6, 8), C2, 0, 17.7, 0, 0, Math.PI / 8);
+    a.add(flat(cylY(42, 48, 10, 8)), C, 0, 5, 0, 0, Math.PI / 8); a.add(flat(cylY(46.1, 46.3, 0.5, 8)), C2, 0, 3.4, 0, 0, Math.PI / 8); a.add(flat(cylY(44.2, 44.4, 0.5, 8)), C2, 0, 6.6, 0, 0, Math.PI / 8);
+    a.add(flat(cylY(38, 40, 8, 8)), W, 0, 14, 0, 0, Math.PI / 8); a.add(flat(cylY(38.6, 38.6, 0.6, 8)), C2, 0, 17.7, 0, 0, Math.PI / 8);
     a.add(cylY(16, 17.5, 2, 32), C2, 0, 19, 0); a.add(cylY(14.6, 14.6, 0.3, 32), D, 0, 20.05, 0);
     for (i = 0; i < 32; i++) { an = i / 32 * TAU; a.add(box(2.9, 0.12, 1.2), i % 2 ? Y : D, Math.sin(an) * 15.6, 20.06, Math.cos(an) * 15.6, 0, an, 0); }
     for (i = 0; i < 8; i++) { an = i / 8 * TAU + Math.PI / 8; a.add(box(10, 14, 6), C2, Math.sin(an) * 45, 7, Math.cos(an) * 45, 0, an); a.add(box(10.4, 1, 6.4), D, Math.sin(an) * 45, 14.4, Math.cos(an) * 45, 0, an); }
@@ -35271,7 +35291,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
     a.add(box(15, 6.5, 1.2), 0x8e8c84, 0, 3.2, -9.2); a.add(box(5, 4.5, 0.4), 0x3b3f36, 0, 2.4, -9.9); return a.geo();
   }, true, 4);
   staticKind('barracks', 'Barracks', 280, 400, 13, 'BARRACKS DESTROYED', function () {
-    var a = new Acc(); a.add(box(9, 3.6, 26), 0x8b8370, 0, 1.8, 0); a.add(new T.CylinderGeometry(5.6, 5.6, 26.4, 3, 1), 0x5b4f43, 0, 4.4, 0, Math.PI / 2, 0, Math.PI / 2, 1, 0.42, 1);
+    var a = new Acc(); a.add(box(9, 3.6, 26), 0x8b8370, 0, 1.8, 0); a.add(flat(new T.CylinderGeometry(5.6, 5.6, 26.4, 3, 1)), 0x5b4f43, 0, 4.4, 0, Math.PI / 2, 0, Math.PI / 2, 1, 0.42, 1);
     for (var i = 0; i < 5; i++) a.sym(box(0.3, 1.1, 1.6), 0x2a2d30, 4.6, 2.2, -10 + i * 5); return a.geo();
   }, false, 0);
   // mounted sub-target models per boss (kind, variant, x, y, z, flip) — used by test_bosses_view.py to show the whole boss
@@ -37321,7 +37341,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
   $('bSetup').addEventListener('click', function () { openSetup(false); });
 
   // ---- map picker (main screen). Clients in a room follow the host map and cannot pick.
-  var MAP_SHORT = { lax: 'City, beach and mountains. Large airport.', fjords: 'Snow mountains and narrow fjords.', cliffs: 'Sea cliffs, arches and caves.', canyon: 'Grand Canyon, mesas, arches and slot canyons.', volcano: 'Jungle islands, reefs, sea arches and a volcano.' };
+  var MAP_SHORT = { lax: 'City, beach and mountains. Large airport.', fjords: 'Snow mountains and narrow fjords.', cliffs: 'Sea cliffs, stacks, caves and the Cuillin.', canyon: 'Grand Canyon, mesas, arches and slot canyons.', volcano: 'Jungle islands, reefs, sea arches and a volcano.' };
   var mapBusy = false, mapQueued = null, hostMapId = null;
   function mapsAll() { return (FL.MAPS && FL.MAPS.length) ? FL.MAPS : [{ id: 'lax', name: 'Los Angeles' }]; }
   function mapInfo(id) { var l = mapsAll(); for (var i = 0; i < l.length; i++) if (l[i].id === id) return l[i]; return { id: id, name: id }; }
@@ -39753,7 +39773,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793162192', updShown = false;
+  var BUILD = '1793163191', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
