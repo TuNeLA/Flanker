@@ -672,7 +672,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       if (user && ready) { txt = 'Cloud save: on · ' + ago(lastSave || link().t); on = true; }
       else if (user && conflict) txt = 'Cloud save: select a save (Account)';
       else if (user) txt = 'Cloud save: connecting…';
-      else if (loading && !libErr) txt = 'Cloud save: connecting…';
+      else if (loading && !sb && !libErr) txt = 'Cloud save: connecting…';
       else txt = 'Cloud save: off';
       f.textContent = ''; f.appendChild(el('span', 'cl')); f.appendChild(document.createTextNode(txt));
       f.classList.toggle('on', on);
@@ -1179,7 +1179,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     { id: 'fjords', name: 'Norway Winter Fjords', region: 'Nordland, Norway', blurb: 'Snowbound peaks and a maze of narrow, dark fjords: hug the walls and stay below the ridgelines.', timeOfDay: 'overcast' },
     { id: 'cliffs', name: 'Sea Cliffs', region: 'County Clare, Ireland', blurb: 'Sheer Atlantic cliffs with sea stacks, arches and sea caves you can fly straight through.', timeOfDay: 'afternoon' },
     { id: 'canyon', name: 'Desert Canyon', region: 'Colorado Plateau, USA', blurb: 'A 40 km winding red-rock canyon at sunset: pop up, shoot, drop back in.', timeOfDay: 'sunset' },
-    { id: 'volcano', name: 'Volcano Islands', region: 'Tafea, Vanuatu', blurb: 'Steep jungle islands around an erupting volcano, lit by lava at dusk.', timeOfDay: 'dusk' }];
+    { id: 'volcano', name: 'Virgin Islands', region: 'British Virgin Islands, Caribbean', blurb: 'Dozens of steep jungle islands, turquoise reefs, sea arches to fly through, a pirate cove and an erupting volcano.', timeOfDay: 'afternoon' }];
 
   // ================================================================ grid helpers
   // Height on a regular grid exactly as THREE.PlaneGeometry triangulates it: cell (ix,iy) = triangles (a,b,d) + (b,c,d),
@@ -4128,7 +4128,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       x += jit;
       lastX = x;
       const P = plat(e, n);
-      let h = strat(x) + P * sstep(0.86, 1.0, x) + mountH(e, n) * sstep(0.98, 1.2, x);
+      let h = (strat(x - 0.012) + 2 * strat(x) + strat(x + 0.012)) * 0.25 + P * sstep(0.86, 1.0, x) + mountH(e, n) * sstep(0.98, 1.2, x);
       lastPlat = 0;
       if (x > 0.98) {
         lastPlat = 1;
@@ -4154,7 +4154,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     // layer colours by height
     const L = (h) => lin(h);
     const LAY = [[RIVER + 4, L(0xb39a76)], [1150, L(0x4a3d38)], [1205, L(0x8d8a6c)], [1445, L(0x9a5038)], [1700, L(0x93492f)], [1790, L(0x9c4630)], [1900, L(0xcdb58c)], [1950, L(0xb8946e)], [2075, L(0xb3a58a)], [2250, L(0xb15c3d)], [2400, L(0xc27a55)], [9000, L(0xd59a72)]];
-    const cRiver = L(0xb39a76), cPlat = L(0x8c8668), cPin = L(0x5d6343), tmp = [0, 0, 0];
+    const cRiver = L(0xb39a76), cPlat = L(0x8c8668), cPin = L(0x5d6343), cSoil1 = L(0xb48c62), cSoil2 = L(0xa65f3c), cSoil3 = L(0x6f5a45), cScree = L(0x7a5140), tmp = [0, 0, 0];
     function layerCol(h, o, e, n) {
       let i = 0; while (i < LAY.length - 1 && h > LAY[i][0]) i++;
       const c = LAY[i][1], band = 0.9 + 0.12 * Math.sin(h * 0.21 + 2 * Math.sin(h * 0.047)) + 0.06 * (vnoise(e / 300, n / 300, 7) - 0.5);
@@ -4164,9 +4164,9 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     }
     const def = {
       name: 'Desert Canyon', region: 'Colorado Plateau, USA', N: 400, noWater: true, lodK: 0.05,
-      sky: { sunAz: 262, sunEl: 7, fog: 0xc89a86, fogD: 0.0000075, hfogA: 0.000009, hfogB: 1 / 1400, zenith: [0.07, 0.07, 0.2], glow: [1.25, 0.55, 0.22], glowW: 0.55, sunCol: [1.0, 0.62, 0.3], disk: 24,
-        band: [0.25, 0.08, 0.12], sunHex: 0xffb070, sunI: 2.7, hemiSky: 0x9a8ab8, hemiGround: 0x7a4a34, hemiI: 0.55, white: 0xe6c8b8, envGround: [0.2, 0.1, 0.07] },
-      ground: { rockOn: 1, rockTint: 1, rock1: 0x8a4a2e, rock2: 0xc07a4a, rockA: 0.2, rockB: 0.42, faceN: 0.6, strataFn: (h, o) => layerCol(h, o, 0, 0), strataOff: -700, strataSpan: 2560 },
+      sky: { sunAz: 262, sunEl: 8, fog: 0xd8b294, fogD: 0.0000072, hfogA: 0.000008, hfogB: 1 / 1400, zenith: [0.02, 0.055, 0.2], glow: [1.35, 0.6, 0.2], glowW: 0.6, sunCol: [1.0, 0.66, 0.32], disk: 24,
+        sunHex: 0xffb47a, sunI: 2.7, hemiSky: 0x8fa2c8, hemiGround: 0x7a4a34, hemiI: 0.55, white: 0xe6c8b8, envGround: [0.2, 0.1, 0.07] },
+      ground: { rockOn: 1, rockTint: 1, rock1: 0x8a4a2e, rock2: 0xc07a4a, rockA: 0.2, rockB: 0.42, faceN: 0.12, strataFn: (h, o) => layerCol(h, o, 0, 0), strataOff: -700, strataSpan: 2560 },
       bases: [BASE, EBASE], raw: raw,
       aux: () => lastPlat,
       levels: [
@@ -4176,8 +4176,14 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         layerCol(h, o, e, n);
         if (h < RIVER + 6) { o[0] = cRiver[0]; o[1] = cRiver[1]; o[2] = cRiver[2]; }
         const flat = sstep(0.93, 0.985, il);
-        if ((aux > 0.9 && aux < 1.5) || (h > 2040 && h < 2120 && aux < 1.5)) { mix3(tmp, cPlat, cPin, sstep(0.5, 0.7, fbm(e / 900, n / 900, 3, 671))); mix3(o, L(0xb3a58a), tmp, 0.35 + 0.6 * flat); }
-        else if (h > 1150 && h < 1215) mix3(o, o, L(0x8f8c6e), flat * 0.6);
+        if ((aux > 0.9 && aux < 1.5) || (h > 2040 && h < 2120 && aux < 1.5)) { mix3(tmp, cPlat, cPin, sstep(0.5, 0.7, fbm(e / 900, n / 900, 3, 671))); mix3(o, L(0xb3a58a), tmp, 0.35 + 0.6 * flat); mix3(o, o, cSoil2, sstep(0.6, 0.78, fbm(e / 2200 + 9, n / 2200, 3, 677)) * 0.45); mix3(o, o, cSoil3, sstep(0.62, 0.8, fbm(e / 330, n / 330, 2, 679)) * 0.35); }
+        else if (flat > 0) { // benches and platforms: desert soil with patches, darker scree below cliffs
+          const v1 = fbm(e / 1200 + 3, n / 1200, 3, 673), v2 = fbm(e / 260, n / 260, 2, 675);
+          mix3(tmp, cSoil1, cSoil2, sstep(0.35, 0.65, v1)); mix3(tmp, tmp, cSoil3, sstep(0.55, 0.75, v2) * 0.6);
+          if (h > 1150 && h < 1215) mix3(tmp, tmp, L(0x8f8c6e), 0.45);
+          mix3(o, o, tmp, flat * 0.8);
+          mix3(o, o, cScree, sstep(4, 25, curv) * 0.5);
+        }
         return 0;
       },
       zones: [], towns: [], roads: null, traffic: 80,
@@ -4303,7 +4309,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       C(-5500, 6100, 1800, 640, { el: 1.5, ang: -0.05 }), C(-1500, 6400, 1600, 520, { el: 1.5, ang: 0.1 }), C(2300, 7300, 1300, 420, { el: 1.4, ang: 0.3 }),
       C(4900, 7000, 650, 14, { flat: 1, el: 1.4, ang: 0.6, shelf: 500 }),
       // Beef Island (home base: flat coral bench + hill at the east end)
-      C(7700, 6550, 1150, 70, { p: 1.6, el: 2.5, ang: A15, cliff: 20, shelf: 600, jag: 0.25, rib: 0.4 }), C(11500, 7650, 700, 210, { p: 1.0, cliff: 50 }),
+      C(7820, 6100, 1500, 80, { p: 1.5, el: 2.1, ang: A15, cliff: 20, shelf: 500, jag: 0.2, rib: 0.4 }), C(11500, 7650, 700, 210, { p: 1.0, cliff: 50 }),
       // Great Camanoe, Guana, Scrub
       C(7000, 10300, 900, 330, { el: 1.3, ang: 0.8 }), C(2500, 11600, 1000, 400, { el: 1.2, ang: 1.1 }), C(10200, 9900, 600, 190),
       // The Pitons (Gros + Petit + low saddle)
@@ -4375,7 +4381,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       }
       return h;
     }
-    const BASE = { name: 'Beef Island Air Station', e: 7700, n: 6550, hdg: 75, len: 2600, w: 45, seed: 81, blend: 600, minH: 9, q: 0.5 };
+    const BASE = { name: 'Beef Island Air Station', e: 7700, n: 6550, hdg: 75, len: 2600, w: 45, seed: 81, blend: 420, minH: 9, q: 0.5 };
     const EBASE = { name: 'Anegada garrison', e: 23300, n: 24450, hdg: 81, len: 1800, w: 40, seed: 82, blend: 500, mini: true, enemy: true, minH: 5, q: 0.5 };
     const cJ1 = lin(0x183410), cJ2 = lin(0x2b561a), cGrass = lin(0x5d7430), cScrub = lin(0x8f8a5a), cAsh = lin(0x5e5a55), cBlack = lin(0x262422), cSand = lin(0xcfc19c), cSea = lin(0xd8cfae), cCoral = lin(0xcfc6a2);
     const def = {
@@ -4385,7 +4391,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       ground: { rockOn: 1, rock1: 0x352e28, rock2: 0x63584b, rockA: 0.34, rockB: 0.54, sandH: 1.6, sand: 0xd6c8a2, faceN: 1 },
       water: { color: 0x031c3c, shallow: 0x1fc2b6, foam: 0.45, shallowK: 1.0, roughness: 0.17, normalScale: 0.35 },
       bases: [BASE, EBASE], raw: raw,
-      levels: [{ tile: 1920, cell: 48, max: 175, dilate: 40, score: (e0, n0, e1, n1, g) => {
+      levels: [{ tile: 1920, cell: 48, max: 235, dilate: 40, score: (e0, n0, e1, n1, g) => {
         let lo = 1e9, hi = -1e9;
         for (let i = 0; i <= 4; i++) for (let j = 0; j <= 4; j++) { const h = triH(g.H, g.NV, (e0 + i * 480 + 48000) / g.cell, (48000 - (n0 + j * 480)) / g.cell); lo = Math.min(lo, h); hi = Math.max(hi, h); }
         const e = (e0 + e1) / 2, n = (n0 + n1) / 2;
@@ -4413,7 +4419,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       },
       traffic: 90,
       veg: [
-        { kind: 'jungle', per: 560, farThin: 3, scale: [0.8, 1.5], cap: 9000, test: (e, n, h, sl) => { if (h < 3 || h > 800 || sl > 1.3) return 0; if (Math.hypot(e - V.e, n - V.n) < V.R * 0.5) return 0; if (Math.hypot((e - 23500) / 3.4, n - 24500) < 1700) return 0.05; return 0.92; } },
+        { kind: 'jungle', per: 480, farThin: 3, scale: [0.8, 1.5], cap: 9000, test: (e, n, h, sl) => { if (h < 3 || h > 800 || sl > 1.3) return 0; if (Math.hypot(e - V.e, n - V.n) < V.R * 0.5) return 0; if (Math.hypot((e - 23500) / 3.4, n - 24500) < 1700) return 0.05; return 0.92; } },
         { kind: 'palm', per: 170, farThin: 2, scale: [0.8, 1.25], cap: 3500, minH: 0.8, test: (e, n, h, sl) => h < 38 && sl < 0.5 ? 0.9 - h / 50 : 0 },
         { kind: 'scrub', per: 160, scale: [0.6, 1.2], cap: 2500, shadow: false, test: (e, n, h, sl) => Math.hypot((e - 23500) / 3.4, n - 24500) < 1800 ? 0.8 : (h > 300 && sl < 0.4 ? 0.3 : 0) },
         { kind: 'lavarock', per: 60, scale: [0.6, 2.4], cap: 2000, shadow: false, test: (e, n, h, sl) => Math.hypot(e - V.e, n - V.n) < V.R * 0.85 && h > 4 ? 0.6 : 0 }],
@@ -4532,7 +4538,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       const ring = []; for (let k = 0; k <= 28; k++) { const a = k / 28 * 6.283; ring.push([Math.round(-2000 + Math.cos(a) * 36000), Math.round(1000 + Math.sin(a) * 25000)]); }
       const lanes = [[[-26000, -2500], [-16000, -1500], [-8000, 0], [0, 1500], [8000, 3000], [13000, 3500], [24000, 6000], [34000, 9000]], ring, [[11000, 3000], [16000, 14000], [21000, 21000], [30000, 28000]]];
       const b0 = ctx.bases[0].spec;
-      const archV = (a, back) => { const ax = a.axisDeg * DEG, pe = Math.cos(ax), pn = -Math.sin(ax); const y = Math.max(a.under * 0.55, 30); return [a.e + pe * back, a.n + pn * back, y + 15, a.e, a.n, y]; };
+      const archV = (a, back) => { const ax = a.axisDeg * DEG, pe = Math.cos(ax), pn = -Math.sin(ax); const y = Math.max(a.under * 0.55, 30); const sg = sampleH(a.e + pe * back, a.n + pn * back) < sampleH(a.e - pe * back, a.n - pn * back) ? 1 : -1; return [a.e + pe * back * sg, a.n + pn * back * sg, y + 15, a.e, a.n, y]; };
       return {
         solids: makeSolids(F), seaLanes: lanes, plume: plume,
         update: function (dt, cam, time) { glow.intensity = 3 * (0.85 + 0.15 * Math.sin(time * 1.3) + 0.08 * Math.sin(time * 3.7)); },
@@ -5000,19 +5006,21 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       const sk = strandK(e, n);
       m = m * (1 - 0.988 * sk) + sk * (6 + 12 * fbm(e / 900, n / 900, 2, 209));
       if (dx < -300) m = Math.min(m, -70 - Math.min(-dx, 9000) * 0.008 + 150 * sstep(0.62, 0.76, fbm(e / 1500 + 9, n / 1500 - 4, 3, 221)) * (1 - sstep(2500, 9000, -dx)));
-      const rough = 26 * (fbm(e / 240, n / 240, 2, 345) - 0.5);
+      const rough = 34 * (fbm(e / 240, n / 240, 2, 345) - 0.5);
+      // buttresses and couloirs: the wall line moves in and out by up to ~±170 m
+      const gul = 340 * (ridged(e / 520 + 7, n / 520 - 3, 2, 347) - 0.45) + 120 * (fbm(e / 1400, n / 1400, 2, 349) - 0.5);
       let h = m;
       let d = fIdx.query(e, n);
       if (SQ.p >= 0) {
         const F = FJ[SQ.p], fr = SQ.s / SQ.len, hw = (F.w[0] + (F.w[1] - F.w[0]) * fr) * (0.9 + 0.2 * vnoise(SQ.s / 2600, SQ.p, 241));
         const floor = -(F.d[0] + (F.d[1] - F.d[0]) * fr) * (1 - Math.min(d / hw, 1) * 0.5);
-        if (h > floor) h = Math.min(h, uProfile(h, floor, d, hw, F.k, rough));
+        if (h > floor) h = Math.min(h, uProfile(h, floor, d + gul * sstep(hw * 0.45, hw * 1.1, d), hw, F.k, rough));
       }
       d = vIdx.query(e, n);
       if (SQ.p >= 0) {
         const V = VA[SQ.p], fr = SQ.s / SQ.len, hw = V.w * (0.85 + 0.3 * vnoise(SQ.s / 2200, SQ.p, 251));
         const floor = V.f[0] + (V.f[1] - V.f[0]) * Math.pow(fr, 1.3) + 10 * Math.pow(Math.min(d / hw, 1), 2);
-        if (h > floor) h = Math.min(h, uProfile(h, floor, d, hw, V.k, rough));
+        if (h > floor) h = Math.min(h, uProfile(h, floor, d + gul * sstep(hw * 0.45, hw * 1.1, d), hw, V.k, rough));
       }
       for (let i = 0; i < DELTAS.length; i++) { // lowland deltas / shore flats where the villages sit
         const D = DELTAS[i], dd = Math.hypot(e - D[0], n - D[1]); if (dd > D[2] * 3.2) continue;
@@ -5048,17 +5056,17 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     const flats = TOWNS.map((t) => ({ e: t.e, n: t.n, hdg: 0, x0: -t.r * 0.6, x1: t.r * 0.6, z0: -t.r * 0.6, z1: t.r * 0.6, blend: t.r * 0.6, minH: 4, q: 0.3 }));
     const cLow = lin(0x4a4a3c), cLowSnow = lin(0xd3d9df), cMid = lin(0x6a6a62), cSea = lin(0x2a3a3a), cShore = lin(0x5a564c), cSnowUnder = lin(0xa9b2ba);
     const def = {
-      name: 'Norway Winter Fjords', region: 'Møre og Romsdal / Sogn, Norway', N: 400, lodK: 0.04,
+      name: 'Norway Winter Fjords', region: 'Møre og Romsdal / Sogn, Norway', N: 400, lodK: 0.05,
       sky: { sunAz: 205, sunEl: 7, fog: 0xaab6c2, fogD: 0.0000115, hfogA: 0.00003, hfogB: 1 / 520, zenith: [0.10, 0.14, 0.22], glow: [0.9, 0.55, 0.35], glowW: 0.3, sunCol: [1.0, 0.8, 0.6], disk: 18,
         sunHex: 0xffd9b0, sunI: 1.6, hemiSky: 0xb9c8da, hemiGround: 0x5a6068, hemiI: 0.55, white: 0xdfe4ea, envGround: [0.18, 0.2, 0.23] },
-      ground: { rockOn: 1, rock1: 0x34373b, rock2: 0x63666a, rockA: 0.26, rockB: 0.46, snowH: 160, snowF: 50, snow: 0xeef3f8, snowSlope: 0.7, faceN: 0.25, ice: 0xa7bfcf },
+      ground: { rockOn: 1, rock1: 0x34373b, rock2: 0x63666a, rockA: 0.26, rockB: 0.46, snowH: 160, snowF: 50, snow: 0xeef3f8, snowSlope: 0.55, faceN: 0.12, ice: 0xa7bfcf },
       water: { color: 0x0a1a22, shallow: 0x1f3a40, foam: 0.35, shallowK: 0.35, roughness: 0.18 },
       bases: [BASE, EBASE], flats: flats,
       raw: raw,
       aux: () => lastIce,
       levels: [
-        { tile: 1920, cell: 64, max: 380, dilate: 260, score: (e0, n0, e1, n1, g) => { const e = (e0 + e1) / 2, n = (n0 + n1) / 2; if (Math.abs(e - BASE.e) < 3500 && Math.abs(n - BASE.n) < 3500) return 1e6; const dd = Math.min(fIdx.query(e, n), vIdx.query(e, n)); return dd < 2600 ? 3000 - dd : 0; } },
-        { tile: 384, cell: 32, select: (e0, n0, e1, n1) => { const e = (e0 + e1) / 2, n = (n0 + n1) / 2; const d = vIdx.query(e, n); return SQ.p === 0 && SQ.s > 2500 && SQ.s < 12000 && d > 250 && d < 900; } }],
+        { tile: 1920, cell: 64, max: 320, dilate: 160, score: (e0, n0, e1, n1, g) => { const e = (e0 + e1) / 2, n = (n0 + n1) / 2; if (Math.abs(e - BASE.e) < 3500 && Math.abs(n - BASE.n) < 3500) return 1e6; const dd = Math.min(fIdx.query(e, n), vIdx.query(e, n)); return dd < 2600 ? 3000 - dd : 0; } },
+        { tile: 384, cell: 32, select: (e0, n0, e1, n1) => { const e = (e0 + e1) / 2, n = (n0 + n1) / 2; const d = vIdx.query(e, n); return SQ.p === 0 && SQ.s > 4000 && SQ.s < 9500 && d > 300 && d < 800; } }],
       color: function (e, n, h, il, curv, o, cell, k, aux) {
         if (h < 0) { mix3(o, cSea, cShore, sstep(-25, -1, h)); return 0; }
         mix3(o, cLow, cLowSnow, 0.35 + 0.5 * sstep(0.4, 0.6, fbm(e / 500, n / 500, 3, 261)));
@@ -8102,27 +8110,27 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     aam_l:    { look: { s: 0.62, air: true, fx: 'flak', sparks: 40 }, sound: { size: 0.8, kind: 'aircraft', lvl: 0.86, pitch: 1.08, nearR: 950, layers: ['flak', 'frag'] }, shake: { i: 0.32, r: 700, dur: 0.15 } },
     agm:      { look: { s: 0.9, fx: 'shaped', sparks: 30, scorch: 10, light: 1 }, sound: { size: 1.05, kind: 'missile', lvl: 0.92, pitch: 1.1, nearR: 1050, layers: ['crack', 'metal', 'debris'] }, shake: { i: 0.4, r: 850, dur: 0.2 } },
     asm:      { look: { s: 1.3, fx: 'shaped', sparks: 36, scorch: 14, light: 1.4, secondary: 3 }, sound: { size: 1.5, kind: 'missile', lvl: 1.0, pitch: 0.95, nearR: 1300, layers: ['crack', 'metal', 'secondary'] }, shake: { i: 0.5, r: 1300, dur: 0.3 } },
-    bomb250:  { look: { s: 1.15, fx: 'gp', plume: 1.2, scorch: 16, smoke: 10, light: 1.2 }, sound: { size: 1.4, kind: 'bomb', lvl: 1.0, pitch: 1.0, nearR: 1250, layers: ['crack', 'debris'] }, shake: { i: 0.55, r: 1400, dur: 0.3 } },
-    bomb500:  { look: { s: 1.6, fx: 'gp', plume: 1.5, scorch: 22, smoke: 14, light: 1.6 }, sound: { size: 2.0, kind: 'bomb', lvl: 1.1, pitch: 0.88, nearR: 1550, layers: ['crack', 'debris'] }, shake: { i: 0.7, r: 2000, dur: 0.45 } },
+    bomb250:  { look: { s: 1.4, fx: 'gp', plume: 1.0, dark: 0.34, scorch: 18, smoke: 10, light: 1.4 }, sound: { size: 1.4, kind: 'bomb', lvl: 1.0, pitch: 1.0, nearR: 1250, layers: ['crack', 'debris'] }, shake: { i: 0.55, r: 1400, dur: 0.3 } },
+    bomb500:  { look: { s: 2.3, fx: 'gp', plume: 1.4, dark: 0.17, scorch: 28, smoke: 16, light: 2.2 }, sound: { size: 2.0, kind: 'bomb', lvl: 1.1, pitch: 0.88, nearR: 1550, layers: ['crack', 'debris'] }, shake: { i: 0.7, r: 2000, dur: 0.45 } },
     betab:    { look: { s: 0, fx: 'penetrator', plume: 2, scorch: 18, smoke: 12, light: 0.6 }, sound: { size: 1.8, kind: 'bomb', lvl: 1.05, pitch: 0.72, nearR: 900, layers: ['deep', 'debris'] }, shake: { i: 0.75, r: 1800, dur: 0.7 } },
     cluster:  { look: { s: 0.2, fx: 'pop', sparks: 6 }, sound: { size: 0.4, kind: 'ground', lvl: 0.5, pitch: 1.4, nearR: 650, layers: ['pops'] }, shake: { i: 0.08, r: 500, dur: 0.1 } },
     napalm:   { look: { s: 0, fx: 'napalm', smoke: 12, light: 1.4 }, sound: { size: 1.1, kind: 'ground', lvl: 0.85, pitch: 0.8, nearR: 950, noBoom: true, layers: ['whoomp', 'crackle'] }, shake: { i: 0.28, r: 900, dur: 0.45 } },
-    thermo:   { look: { s: 2.0, fx: 'thermo', light: 3 }, sound: { size: 3.2, kind: 'bomb', lvl: 1.2, pitch: 0.68, nearR: 2200, pre: 0.22, layers: ['vacuum', 'crack', 'debris'] }, shake: { i: 1.0, r: 3500, dur: 0.9 } },
+    thermo:   { look: { s: 3.0, fx: 'thermo', light: 4 }, sound: { size: 3.2, kind: 'bomb', lvl: 1.2, pitch: 0.68, nearR: 2200, pre: 0.22, layers: ['vacuum', 'crack', 'debris'] }, shake: { i: 1.0, r: 3500, dur: 0.9 } },
     emp:      { look: { s: 0, fx: 'emp', light: 2 }, sound: { size: 1.2, kind: 'aircraft', lvl: 0.8, pitch: 1.0, nearR: 1600, noBoom: true, layers: ['sweep'] }, shake: { i: 0.25, r: 1500, dur: 0.35 } },
     rail:     { look: { s: 0, fx: 'rail', sparks: 22 }, sound: { size: 0.6, kind: 'ground', lvl: 0.8, pitch: 1.3, nearR: 1600, noBoom: true, layers: ['kinetic'] }, shake: { i: 0.28, r: 650, dur: 0.1 } },
     laser:    { look: { s: 0, fx: 'laser' }, sound: { size: 0.2, kind: 'ground', lvl: 0.3, pitch: 1.0, nearR: 450, noBoom: true, layers: ['sizzle'] }, shake: { i: 0, r: 1, dur: 0 } },
-    cruise:   { look: { s: 2.0, fx: 'gp', plume: 1.7, scorch: 26, smoke: 16, light: 2 }, sound: { size: 2.6, kind: 'bomb', lvl: 1.15, pitch: 0.84, nearR: 1850, layers: ['crack', 'debris'] }, shake: { i: 0.8, r: 2600, dur: 0.5 } },
-    hyper:    { look: { s: 1.9, fx: 'hyper', sparks: 40, plume: 1.6, scorch: 24, smoke: 14, light: 2.4 }, sound: { size: 2.6, kind: 'bomb', lvl: 1.15, pitch: 0.86, nearR: 2000, layers: ['kinetic', 'crack', 'debris'] }, shake: { i: 0.85, r: 2800, dur: 0.5 } },
+    cruise:   { look: { s: 2.6, fx: 'gp', plume: 1.5, dark: 0.15, scorch: 30, smoke: 18, light: 2.5 }, sound: { size: 2.6, kind: 'bomb', lvl: 1.15, pitch: 0.84, nearR: 1850, layers: ['crack', 'debris'] }, shake: { i: 0.8, r: 2600, dur: 0.5 } },
+    hyper:    { look: { s: 2.4, fx: 'hyper', sparks: 40, plume: 1.3, dark: 0.3, scorch: 28, smoke: 14, light: 2.8 }, sound: { size: 2.6, kind: 'bomb', lvl: 1.15, pitch: 0.86, nearR: 2000, layers: ['kinetic', 'crack', 'debris'] }, shake: { i: 0.85, r: 2800, dur: 0.5 } },
     ship:     { look: { s: 1.6, air: true, fx: 'ship', smoke: 30, light: 1.6, secondary: 4 }, sound: { size: 2.0, kind: 'water', lvl: 1.05, pitch: 0.9, nearR: 1500, layers: ['metal', 'secondary'] }, shake: { i: 0.5, r: 1800, dur: 0.4 } },
     boat:     { look: { s: 1.1, air: true, fx: 'ship', smoke: 16, light: 1, secondary: 2 }, sound: { size: 1.3, kind: 'water', lvl: 0.95, pitch: 1.0, nearR: 1200, layers: ['metal', 'secondary'] }, shake: { i: 0.4, r: 1200, dur: 0.3 } },
     aircraft: { look: { s: 1.5, air: true, fx: 'wreck', debris: 6, light: 1.4 }, sound: { size: 1.4, kind: 'aircraft', lvl: 0.95, pitch: 1.0, nearR: 1150, layers: ['crack', 'metal', 'debris'] }, shake: { i: 0.45, r: 1200, dur: 0.25 } },
     heli:     { look: { s: 1.0, air: true, fx: 'wreck', debris: 4, light: 1 }, sound: { size: 1.0, kind: 'aircraft', lvl: 0.9, pitch: 1.1, nearR: 950, layers: ['crack', 'metal', 'debris'] }, shake: { i: 0.35, r: 900, dur: 0.2 } },
-    crash:    { look: { s: 1.3, fx: 'gp', plume: 1.2, scorch: 18, smoke: 14, light: 1 }, sound: { size: 1.4, kind: 'ground', lvl: 1.0, pitch: 0.95, nearR: 1200, layers: ['crack', 'metal', 'debris'] }, shake: { i: 0.5, r: 1300, dur: 0.3 } },
+    crash:    { look: { s: 1.3, fx: 'gp', plume: 0.8, dark: 0.1, scorch: 18, smoke: 14, light: 1 }, sound: { size: 1.4, kind: 'ground', lvl: 1.0, pitch: 0.95, nearR: 1200, layers: ['crack', 'metal', 'debris'] }, shake: { i: 0.5, r: 1300, dur: 0.3 } },
     vehicle:  { look: { s: 0.9, fx: 'cookoff', secondary: 2, smoke: 10 }, sound: { size: 1.0, kind: 'ground', lvl: 0.9, pitch: 1.05, nearR: 1000, layers: ['crack', 'metal', 'secondary'] }, shake: { i: 0.35, r: 900, dur: 0.2 } },
     sam:      { look: { s: 2.0, fx: 'cookoff', secondary: 4, smoke: 20, light: 1.6 }, sound: { size: 2.0, kind: 'ground', lvl: 1.05, pitch: 0.92, nearR: 1500, layers: ['crack', 'secondary', 'debris'] }, shake: { i: 0.6, r: 2000, dur: 0.4 } },
     cookoff:  { look: { s: 0.8, air: true, fx: 'cookoff', secondary: 1 }, sound: { size: 0.9, kind: 'ground', lvl: 0.8, pitch: 1.1, nearR: 900, layers: ['crack', 'debris'] }, shake: { i: 0.2, r: 600, dur: 0.1 } },
     structure:{ look: { s: 2.4, fx: 'collapse', plume: 1.2, scorch: 30, smoke: 25, light: 1.6 }, sound: { size: 2.4, kind: 'bomb', lvl: 1.05, pitch: 0.82, nearR: 1700, layers: ['crack', 'debris', 'rumble'] }, shake: { i: 0.7, r: 2200, dur: 0.7 } },
-    depot:    { look: { s: 2.6, fx: 'mushroom', scorch: 40, smoke: 40, light: 3, secondary: 5 }, sound: { size: 3.2, kind: 'bomb', lvl: 1.2, pitch: 0.72, nearR: 2300, layers: ['whoomp', 'crack', 'secondary', 'crackle'] }, shake: { i: 0.95, r: 3600, dur: 1.0 } },
+    depot:    { look: { s: 3.0, fx: 'mushroom', scorch: 40, smoke: 40, light: 3, secondary: 5 }, sound: { size: 3.2, kind: 'bomb', lvl: 1.2, pitch: 0.72, nearR: 2300, layers: ['whoomp', 'crack', 'secondary', 'crackle'] }, shake: { i: 0.95, r: 3600, dur: 1.0 } },
   };
   const IMPACT_BY_ID = { r60: 'aam_s', r73: 'aam_s', aim9x: 'aam_s', iris_t: 'aam_s', qaam: 'aam_s', aam4: 'aam_s', aam6: 'aam_s',
     r77: 'aam_l', r27er: 'aam_l', r27et: 'aam_l', aim120: 'aam_l', meteor: 'aam_l', aim54: 'aam_l',
@@ -9203,8 +9211,10 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       for (let j = 0; j < nq(20); j++) {
         randDir(_iB); if (!air && _iB.y < 0) _iB.y = -_iB.y * 0.4;
         const r0 = (8 + R() * 14) * S;
-        fire.spawn(x + _iB.x * r0, y + _iB.y * r0, z + _iB.z * r0, _iB.x * 12 * S, _iB.y * 10 * S + 4, _iB.z * 12 * S, 1.2 + R() * 0.8, 10 * S, (34 + R() * 16) * S, 0.9, 1.15, 1.05, 0.9, 1.6, 2, K_FIRE);
+        fire.spawn(x + _iB.x * r0, y + _iB.y * r0, z + _iB.z * r0, _iB.x * 12 * S, _iB.y * 10 * S + 4, _iB.z * 12 * S, 1.2 + R() * 0.8, 10 * S, (34 + R() * 16) * S, 0.9, 1.2, 1.3, 1.6, 1.6, 2, K_FIRE);   // whiter-yellow fuel-air burn
       }
+      glow.spawn(x, y, z, 0, 2, 0, 0.9, 30 * S, 70 * S, 0.45, 2.2, 1.9, 1.2, 0, 0, K_FLASH);
+      if (!air) { _iB.set(x, (W ? gY(x, z) : y) + 0.8, z); flatRing(_iB, _up, 2.6, 12 * S, 200 * S, 0.6, 0.7, 0.64, 0.54); }
       if (!air) {
         const dr = srgb2lin(0.52), dg = srgb2lin(0.47), db = srgb2lin(0.38), gy = W ? gY(x, z) : y;
         for (let j = 0; j < nq(26); j++) {
@@ -9284,7 +9294,21 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       gp(x, y, z, S, k, air, water, o, L) {              // GP bomb: tall dark column, wide dust ring, big scorch, smoke
         if (air || water) return;
         _iP.set(x, y + 0.6, z);
-        flatRing(_iP, _up, 1.2 + 0.2 * S, 6 * S, 120 * S, 0.5, 0.6, 0.55, 0.46);
+        // ground shock: a fast pale ring, then the slow dust ring rolling out (both read from the air), bright flash
+        flatRing(_iP, _up, 0.55, 8 * S, 170 * S, 0.45, 0.95, 0.93, 0.88);
+        flatRing(_iP, _up, 2.2 + 0.3 * S, 6 * S, 150 * S, 0.65, 0.66, 0.6, 0.5);
+        _iA.set(x, y + 4 * S, z); spr(_iA, false, 0.12, 30 * S, 80 * S, 1.0, 2.6, 2.1, 1.5);
+        const dr = srgb2lin(0.56), dg = srgb2lin(0.5), db = srgb2lin(0.41), ns = nq(16 + 6 * S);
+        for (let j = 0; j < ns; j++) {       // dust skirt riding the shock outward
+          const a = (j / ns) * 6.283 + R() * 0.3, sp = (30 + R() * 15) * S;
+          smoke.spawn(x + Math.cos(a) * 3 * S, y + 1.5, z + Math.sin(a) * 3 * S, Math.cos(a) * sp, 1 + R() * 3, Math.sin(a) * sp, 4 + R() * 3, 6 * S, (30 + R() * 14) * S, 0.55, dr, dg, db, 1.1, 0.3, K_SMOKE, 0.06);
+        }
+        // rising column of earth + smoke: height ~ 40 m x size, darker for heavier bombs (look.dark)
+        const cg = srgb2lin(L.dark != null ? L.dark : 0.25), H = 40 * S * (L.plume || 1);
+        for (let j = 0; j < nq(10 + 4 * S); j++) {
+          const r0 = R() * 4 * S, a = R() * 6.283, vy = H * 0.6 * (0.45 + R() * 0.55);
+          smoke.spawn(x + Math.cos(a) * r0, y + 2, z + Math.sin(a) * r0, Math.cos(a) * 3 * S, vy, Math.sin(a) * 3 * S, 7 + R() * 4, 8 * S, (26 + R() * 18) * S, 0.72, cg * 1.08, cg, cg * 0.9, 0.6, 0.4, K_HOT, 0.2);
+        }
         dirt(x, y, z, S, nq(14 * (L.plume || 1)), 45 * Math.sqrt(S), 0.35, 0.3, 0.26, 0.2);
         if (L.scorch) decal(x, y, z, L.scorch * k, false, 60);
         if (L.smoke) later(0.3, burnLater, x, y, z, S * 0.9, L.smoke);
@@ -9294,7 +9318,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         for (let j = 0; j < nq(8); j++) smoke.spawn(x, y + 0.5, z, (R() - 0.5) * 4, 20 + R() * 25, (R() - 0.5) * 4, 1.5 + R(), 1.5, 6 + R() * 4, 0.7, dr, dg, db, 1.2, -6, K_SMOKE, 0.03);
         glow.spawn(x, y + 1, z, 0, 0, 0, 0.1, 3, 8, 0.6, 1.8, 1.0, 0.4, 0, 0, K_FLASH);
         if (water) { later(0.35, waterLater, x, 0.2, z, 1.2 * k); return; }
-        later(0.35, deepBlast, x, y, z, 1.4 * k, L.plume || 2, (L.scorch || 0) * k);
+        later(0.35, deepBlast, x, y, z, 2.1 * k, L.plume || 2, (L.scorch || 0) * k);
         if (L.smoke) later(0.6, burnLater, x, y, z, 1.1 * k, L.smoke);
       },
       pop(x, y, z, S, k, air, water, o, L) {             // cluster bomblet
@@ -9428,14 +9452,15 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       let y = pos.y;
       if (W && !air && !water && isWet(x, z) && y < 4) water = true;
       if (!air && W) { const g = gY(x, z); if (y < g + 0.3) y = g + 0.3; }
-      const cd = camera.position.distanceTo(pos), lod = cd > 9000 ? 3 : cd > 4500 ? 2 : cd > 2000 ? 1 : 0;
+      const cd = camera.position.distanceTo(pos) / ((Lk.s || 0) * k >= 1.5 ? 1.8 : 1);   // big blasts keep detail further out
+      const lod = cd > 9000 ? 3 : cd > 4500 ? 2 : cd > 2000 ? 1 : 0;
       const q0 = qm; qm = q0 * LOD_Q[lod];
       try {
         const S = (Lk.s || 0) * k;
         if (S > 0) { _iP.set(x, pos.y, z); IO.water = water; IO.air = air; boomCore(_iP, S, IO); }
         const f = IMPACT_FX[Lk.fx];
         if (f && (lod < 3 || !(S > 0))) f(x, y, z, S > 0 ? S : k, k, air, water, opts, Lk);
-        if (Lk.light && lod < 2 && Lk.fx !== 'emp') { _iP.set(x, y + 3, z); light(_iP, 4 * Lk.light, 250 + 180 * Lk.light, 0.35 + 0.2 * Lk.light); }
+        if (Lk.light && lod < 3 && Lk.fx !== 'emp') { _iP.set(x, y + 3, z); light(_iP, 7 * Lk.light, 300 + 300 * Lk.light, 0.25 + 0.15 * Lk.light); }   // brief bright flash
       } catch (e) { /* an effect never breaks the game */ } finally { qm = q0; }
     };
     fx.time = () => time;
@@ -9749,23 +9774,23 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   }
   let WREC = null; // main-wing outlines recorded during a build (for the control-surface panel lines)
   function planform(pts, depth, bevel, yc, thick) {
-    const st = outlineStations(pts, depth, bevel, yc || 0, (sp, z) => (thick ? thick(Math.abs(sp), z) : 1), 8);
-    return K.airfoilGeo(st, { nc: 13 });
+    const st = outlineStations(pts, depth, bevel, yc || 0, (sp, z) => (thick ? thick(Math.abs(sp), z) : 1), Math.max(3, Math.round(8 * LODK)));
+    return K.airfoilGeo(st, { nc: ncL(13) });
   }
   // SURF: build-time collector for moving control surfaces { P, def, wingDone, rudders, last }
   let SURF = null;
   const SURF_DEF = [{ a: 0.08, b: 0.5, c: 0.24, kind: 'flap' }, { a: 0.54, b: 0.92, c: 0.24, kind: 'aileron' }];
   function warpGeo(g, f) { if (!f) return g; const p = g.attributes.position; for (let i = 0; i < p.count; i++) p.setY(i, f(p.getX(i), p.getY(i))); g.computeVertexNormals(); return g; }
   function wingPair(pts, depth, bevel, yc, thick) {
-    const st = outlineStations(pts, depth, bevel, yc || 0, (sp, z) => (thick ? thick(Math.abs(sp), z) : 1), 8);
+    const st = outlineStations(pts, depth, bevel, yc || 0, (sp, z) => (thick ? thick(Math.abs(sp), z) : 1), Math.max(4, Math.round(8 * LODK)));
     if (WREC) WREC.push(st);
     const W = SURF && !SURF.wingDone ? SURF : null, wf = W && W.def.wingWarp;
     if (W) W.wingDone = true;
-    if (!W || W.def.surf === false) { const w = warpGeo(K.airfoilGeo(st, { nc: 15 }), wf); return [w, mirrorX(w)]; }
+    if (!W || W.def.surf === false) { const w = warpGeo(K.airfoilGeo(st, { nc: ncL(15) }), wf); return [w, mirrorX(w)]; }
     const sp = K.splitSurfaces(st, W.def.surf || SURF_DEF);
-    const w = warpGeo(K.airfoilGeo(sp.st, { nc: 15 }), wf);
+    const w = warpGeo(K.airfoilGeo(sp.st, { nc: ncL(15) }), wf);
     for (const f of sp.surf) {
-      const g = warpGeo(K.airfoilGeo(f.st, { nc: 9 }), wf);
+      const g = warpGeo(K.airfoilGeo(f.st, { nc: ncL(9) }), wf);
       const A = [f.A[0], wf ? wf(f.A[0], f.A[1]) : f.A[1], f.A[2]], B = [f.B[0], wf ? wf(f.B[0], f.B[1]) : f.B[1], f.B[2]];
       const d = new T.Vector3(B[0] - A[0], B[1] - A[1], B[2] - A[2]).normalize();
       W.P.movers.push({ geo: g, pivot: A, kind: f.kind, side: 1, axis: [d.x, d.y, d.z] });
@@ -9773,20 +9798,25 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     }
     return [w, mirrorX(w)];
   }
-  // fin profile in (z, y) -> vertical airfoil at x = xc, thinning toward the tip
+  // fin profile in (z, y) -> vertical airfoil at x = xc, thinning toward the tip (geometry is tagged for the fin atlas region)
+  const FINS = new WeakSet();
+  let FREC = null;
+  const ncL = (n) => Math.max(5, Math.round(n * Math.min(1, LODK * 1.25)) | 1);
   function fin(pts, depth, bevel, xc, taper) {
     const sw = pts.map((q) => [q[1], q[0]]);
     const tp = taper === undefined ? 0.5 : taper;
-    const st = outlineStations(sw, depth, bevel, 0, (sp, z, fr) => 1 - tp * fr, 5);
+    const st = outlineStations(sw, depth, bevel, 0, (sp, z, fr) => 1 - tp * fr, Math.max(3, Math.round(5 * LODK)));
     const h = st.length ? st[st.length - 1][0] - st[0][0] : 0;
-    if (!SURF || SURF.def.noRudder || h < 1.4 || SURF.rudders >= 2) return K.airfoilGeo(st, { nc: 13, vertical: true, xc: xc || 0 });
+    if (FREC && h > 0.8) FREC.push({ st, xc: xc || 0 });
+    const tag = (g) => (FINS.add(g), g);
+    if (!SURF || SURF.def.noRudder || h < 1.4 || SURF.rudders >= 2) return tag(K.airfoilGeo(st, { nc: ncL(13), vertical: true, xc: xc || 0 }));
     SURF.rudders++;
     const sp = K.splitSurfaces(st, [{ a: 0.1, b: 0.9, c: 0.28, kind: 'rudder' }]), f = sp.surf[0];
     const A = [(xc || 0) + f.A[1], f.A[0], f.A[2]], B = [(xc || 0) + f.B[1], f.B[0], f.B[2]];
     const d = new T.Vector3(B[0] - A[0], B[1] - A[1], B[2] - A[2]).normalize();
-    SURF.last = { geo: K.airfoilGeo(f.st, { nc: 9, vertical: true, xc: xc || 0 }), pivot: A, kind: 'rudder', side: Math.sign(xc || 0), axis: [d.x, d.y, d.z], xc: xc || 0 };
+    SURF.last = { geo: tag(K.airfoilGeo(f.st, { nc: ncL(9), vertical: true, xc: xc || 0 })), pivot: A, kind: 'rudder', side: Math.sign(xc || 0), axis: [d.x, d.y, d.z], xc: xc || 0 };
     SURF.P.movers.push(SURF.last);
-    return K.airfoilGeo(sp.st, { nc: 13, vertical: true, xc: xc || 0 });
+    return tag(K.airfoilGeo(sp.st, { nc: ncL(13), vertical: true, xc: xc || 0 }));
   }
   function cylZ(r0, r1, len, seg, open) {
     const g = new T.CylinderGeometry(r1, r0, len, seg, 1, !!open);
@@ -9826,14 +9856,22 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   }
   const MSL_DIM = { r73: [2.9, 0.085], r77: [3.6, 0.1], rb24: [2.85, 0.064], rb71: [3.7, 0.1], iris: [2.9, 0.064], meteor: [3.65, 0.09] };
   function store(list, kind, x, y, z, pylon) { list.push({ deferred: true, kind, x, y, z, pylon: pylon || 0 }); }
-  function resolveStores(list, hit) {
+  function cheapMissile(id) { // low-LOD missile: 8-sided body, nose cone, 4 tail fins
+    const k = 'CM_' + id; if (SG[k]) return SG[k];
+    const M = missileGeo(id), L = M.L, r = M.r, p = [];
+    p.push(paint(cylZ(r, r, L * 0.8, 6, false).translate(0, 0, -L * 0.4), 0.86, 0.86, 0.84), paint(cylZ(0.001, r, L * 0.2, 6, false).translate(0, 0, -L * 0.6), 0.5, 0.5, 0.5));
+    for (let i = 0; i < 2; i++) p.push(paint(box(i ? 0.012 : r * 4.4, i ? r * 4.4 : 0.012, L * 0.12, 0, 0, L * 0.33), 0.7, 0.7, 0.7));
+    return (SG[k] = { geo: merge(p, false, true), L, r });
+  }
+  function resolveStores(list, hit, cheap) {
     const out = [];
     for (const it of list) {
       if (!it.deferred) { out.push(it); continue; }
-      const MG = missileGeo({ rb24: 'aim9x', rb71: 'aim120', iris: 'iris_t' }[it.kind] || it.kind), L = MG.L, r = MG.r, g = MG.geo;
+      const id = { rb24: 'aim9x', rb71: 'aim120', iris: 'iris_t' }[it.kind] || it.kind, MG = cheap ? cheapMissile(id) : missileGeo(id), L = MG.L, r = MG.r, g = MG.geo;
       const h = hit([it.x, -20, it.z], [0, 1, 0], 40);
       if (h && h.y < it.y + r + it.pylon + 0.9) {
-        if (it.pylon > 0) K.hang(out, g, r, it.x, it.z, h.y + 0.02, L * 0.5, it.pylon);
+        if (it.pylon > 0 && cheap) { out.push(paint(box(0.08, it.pylon, L * 0.4, it.x, h.y + 0.02 - it.pylon / 2, it.z), 0.6, 0.62, 0.64)); out.push(g.clone().translate(it.x, h.y - it.pylon - r, it.z)); }
+        else if (it.pylon > 0) K.hang(out, g, r, it.x, it.z, h.y + 0.02, L * 0.5, it.pylon);
         else { out.push(paint(box(0.07, 0.05, L * 0.7, it.x, h.y - 0.025, it.z), 0.38, 0.4, 0.42)); out.push(g.clone().translate(it.x, h.y - 0.05 - r, it.z)); }
       } else out.push(g.clone().translate(it.x, it.y, it.z));
     }
@@ -9945,8 +9983,9 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     const n = seeds.length, col = new Int8Array(n).fill(-1), d2 = (i, j) => { const dz = seeds[i][0] - seeds[j][0], ds = (seeds[i][1] - seeds[j][1]) / ks; return dz * dz + ds * ds; };
     const near = (i, lim) => { const o = []; for (let j = 0; j < n; j++) if (j !== i && d2(i, j) < lim * lim * sp * sp) o.push(j); return o; };
     const wts = opt.weights || cols.map(() => 1);
+    const adj = cols.length > 2;
     for (let i = 0; i < n; i++) {
-      const used = new Set(); for (const j of near(i, 1.6)) if (col[j] >= 0) used.add(col[j]);
+      const used = new Set(); if (adj) for (const j of near(i, 1.6)) if (col[j] >= 0) used.add(col[j]);
       let tot = 0; for (let k = 0; k < cols.length; k++) if (!used.has(k)) tot += wts[k];
       let r = R() * tot, pick = (R() * cols.length) | 0;
       for (let k = 0; k < cols.length; k++) { if (used.has(k)) continue; r -= wts[k]; if (r <= 0) { pick = k; break; } }
@@ -10191,7 +10230,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       x.fillStyle = lc[1]; starPath(x, 256, 262, 140); x.fill();
     } else {
       x.lineJoin = 'miter';
-      if (M.sovietStar !== false) { starPath(x, 256, 270, 250); x.fillStyle = '#1b3f8f'; x.fill(); }
+      starPath(x, 256, 270, 250); x.fillStyle = M.star === 'soviet' ? '#c8101c' : '#1b3f8f'; x.fill(); // Soviet: red rim, modern Russian: blue rim
       starPath(x, 256, 270, 222); x.fillStyle = '#ffffff'; x.fill();
       starPath(x, 256, 270, 192); x.fillStyle = '#d0141f'; x.fill();
     }
@@ -10326,24 +10365,31 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     fins: [[0, 1.0, 4.4]],
     nation: 'RU', seed: 21, len: [-7.6, 7.2], hs: 3.7, radomeZ: -7.6, metalBody: true,
     frames: [-6.4, -5.0, -3.2, -1.2, 0.8, 2.8, 4.6],
-    liv: { pattern: 'metal', base: '#bfc5c9', under: '#c3c8cb', line: 'rgba(55,60,66,0.35)' },
-    code: { text: '45', color: '#1f4fa8', stroke: '#ffffff' },
+    // MiG-21bis in Soviet service: bare / silver-lacquered metal, red tactical number with white outline, Guards badge
+    liv: { pattern: 'metal', base: '#bcc2c6', under: '#c2c7ca', line: 'rgba(55,60,66,0.35)' },
+    marks: { badge: 'guards' },
+    code: { text: '45', color: '#c8101c', stroke: '#ffffff' },
     engines: [{ x: 0, y: 0, z: 6.45, r: 0.5, len: 0.6 }],
     gear: [{ x: 0, y: -0.55, z: -4.6, r: 0.25, nose: 1 }, { x: 1.35, y: -0.3, z: 1.3, r: 0.36 }, { x: -1.35, y: -0.3, z: 1.3, r: 0.36 }],
     wingtips: [[-3.58, -0.05, 2.65], [3.58, -0.05, 2.65]], navs: [[-3.56, 0.0, 2.3], [3.56, 0.0, 2.3]],
     build(P) {
-      // slim tube with the open nose intake
-      P.body.push(loft([
-        [-7.25, 0, 0.47, 0.47, 0.47, 2], [-7.0, 0, 0.53, 0.53, 0.53, 2], [-6.0, 0.0, 0.6, 0.6, 0.6, 2],
-        [-4.5, 0.0, 0.66, 0.68, 0.66, 2], [-2.5, 0, 0.7, 0.72, 0.7, 2], [0.5, 0, 0.72, 0.72, 0.7, 2],
-        [3.0, 0, 0.68, 0.68, 0.66, 2], [5.0, 0, 0.6, 0.6, 0.6, 2], [6.45, 0, 0.55, 0.55, 0.55, 2],
-      ], 28, 3, 0));
+      // slim circular tube (1.3 m) with the open nose intake; slightly taller than wide behind the cockpit
+      const FUS = [
+        [-7.25, 0, 0.46, 0.46, 0.46, 2], [-7.0, 0, 0.51, 0.51, 0.51, 2], [-6.0, 0.0, 0.58, 0.58, 0.58, 2],
+        [-4.5, 0.0, 0.63, 0.65, 0.63, 2], [-2.5, 0, 0.66, 0.68, 0.65, 2], [0.5, 0, 0.67, 0.68, 0.66, 2],
+        [3.0, 0, 0.64, 0.65, 0.63, 2], [5.0, 0, 0.58, 0.58, 0.58, 2], [6.45, 0, 0.55, 0.55, 0.55, 2],
+      ];
+      P.body.push(loft(FUS, 28, 3, 0));
+      intake(P, FUS[0], 0, { lip: 0.04, depth: 1.5, shrink: 0.8, face: false, lipCol: [0.6, 0.62, 0.63] });
       // big MiG-21bis dorsal spine (fuel hump) from the canopy to the fin
-      P.body.push(loft([[-3.3, 0.55, 0.28, 0.3, 0.1], [-2.0, 0.6, 0.36, 0.36, 0.1], [0.5, 0.62, 0.36, 0.34, 0.1], [3.0, 0.58, 0.28, 0.24, 0.1], [4.8, 0.52, 0.12, 0.08, 0.08]], 16, 3, 0));
+      P.body.push(loft([[-3.3, 0.5, 0.26, 0.3, 0.1], [-2.0, 0.56, 0.34, 0.37, 0.1], [0.5, 0.58, 0.35, 0.35, 0.1], [3.0, 0.55, 0.27, 0.25, 0.1], [4.8, 0.5, 0.12, 0.08, 0.08]], 16, 3, 0));
+      // GSh-23L gun pack under the belly + brake-chute container at the fin root
+      P.body.push(loft([[-2.15, -0.6, 0.02, 0.02, 0.02], [-1.9, -0.62, 0.14, 0.08, 0.1], [-0.8, -0.63, 0.19, 0.1, 0.14], [0.5, -0.62, 0.17, 0.08, 0.12], [1.2, -0.6, 0.02, 0.02, 0.02]], 12, 2, 0));
+      P.body.push(loft([[4.9, 0.55, 0.02, 0.02, 0.02], [5.3, 0.62, 0.13, 0.12, 0.1], [6.3, 0.62, 0.13, 0.12, 0.1], [6.55, 0.62, 0.11, 0.1, 0.09]], 10, 2, 0));
       // mid-mounted 57 deg delta
       P.body.push(...wingPair([[0.55, -2.15], [3.58, 2.5], [3.58, 2.82], [0.55, 2.95]], 0.16, 0.045, -0.05, (ax) => 1 - 0.55 * clamp01((ax - 0.6) / 3.0)));
       // wing fences
-      for (const sx of [-1, 1]) P.body.push(box(0.03, 0.12, 2.3, sx * 1.75, 0.1, 1.3));
+      for (const sx of [-1, 1]) P.body.push(box(0.03, 0.12, 2.3, sx * 1.75, 0.1, 1.3), box(0.025, 0.1, 1.5, sx * 2.6, 0.08, 1.9));
       // swept fin + ventral fin
       P.body.push(fin([[2.3, 0.5], [5.75, 0.5], [6.6, 2.4], [5.7, 2.4]], 0.12, 0.04, 0, 0.55));
       P.body.push(fin([[4.4, -0.45], [5.9, -0.45], [6.1, -1.05], [5.4, -1.05]], 0.06, 0.03, 0, 0));
@@ -10354,27 +10400,107 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         P.movers.push({ geo: st, pivot: [s * 0.5, -0.12, 5.35], kind: 'stab', side: s, local: true });
       }
       // forward ventral airbrakes
-      for (const s of [1, -1]) P.movers.push({ geo: box(0.4, 0.04, 0.8, s * 0.38, -0.66, -2.3), pivot: [s * 0.38, -0.66, -2.7], kind: 'brakeBot', side: s });
+      for (const s of [1, -1]) P.movers.push({ geo: box(0.4, 0.04, 0.8, s * 0.38, -0.62, -2.3), pivot: [s * 0.38, -0.62, -2.7], kind: 'brakeBot', side: s });
       canopy(P, [[-4.7, 0.48, 0.05, 0.05, 0.05], [-4.3, 0.5, 0.3, 0.3, 0.1], [-3.7, 0.53, 0.37, 0.42, 0.1], [-3.1, 0.56, 0.32, 0.36, 0.1],
         [-2.7, 0.58, 0.05, 0.05, 0.05]]);
       const M = P.metal;
-      // shock cone (dielectric grey-green) + intake lip + dark duct
-      const cone = cylZ(0.001, 0.36, 1.05, 18, false); cone.translate(0, 0, -8.0); M.push(paint(cone, 0.33, 0.38, 0.33));
-      M.push(paint(cylZ(0.36, 0.32, 0.5, 18, false).translate(0, 0, -6.95), 0.33, 0.38, 0.33));
-      const lip = nonIdx(new T.TorusGeometry(0.47, 0.04, 8, 24)); lip.translate(0, 0, -7.25); M.push(paint(lip, 0.7, 0.72, 0.74));
-      const duct = cylZ(0.46, 0.44, 0.6, 18, true); duct.translate(0, 0, -7.25); M.push(paint(duct, 0.02, 0.02, 0.025));
-      M.push(paint(cylZ(0.03, 0.012, 1.4, 6, false).translate(0.25, 0.45, -7.4), 0.7, 0.7, 0.72)); // offset pitot (PVD)
+      // three-position shock cone (dielectric grey-green) with its sliding base
+      const cone = latheZ([[-8.05, 0.001], [-7.85, 0.09], [-7.55, 0.2], [-7.2, 0.3], [-6.95, 0.35], [-6.6, 0.36], [-6.2, 0.33]], 20); M.push(paint(cone, 0.33, 0.38, 0.33));
+      M.push(paint(cylZ(0.37, 0.37, 0.05, 20, true).translate(0, 0, -6.98), 0.55, 0.57, 0.58)); // cone joint ring
+      for (const sx of [-1, 1]) { // blow-in auxiliary intake doors + anti-surge flaps on the nose sides
+        M.push(paint(box(0.012, 0.16, 0.34, sx * 0.585, -0.08, -5.6), 0.06, 0.06, 0.065));
+        M.push(paint(box(0.012, 0.12, 0.26, sx * 0.62, 0.12, -4.95), 0.08, 0.08, 0.085));
+      }
+      M.push(paint(cylZ(0.03, 0.012, 1.4, 6, false).translate(0.25, 0.42, -7.6), 0.7, 0.7, 0.72)); // offset PVD-7 pitot
+      M.push(paint(box(0.015, 0.09, 0.14, -0.6, 0.18, -6.3), 0.15, 0.15, 0.16)); // AoA vane
+      for (const sx of [-1, 1]) M.push(paint(cylZ(0.022, 0.022, 0.42, 6, false).translate(sx * 0.07, -0.74, -2.38), 0.12, 0.12, 0.13)); // GSh-23 barrels
       M.push(paint(cylZ(0.58, 0.56, 0.5, 18, true).translate(0, 0, 6.0), ...TIT));
       M.push(paint(box(0.3, 0.04, 0.4, 0, 0.82, -2.95), 0.25, 0.25, 0.27)); // canopy hinge cover
+      M.push(paint(cylZ(0.11, 0.11, 0.04, 12, false).translate(0, 0.62, 6.53), 0.1, 0.1, 0.1)); // chute door
       for (const sx of [-1, 1]) store(P.stores, 'r73', sx * 2.25, -0.38, 1.4, 0.22);
       for (const o of [-1, 1]) P.decals.push(decal(0, 1.15, 1.15, o > 0 ? 'right' : 'left', o * 0.09, 1.55, 4.9));
       for (const sx of [-1, 1]) P.decals.push(decal(0, 0.95, 0.95, 'top', sx * 2.75, 0.03, 2.25), decal(0, 0.95, 0.95, 'bottom', sx * 2.75, -0.13, 2.25));
       for (const o of [-1, 1]) P.decals.push(decal(1, 1.1, 0.55, o > 0 ? 'right' : 'left', o * 0.6, -0.05, -5.2));
+      for (const o of [-1, 1]) P.decals.push(decal(2, 0.42, 0.42, o > 0 ? 'right' : 'left', o * 0.66, 0.05, -4.05));
     },
   };
 
-  // ---------------------------------------------------------------- Su-35S
-  DEFS.su35 = {
+  // ---------------------------------------------------------------- Flanker family (Su-27S / Su-35S): shared airframe
+  // Su-27: length 21.9 m, span 14.7 m, height 5.92 m. Lifting-body centre section, widely spaced engine nacelles with a flat
+  // tunnel between them, raked rectangular intakes (lower lip forward, compression ramp at the top), tail booms with the fins,
+  // stabilators and ventral fins, tail stinger between the nozzles, IRST ball ahead of the windscreen.
+  function flankerBuild(P, o) {
+    const big = !!o.su35;
+    P.body.push(loft([
+      [-11.0, -0.50, 0.01, 0.01, 0.01, 2], [-10.7, -0.44, 0.2, 0.2, 0.2, 2], [-10.0, -0.31, big ? 0.41 : 0.39, big ? 0.41 : 0.39, 0.39, 2],
+      [-9.0, -0.15, big ? 0.57 : 0.55, 0.57, 0.54, 2], [-8.0, 0.0, 0.66, 0.67, 0.62, 2, 0, 0, 0.15], [-7.0, 0.04, 0.74, 0.72, 0.68, 2.1, 0, 0, 0.35],
+      [-5.8, 0.05, 0.81, 0.74, 0.72, 2.2, 0, 0.1, 0.45], [-4.5, 0.03, 0.9, 0.75, 0.72, 2.35, 0, 0.15, 0.4], [-3.0, 0.0, 1.1, 0.71, 0.66, 2.5, 0, 0.1, 0.25],
+      [-1.5, 0.0, 1.47, 0.64, 0.58, 2.7], [0.5, 0.0, 1.85, 0.56, 0.5, 2.8], [3.0, 0.0, 1.88, 0.52, 0.45, 2.8],
+      [5.5, 0.0, 1.55, 0.46, 0.38, 2.6], [7.5, 0.02, 0.95, 0.4, 0.32, 2.3],
+      ...(big ? [[9.2, 0.05, 0.58, 0.38, 0.32, 2.1], [10.8, 0.08, 0.47, 0.34, 0.29, 2], [11.7, 0.1, 0.38, 0.28, 0.24, 2], [12.2, 0.1, 0.2, 0.16, 0.13, 2], [12.35, 0.1, 0.01, 0.01, 0.01, 2]]
+        : [[9.2, 0.05, 0.5, 0.33, 0.27, 2.1], [10.6, 0.08, 0.32, 0.25, 0.22, 2], [11.2, 0.1, 0.18, 0.14, 0.12, 2], [11.35, 0.1, 0.01, 0.01, 0.01, 2]]),
+    ], 34, 3, 0));
+    // dorsal spine
+    P.body.push(loft([[-4.6, 0.55, 0.3, 0.3, 0.1], [-4.0, 0.55, 0.45, 0.5, 0.1], [-2.0, 0.5, 0.56, 0.45, 0.1, 2.2], [1.0, 0.45, 0.5, 0.38, 0.1, 2.4],
+      [4.5, 0.4, 0.4, 0.25, 0.1, 2.2], [7.5, 0.32, 0.3, 0.1, 0.1], [8.5, 0.3, 0.03, 0.02, 0.02]], 20, 3, 0));
+    // engine nacelles: raked box intakes (lower lip forward) blending into round engine bays
+    const nac = [[-4.75, -0.84, 0.46, 0.5, 0.55, 9, 0.38], [-4.1, -0.82, 0.5, 0.52, 0.57, 7, 0.15], [-3.0, -0.79, 0.54, 0.53, 0.59, 5.5, 0], [-1.5, -0.74, 0.57, 0.54, 0.6, 4.2, 0],
+      [0.0, -0.66, 0.62, 0.54, 0.62, 3.2, 0], [3.0, -0.55, 0.64, 0.55, 0.64, 2.4, 0], [6.0, -0.46, 0.62, 0.55, 0.6, 2.1, 0], [8.6, -0.42, 0.57, 0.57, 0.57, 2, 0]];
+    for (const sx of [-1, 1]) {
+      P.body.push(loft(nac, 24, 3, sx * 1.35));
+      intake(P, nac[0], sx * 1.35, { lip: 0.045, depth: 2.6, shrink: 0.82, dy: 0.25, lipCol: [0.6, 0.63, 0.66] });
+      // variable compression ramp under the upper lip + boundary-layer bleed slot behind it
+      P.metal.push(plateYZ([[-4.52, -0.36], [-2.6, -0.62], [-2.6, -0.66], [-4.52, -0.4]], sx * 1.35, 0.84, [0.42, 0.45, 0.47]));
+      // intake louvres (auxiliary inlets / FOD grids) on the nacelle undersides
+      for (let k = 0; k < 5; k++) P.metal.push(paint(box(0.62, 0.02, 0.06, sx * 1.35, -1.38 + k * 0.006, -3.35 + k * 0.17), 0.06, 0.06, 0.065));
+    }
+    const WING = [[0.5, -7.3], [0.85, -6.6], [1.25, -5.4], [1.75, -3.9], [2.35, -2.3], [3.0, -0.8], [3.5, 0.2], [7.15, 3.7], [7.15, 5.05], [4.5, 5.28], [2.4, 5.5], [1.4, 6.3], [0.5, 6.3]];
+    P.body.push(...wingPair(WING, 0.16, 0.055, 0, null)); // anhedral: def.wingWarp
+    const boom = [[4.6, 0.04, 0.05, 0.05, 0.05, 3], [5.4, 0.04, 0.22, 0.2, 0.2, 4], [9.8, 0.04, 0.22, 0.2, 0.2, 4], [10.7, 0.04, 0.12, 0.12, 0.12, 3], [10.9, 0.04, 0.01, 0.01, 0.01, 2]];
+    P.body.push(loft(boom, 12, 2, 2.15), loft(boom, 12, 2, -2.15));
+    const F = [[4.4, 0.25], [9.25, 0.25], [9.75, 3.6], [8.05, 3.6]];
+    P.body.push(fin(F, 0.1, 0.04, 2.2), fin(F, 0.1, 0.04, -2.2));
+    const VF = [[6.2, -0.05], [8.3, -0.05], [8.4, -0.95], [7.5, -0.95]];
+    P.body.push(fin(VF, 0.06, 0.03, 2.3, 0), fin(VF, 0.06, 0.03, -2.3, 0));
+    for (const s of [1, -1]) { // all-moving stabilators
+      let st = planform([[1.95, 7.2], [4.95, 9.55], [4.95, 10.45], [1.95, 10.55]], 0.08, 0.04, -0.02);
+      if (s < 0) st = mirrorX(st);
+      P.movers.push({ geo: st, pivot: [s * 2.2, -0.02, 8.9], kind: 'stab', side: s });
+    }
+    if (!big) P.movers.push({ geo: box(1.0, 0.05, 1.7, 0, 1.0, -0.3), pivot: [0, 1.0, -1.15], kind: 'brakeTop' }); // Su-27 dorsal airbrake (Su-35S brakes with its rudders)
+    canopy(P, [[-7.75, 0.55, 0.05, 0.05, 0.05], [-7.2, 0.55, 0.42, 0.45, 0.1], [-6.4, 0.58, 0.56, 0.70, 0.1], [-5.4, 0.60, 0.60, 0.80, 0.1],
+      [-4.4, 0.62, 0.52, 0.66, 0.1], [-3.5, 0.62, 0.35, 0.38, 0.1], [-2.9, 0.62, 0.05, 0.05, 0.05]]);
+    const M = P.metal;
+    for (const sx of [-1, 1]) {
+      M.push(paint(box(0.12, 0.16, 3.4, sx * 7.27, 0.06, 4.45), 0.55, 0.57, 0.58)); // wingtip launch rails
+      M.push(paint(cylZ(0.035, 0.03, 0.3, 6).translate(sx * 7.27, 0.06, 2.45), 0.2, 0.2, 0.21)); // rail nose (RWR)
+      const tb = cylZ(0.6, 0.58, 0.5, 18, true); tb.translate(sx * 1.35, -0.42, 8.15); M.push(paint(tb, ...TIT)); // titanium band at the nozzles
+      M.push(paint(cylZ(0.06, 0.05, 0.35, 8).translate(sx * 2.2, 3.35, 9.55), 0.18, 0.19, 0.2)); // fin-tip antenna fairing
+    }
+    M.push(paint(cylZ(0.03, 0.012, 0.9, 6, false).translate(0, -0.5, -11.85), 0.7, 0.7, 0.72)); // nose pitot
+    for (const sx of [-1, 1]) M.push(paint(cylZ(0.02, 0.008, 0.45, 5, false).translate(sx * 0.5, -0.12, -9.3), 0.7, 0.7, 0.72)); // side pitots
+    M.push(paint(box(0.015, 0.1, 0.16, -0.58, 0.1, -8.5), 0.15, 0.15, 0.16)); // AoA vane
+    // OLS IRST ball on a short fairing, right of the windscreen
+    M.push(paint(cylZ(0.17, 0.19, 0.25, 12, false).translate(0.22, 0.6, -7.9), 0.3, 0.32, 0.34));
+    M.push(paint(sphere(0.165, 0.22, 0.73, -7.78), 0.55, 0.62, 0.7));
+    // GSh-30-1 gun port in the right LERX root
+    M.push(paint(cylZ(0.07, 0.06, 0.4, 8).translate(1.15, 0.1, -5.25), 0.25, 0.26, 0.27), paint(cylZ(0.035, 0.035, 0.05, 8).translate(1.15, 0.1, -5.3), 0.02, 0.02, 0.02));
+    // tail stinger: chute / flare tip + arrestor hook under it
+    M.push(paint(cylZ(0.16, 0.12, 0.4, 10, false).translate(0, 0.1, big ? 12.0 : 11.0), 0.25, 0.27, 0.3));
+    M.push(paint(box(0.06, 0.06, 1.3, 0, -0.18, big ? 10.4 : 9.9).rotateX(-0.06), 0.3, 0.3, 0.3), paint(box(0.12, 0.1, 0.12, 0, -0.24, big ? 11.0 : 10.5), 0.85, 0.75, 0.1));
+    for (const sx of [-1, 1]) {
+      store(P.stores, 'r73', sx * 7.27, -0.16, 4.5);
+      store(P.stores, 'r77', sx * 4.0, -0.6, 3.0, 0.3);
+      store(P.stores, 'r73', sx * 5.55, -0.52, 3.9, 0.26);
+    }
+    // stars on both fins (both faces), bort number on the intakes, Guards badge under the windscreen
+    for (const sx of [-1, 1]) for (const ob of [-1, 1]) P.decals.push(decal(0, 1.4, 1.4, ob > 0 ? 'right' : 'left', sx * 2.2 + ob * 0.115, 2.0, 7.95));
+    for (const sx of [-1, 1]) P.decals.push(decal(0, 1.5, 1.5, 'top', sx * 5.6, 0.0, 4.1), decal(0, 1.5, 1.5, 'bottom', sx * 5.6, -0.2, 4.1));
+    P.decals.push(decal(1, 1.6, 0.8, 'right', 1.935, -0.8, -2.7), decal(1, 1.6, 0.8, 'left', -1.935, -0.8, -2.7));
+    if (o.flag) for (const sx of [-1, 1]) for (const ob of [-1, 1]) P.decals.push(decal(3, 0.75, 0.75, ob > 0 ? 'right' : 'left', sx * 2.2 + ob * 0.115, 3.0, 8.6));
+    for (const ob of [-1, 1]) P.decals.push(decal(2, 0.5, 0.5, ob > 0 ? 'right' : 'left', ob * 0.8, 0.15, -7.1));
+  }
+  const FLANKER_SPEC = {
     wingWarp: (x, y) => { const ax = Math.abs(x); return y * (1 - 0.6 * clamp01((ax - 2) / 5.15)) + 0.08 - 0.045 * Math.max(0, ax - 2); },
     surf: [{ a: 0.22, b: 0.74, c: 0.22, kind: 'flaperon' }],
     // gear: twin nose wheels with mudguard, all units retract forward, main wheels turn flat
@@ -10382,68 +10508,33 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       { x: 0, y: -0.55, z: -5.2, r: 0.3, w: 0.2, wheels: 2, nose: true, fold: [1, 0, 0], ang: Math.PI / 2, lift: 0.18, mudguard: true, hub: 'hubGreen', sr: 0.075 },
       { x: 2.15, y: -0.35, z: 1.0, r: 0.5, w: 0.3, fold: [1, 0, 0], ang: Math.PI / 2, twist: Math.PI / 2, lift: 0.25, hub: 'hubGreen', sr: 0.1, legDoor: [0.5, 0.9, 0.15], well: [-0.2, 0.42, -2.05, 0.25] },
     ],
-    cockpitStyle: 'ru_glass',
     fins: [[2.2, 1.0, 7.0], [-2.2, 1.0, 7.0]],
-    nation: 'RU', seed: 35, len: [-12, 13], hs: 7.4, radomeZ: -9.6,
+    nation: 'RU', hs: 7.4, radomeZ: -9.6,
     frames: [-9.6, -8.4, -7.0, -4.2, -2.4, -0.6, 1.6, 3.9, 6.2, 8.1, 10.5],
-    liv: { pattern: 'pixel', base: '#8597a8', tones: ['#6c8197', '#55687e', '#3f4f62'], thr: [0.42, 0.55, 0.68], under: '#a9b8c5', underTone: '#9aaaba', radome: '#2b3137' },
-    code: { text: '05', color: '#c8101c', stroke: '#ffffff' },
-    engines: [{ x: -1.35, y: -0.42, z: 8.6, r: 0.56, len: 1.25, tvc: true }, { x: 1.35, y: -0.42, z: 8.6, r: 0.56, len: 1.25, tvc: true }],
     gear: [{ x: 0, y: -0.55, z: -5.2, r: 0.33, nose: 1 }, { x: 2.15, y: -0.35, z: 1.0, r: 0.5 }, { x: -2.15, y: -0.35, z: 1.0, r: 0.5 }],
     wingtips: [[-7.3, 0.06, 5.2], [7.3, 0.06, 5.2]], navs: [[-7.27, 0.17, 3.0], [7.27, 0.17, 3.0]],
-    build(P) {
-      P.body.push(loft([
-        [-11.0, -0.50, 0.01, 0.01, 0.01, 2], [-10.7, -0.44, 0.20, 0.20, 0.20, 2], [-10.0, -0.31, 0.40, 0.40, 0.39, 2],
-        [-9.0, -0.15, 0.56, 0.57, 0.54, 2], [-8.0, 0.0, 0.66, 0.67, 0.62, 2], [-7.0, 0.04, 0.74, 0.73, 0.68, 2.1],
-        [-5.8, 0.05, 0.80, 0.75, 0.72, 2.2], [-4.5, 0.03, 0.88, 0.76, 0.72, 2.3], [-3.0, 0.0, 1.08, 0.72, 0.66, 2.5],
-        [-1.5, 0.0, 1.45, 0.64, 0.58, 2.7], [0.5, 0.0, 1.85, 0.56, 0.50, 2.8], [3.0, 0.0, 1.88, 0.52, 0.45, 2.8],
-        [5.5, 0.0, 1.55, 0.46, 0.38, 2.6], [7.5, 0.02, 0.95, 0.40, 0.32, 2.3], [9.2, 0.05, 0.58, 0.38, 0.32, 2.1],
-        [10.8, 0.08, 0.46, 0.34, 0.29, 2], [12.0, 0.1, 0.36, 0.27, 0.23, 2], [12.6, 0.1, 0.16, 0.13, 0.11, 2], [12.75, 0.1, 0.01, 0.01, 0.01, 2],
-      ], 32, 3, 0));
-      P.body.push(loft([[-4.6, 0.55, 0.30, 0.30, 0.1], [-4.0, 0.55, 0.45, 0.50, 0.1], [-2.0, 0.50, 0.56, 0.45, 0.1, 2.2], [1.0, 0.45, 0.50, 0.38, 0.1, 2.4],
-        [4.5, 0.40, 0.40, 0.25, 0.1, 2.2], [7.5, 0.32, 0.30, 0.10, 0.1], [8.5, 0.30, 0.03, 0.02, 0.02]], 20, 3, 0));
-      const nac = [[-4.75, -0.82, 0.47, 0.50, 0.55, 8, -0.5], [-3.5, -0.80, 0.52, 0.52, 0.58, 7, -0.15], [-2.0, -0.76, 0.56, 0.53, 0.60, 5, 0],
-        [0.0, -0.66, 0.62, 0.54, 0.62, 3.2, 0], [3.0, -0.55, 0.64, 0.55, 0.64, 2.4, 0], [6.0, -0.46, 0.62, 0.55, 0.60, 2.1, 0], [8.6, -0.42, 0.57, 0.57, 0.57, 2, 0]];
-      P.body.push(loft(nac, 24, 3, 1.35), loft(nac, 24, 3, -1.35));
-      const WING = [[0.5, -7.3], [0.85, -6.6], [1.25, -5.4], [1.75, -3.9], [2.35, -2.3], [3.0, -0.8], [3.5, 0.2], [7.15, 3.7], [7.15, 5.05], [4.5, 5.28], [2.4, 5.5], [1.4, 6.3], [0.5, 6.3]];
-      P.body.push(...wingPair(WING, 0.16, 0.055, 0, null)); // anhedral: def.wingWarp
-      const boom = [[4.6, 0.04, 0.05, 0.05, 0.05, 3], [5.4, 0.04, 0.22, 0.2, 0.2, 4], [9.8, 0.04, 0.22, 0.2, 0.2, 4], [10.7, 0.04, 0.12, 0.12, 0.12, 3], [10.9, 0.04, 0.01, 0.01, 0.01, 2]];
-      P.body.push(loft(boom, 12, 2, 2.15), loft(boom, 12, 2, -2.15));
-      const F = [[4.4, 0.25], [9.25, 0.25], [9.75, 3.6], [8.05, 3.6]];
-      P.body.push(fin(F, 0.1, 0.04, 2.2), fin(F, 0.1, 0.04, -2.2));
-      const VF = [[6.2, -0.05], [8.3, -0.05], [8.4, -0.95], [7.5, -0.95]];
-      P.body.push(fin(VF, 0.06, 0.03, 2.3, 0), fin(VF, 0.06, 0.03, -2.3, 0));
-      // all-moving stabilators
-      for (const s of [1, -1]) {
-        let st = planform([[1.95, 7.2], [4.95, 9.55], [4.95, 10.45], [1.95, 10.55]], 0.08, 0.04, -0.02);
-        if (s < 0) st = mirrorX(st);
-        P.movers.push({ geo: st, pivot: [s * 2.2, -0.02, 8.9], kind: 'stab', side: s });
-      }
-      // dorsal airbrake
-      P.movers.push({ geo: box(1.0, 0.05, 1.7, 0, 1.0, -0.3), pivot: [0, 1.0, -1.15], kind: 'brakeTop' });
-      canopy(P, [[-7.75, 0.55, 0.05, 0.05, 0.05], [-7.2, 0.55, 0.42, 0.45, 0.1], [-6.4, 0.58, 0.56, 0.70, 0.1], [-5.4, 0.60, 0.60, 0.80, 0.1],
-        [-4.4, 0.62, 0.52, 0.66, 0.1], [-3.5, 0.62, 0.35, 0.38, 0.1], [-2.9, 0.62, 0.05, 0.05, 0.05]]);
-      const M = P.metal;
-      for (const sx of [-1, 1]) {
-        const inlet = new T.PlaneGeometry(0.86, 0.92); inlet.rotateY(Math.PI); inlet.rotateX(-Math.atan(0.5)); inlet.translate(sx * 1.35, -0.84, -4.6);
-        M.push(paint(nonIdx(inlet), 0.01, 0.01, 0.012));
-        M.push(paint(box(0.12, 0.16, 3.4, sx * 7.27, 0.06, 4.45), 0.55, 0.57, 0.58));
-        // titanium band where the nozzles join the nacelles
-        const tb = cylZ(0.6, 0.58, 0.5, 18, true); tb.translate(sx * 1.35, -0.42, 8.15); M.push(paint(tb, ...TIT));
-      }
-      M.push(paint(cylZ(0.03, 0.012, 0.9, 6, false).translate(0, -0.5, -11.85), 0.7, 0.7, 0.72));
-      M.push(paint(sphere(0.16, 0.22, 0.72, -7.75), 0.75, 0.8, 0.85));
-      M.push(paint(cylZ(0.16, 0.12, 0.4, 10, false).translate(0, 0.1, 12.6), 0.25, 0.27, 0.3)); // stinger tip
-      for (const sx of [-1, 1]) {
-        store(P.stores, 'r73', sx * 7.27, -0.16, 4.5);
-        store(P.stores, 'r77', sx * 4.0, -0.6, 3.0, 0.3);
-        store(P.stores, 'r73', sx * 5.55, -0.52, 3.9, 0.26);
-      }
-      // stars on both fins (both faces), bort number on the intakes
-      for (const sx of [-1, 1]) for (const o of [-1, 1]) P.decals.push(decal(0, 1.4, 1.4, o > 0 ? 'right' : 'left', sx * 2.2 + o * 0.115, 2.0, 7.95));
-      P.decals.push(decal(1, 1.6, 0.8, 'right', 1.935, -0.8, -2.7), decal(1, 1.6, 0.8, 'left', -1.935, -0.8, -2.7));
-    },
   };
+
+  // ---------------------------------------------------------------- Su-27S Flanker-B
+  DEFS.su27 = Object.assign({}, FLANKER_SPEC, {
+    cockpitStyle: 'ru_mixed', seed: 27, len: [-11.2, 11.5],
+    // VVS three-tone blue-grey "Flanker" camouflage, pale blue underside, dark radome, blue bort number with white outline
+    liv: { pattern: 'blotch', base: '#a9bccb', tones: ['#7d97ad', '#5a728a'], blot: [[1.5, 0.9, 2.3], [0.85, 0.7, 1.9]], aspect: 1.7, under: '#c6d3dc', radome: '#48535a' },
+    marks: { badge: 'guards', star: 'soviet' },
+    code: { text: '27', color: '#1d4fb0', stroke: '#ffffff' },
+    engines: [{ x: -1.35, y: -0.42, z: 8.57, r: 0.565, len: 1.15 }, { x: 1.35, y: -0.42, z: 8.57, r: 0.565, len: 1.15 }],
+    build(P) { flankerBuild(P, {}); },
+  });
+  // ---------------------------------------------------------------- Su-35S Flanker-E
+  DEFS.su35 = Object.assign({}, FLANKER_SPEC, {
+    cockpitStyle: 'ru_glass', seed: 35, len: [-12, 12.6], rudderBrake: true,
+    // VKS two-tone "shark" scheme: pale grey-blue with sharp dark blue-grey splinters, dark radome, Russian flag on the fins
+    liv: { pattern: 'splinter', base: '#a3b4c2', cols: [null, '#60758a'], weights: [0.58, 0.42], cell: 2.0, squash: 1.3, under: '#bcc9d3', radome: '#353c43' },
+    marks: { fin: 'flag', star: 'russian' },
+    code: { text: '05', color: '#c8101c', stroke: '#ffffff' },
+    engines: [{ x: -1.35, y: -0.42, z: 8.6, r: 0.56, len: 1.25, tvc: true }, { x: 1.35, y: -0.42, z: 8.6, r: 0.56, len: 1.25, tvc: true }],
+    build(P) { flankerBuild(P, { su35: true, flag: true }); },
+  });
 
   // ---------------------------------------------------------------- Su-57
   DEFS.su57 = {
@@ -10945,18 +11036,63 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
 
   // ------------------------------------------------------------------ per-type shared cache
   const TC = {};
+  function buildP(def, k) { // run a jet's build() at tessellation factor k
+    const P = { body: [], metal: [], stores: [], decals: [], canopy: [], movers: [] };
+    LODK = k; WREC = []; FREC = [];
+    SURF = { P, def, wingDone: false, rudders: 0, last: null };
+    try { def.build(P); } finally { SURF = null; LODK = 1; }
+    P.wrec = WREC; P.frec = FREC; WREC = null; FREC = null;
+    return P;
+  }
+  function moversOf(def, list) {
+    return list.map((m) => {
+      const fin = FINS.has(m.geo);
+      const g = m.local ? bodyUV(def, m.geo.clone().translate(...m.pivot), fin) : bodyUV(def, m.geo, fin);
+      g.translate(-m.pivot[0], -m.pivot[1], -m.pivot[2]);
+      return Object.assign({}, m, { geo: g });
+    });
+  }
+  // nozzles: heat-tinted shroud + petals + actuator rods, and inside: flame-holder rings, radial gutters, spray-bar ring, tail cone
+  function nozzlesOf(def, low) {
+    return def.engines.map((e) => {
+      const p = [], sg = low ? 14 : 32;
+      p.push(cylZ(e.r, e.r * 0.9, e.len, sg, true));
+      p.push(cylZ(e.r * 0.91, e.r * 0.88, 0.06, sg, true).translate(0, 0, e.len - 0.06));
+      if (e.tvc) p.push(cylZ(e.r * 1.02, e.r * 1.0, 0.12, sg, true).translate(0, 0, 0.0));
+      if (!low) {
+        const np = e.r > 0.4 ? 16 : 12;
+        for (let k = 0; k < np; k++) {
+          const a = (k / np) * Math.PI * 2, pet = box(e.r * 0.36, 0.018, e.len * 0.55, 0, e.r * 0.92, e.len * 0.72);
+          pet.rotateZ(a); p.push(pet);
+          if (k % 2 === 0) { const rod = box(0.03, 0.03, e.len * 0.5, 0, e.r * 0.99, e.len * 0.35); rod.rotateZ(a + Math.PI / np); p.push(rod); }
+        }
+        for (const q of [[0.64, 0.045], [0.36, 0.04]]) { const t = nonIdx(new T.TorusGeometry(e.r * q[0], e.r * q[1], 6, 28)); t.translate(0, 0, e.len * 0.5); p.push(t); }
+        for (let k = 0; k < 8; k++) { const g = box(e.r * 0.06, e.r * 0.3, e.r * 0.1, 0, e.r * 0.5, e.len * 0.5); g.rotateZ((k / 8) * Math.PI * 2 + 0.2); p.push(g); }
+        const spray = nonIdx(new T.TorusGeometry(e.r * 0.8, e.r * 0.016, 4, 28)); spray.translate(0, 0, e.len * 0.45); p.push(spray);
+        p.push(cylZ(e.r * 0.2, 0.004, e.r * 0.55, 12, false).translate(0, 0, e.len * 0.41));
+      }
+      const glow = [];
+      glow.push(nonIdx(new T.CircleGeometry(e.r * 0.86, low ? 12 : 24)).translate(0, 0, e.len * 0.4));
+      glow.push(cylZ(e.r * 0.86, e.r * 0.85, e.len * 0.55, low ? 12 : 24, true).translate(0, 0, e.len * 0.4));
+      return { geo: merge(p, true, false), glow: merge(glow, false, false) };
+    });
+  }
   function typeCache(type) {
     if (TC[type]) return TC[type];
     const def = DEFS[type];
-    const P = { body: [], metal: [], stores: [], decals: [], canopy: [], movers: [] };
-    WREC = [];
-    SURF = { P, def, wingDone: false, rudders: 0, last: null };
-    def.build(P);
-    SURF = null;
-    def.ops = bodyOps(def, WREC.slice(0, 1), P.canSt);
-    WREC = null;
+    const P = buildP(def, 1);
+    // atlas inputs: fin height range, fuselage half width
+    let fy0 = 1e9, fy1 = -1e9;
+    const fg = P.body.filter((g) => FINS.has(g)).concat(P.movers.filter((m) => FINS.has(m.geo)).map((m) => (m.local ? m.geo.clone().translate(...m.pivot) : m.geo)));
+    for (const g of fg) { g.computeBoundingBox(); fy0 = Math.min(fy0, g.boundingBox.min.y); fy1 = Math.max(fy1, g.boundingBox.max.y); }
+    def.finY = fy1 > fy0 + 0.5 ? [fy0, fy1] : [0, 3];
+    P.body[0].computeBoundingBox();
+    def.fusW = Math.max(P.body[0].boundingBox.max.x, ...def.engines.map((e) => Math.abs(e.x) + e.r));
+    def.yTop = P.body[0].boundingBox.max.y;
+    def.AT = null;
+    def.ops = bodyOps(def, P.wrec.slice(0, 1), P.canSt, P.frec);
     const C = { def };
-    const raw = merge(P.body, false, false);
+    const raw = merge(P.body.map((g) => bodyUV(def, g, FINS.has(g))), true, false);
     const hit = hitter(raw);
     // blade antennas (spine behind the canopy, belly) + a UHF whip on the spine
     {
@@ -10968,7 +11104,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       if (hw) P.metal.push(paint(cylZ(0.012, 0.005, 0.5, 5).rotateX(-1.2).translate(0, hw.y, zb + 2.0), 0.15, 0.15, 0.16));
     }
     C.hit = hit;
-    C.body = bodyUV(def, raw);
+    C.body = raw;
     P.stores = resolveStores(P.stores, hit);
     snapDecals(P.decals, hit);
     C.metal = P.metal.length ? merge(P.metal, false, true) : null;
@@ -10976,6 +11112,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     C.decals = P.decals.length ? merge(P.decals, true, false) : null;
     // canopy (optionally taller than the old model so a pilot fits), cockpit layout, opening in the skin
     if (def.canTop) P.canSt = P.canSt.map((q) => [q[0], q[1], q[2], q[3] * def.canTop, q[4]]);
+    C.canSt = P.canSt;
     C.canopy = loft(P.canSt, 24, 4, 0);
     {
       const cs = P.canSt;
@@ -11000,32 +11137,29 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       for (const f of def.fins || []) for (const sx of [-1, 1]) { const h = hit([f[0] + sx * 3, f[1], f[2]], [-sx, 0, 0], 3); if (h) strips.push([h.x + sx * 0.02, f[1], f[2], 0.9, 'y']); }
       C.strips = strips.length ? K.stripsGeo(strips) : null;
     }
-    C.movers = P.movers.map((m) => {
-      const g = m.local ? bodyUV(def, m.geo.clone().translate(...m.pivot)) : bodyUV(def, m.geo);
-      g.translate(-m.pivot[0], -m.pivot[1], -m.pivot[2]);
-      return Object.assign({}, m, { geo: g });
-    });
+    C.movers = moversOf(def, P.movers);
     const mp = K.detailMaps(def.ops.ops, 2048, 2048, def.ops.base);
     C.bodyMat = new T.MeshStandardMaterial({ map: bodyTexture(def), normalMap: mp.nrm, normalScale: new T.Vector2(0.7, 0.7), roughnessMap: mp.orm, metalnessMap: mp.orm, metalness: 1, roughness: 1 });
     C.decalMat = new T.MeshStandardMaterial({ map: decalTexture(def), metalness: 0.2, roughness: 0.5, alphaTest: 0.45, side: T.DoubleSide });
-    C.nozzles = def.engines.map((e) => {
-      const p = [];
-      p.push(cylZ(e.r, e.r * 0.9, e.len, 32, true));
-      p.push(cylZ(e.r * 0.91, e.r * 0.88, 0.06, 32, true).translate(0, 0, e.len - 0.06));
-      if (e.tvc) p.push(cylZ(e.r * 1.02, e.r * 1.0, 0.12, 32, true).translate(0, 0, 0.0));
-      // nozzle petals: overlapping flaps around the exit + actuator rods
-      const np = e.r > 0.4 ? 16 : 12;
-      for (let k = 0; k < np; k++) {
-        const a = (k / np) * Math.PI * 2, pet = box(e.r * 0.36, 0.018, e.len * 0.55, 0, e.r * 0.92, e.len * 0.72);
-        pet.rotateZ(a); p.push(pet);
-        if (k % 2 === 0) { const rod = box(0.03, 0.03, e.len * 0.5, 0, e.r * 0.99, e.len * 0.35); rod.rotateZ(a + Math.PI / np); p.push(rod); }
-      }
-      const glow = [];
-      glow.push(nonIdx(new T.CircleGeometry(e.r * 0.86, 24)).translate(0, 0, e.len * 0.4));
-      glow.push(cylZ(e.r * 0.86, e.r * 0.85, e.len * 0.55, 24, true).translate(0, 0, e.len * 0.4));
-      return { geo: merge(p, true, false), glow: merge(glow, false, false) };
-    });
+    C.nozzles = nozzlesOf(def, false);
     return (TC[type] = C);
+  }
+  // 'low' LOD (distant wingmen / enemies): same materials, textures and stores; coarse airframe, simple nozzles, no small metal bits
+  function lowCache(type) {
+    const key = type + ':low';
+    if (TC[key]) return TC[key];
+    const H = typeCache(type), def = H.def, P = buildP(def, 0.42);
+    const L = Object.assign({}, H);
+    L.body = merge(P.body.map((g) => bodyUV(def, g, FINS.has(g))), true, false);
+    const met = P.metal.filter((g) => g.attributes.position.count >= 150 || g.userData.keepLow);
+    L.metal = met.length ? merge(met, false, true) : null;
+    L.movers = moversOf(def, P.movers);
+    L.nozzles = nozzlesOf(def, true);
+    const sl = resolveStores(P.stores, H.hit, true);
+    L.stores = sl.length ? merge(sl, false, true) : null;
+    LODK = 0.5; L.canopy = loft(H.canSt, 16, 3, 0); LODK = 1;
+    L.low = true;
+    return (TC[key] = L);
   }
 
   // =====================================================================================================
@@ -11390,10 +11524,10 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   }
 
   // ------------------------------------------------------------------ buildAircraft
-  FL.AIRCRAFT_TYPES = ['su27'].concat(Object.keys(DEFS));
+  FL.AIRCRAFT_TYPES = ['su27'].concat(Object.keys(DEFS).filter((k) => k !== 'su27'));
   FL.buildAircraft = function (type, opts) {
     opts = opts || {};
-    if (!type || type === 'su27' || !DEFS[type]) {
+    if (!type || !DEFS[type]) {
       const f = FL.buildFlanker('player', opts);
       if (!f.setAirbrake) f.setAirbrake = function () {};
       if (!f.setControls) f.setControls = function () {};
@@ -11402,7 +11536,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       attachPaint(f, bm, (n) => su27PaintMat(bm, n));
       return attachStores(f, 'su27', SU27HIT, f.storesMesh);
     }
-    const C = typeCache(type), def = C.def, S = common();
+    const low = opts.lod === 'low'; // distant teammates / enemies: coarse airframe, no cockpit interior, lights, gear doors
+    const C = low ? lowCache(type) : typeCache(type), def = C.def, S = common();
     const group = new T.Group();
     group.name = 'AC-' + type;
     const add = (geo, mat, parent, shadow) => {
@@ -11411,21 +11546,19 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       (parent || group).add(m);
       return m;
     };
-    add(C.body, C.bodyMat);
-    const cv = add(C.canopy, def.goldCanopy ? K.GLASS_GOLD : K.GLASS); cv.receiveShadow = false; cv.castShadow = false; cv.renderOrder = 2;
-    add(C.cockpit, S.cockpit);
+    add(C.body, C.bodyMat).name = 'body';
+    const cv = add(C.canopy, def.goldCanopy ? K.GLASS_GOLD : K.GLASS); cv.receiveShadow = false; cv.castShadow = false; cv.renderOrder = 2; cv.name = 'canopy';
+    add(C.cockpit, S.cockpit).name = 'seat';
     const pilot = add(C.pilot, S.cockpit);
-    const low = opts.lod === 'low'; // distant teammates / enemies: no cockpit interior, lights, gear doors
     let CP;
     if (low) {
-      const tub = new T.Mesh(C.cg.tub, K.palMat()); group.add(tub);
       CP = { cockpit: { eye: new T.Vector3(...C.ck.eye), group: new T.Group() }, setView() {}, setStick() {} };
     } else CP = K.attachCockpit(group, C.cg, C.ck, cv, pilot, cv.material, C.canopy, C.canopyIn);
     const LK = K.lightKit();
     if (C.strips && !low) add(C.strips, LK.form, null, false);
     const bMat = K.beaconMat();
     if (C.beacon && !low) { const bc = add(LK.bulb, bMat, null, false); bc.position.set(...C.beacon); bc.scale.set(1, 0.8, 1.4); }
-    if (C.metal) add(C.metal, S.metal);
+    if (C.metal) add(C.metal, S.metal).name = 'metal';
     const defStores = C.stores ? add(C.stores, S.store) : null;
     if (C.decals) add(C.decals, C.decalMat).castShadow = false;
     add(S.navGeo, S.navR, null, false).position.set(...def.navs[0]);
@@ -11437,7 +11570,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       const pv = new T.Group(); pv.position.set(...m.pivot);
       if (m.cant) pv.rotation.z = m.cant;
       const inner = new T.Group(); pv.add(inner);
-      add(m.geo, C.bodyMat, inner);
+      add(m.geo, C.bodyMat, inner).name = 'mv-' + m.kind;
       if (m.decal) add(m.decal, C.decalMat, inner).castShadow = false;
       group.add(pv);
       movers.push({ m, inner, ax: m.axis ? new T.Vector3(...m.axis).normalize() : null });
@@ -11453,7 +11586,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     let maxZ = -1e9, cx = 0, cy = 0;
     def.engines.forEach((e, i) => {
       const pv = new T.Group(); pv.position.set(e.x, e.y, e.z); group.add(pv);
-      add(C.nozzles[i].geo, K.nozzleKit().mat, pv);
+      add(C.nozzles[i].geo, K.nozzleKit().mat, pv).name = 'nozzle';
       add(C.nozzles[i].glow, glowMat, pv, false);
       const outer = new T.Mesh(plumeGeo(e.r * 0.9), outerMat), core = new T.Mesh(plumeGeo(e.r * 0.6), coreMat);
       for (const m of [outer, core]) { m.position.z = e.len - 0.02; m.frustumCulled = false; m.renderOrder = 5; pv.add(m); }
@@ -11470,7 +11603,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       group.add(light);
     }
 
-    const ctl = { p: 0, r: 0, y: 0, flap: 1 };
+    const ctl = { p: 0, r: 0, y: 0, flap: 1, b: 0 };
     const api = {
       group,
       type,
@@ -11511,6 +11644,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       },
       setAirbrake(t) {
         t = clamp01(t || 0);
+        if (def.rudderBrake && Math.abs(t - ctl.b) > 1e-3) { ctl.b = t; api.setControls(ctl.p, ctl.r, ctl.y); }
         for (const M of movers) {
           if (M.m.kind === 'brakeTop') M.inner.rotation.x = -t * 0.85;
           else if (M.m.kind === 'brakeSide') M.inner.rotation.y = M.m.side * t * 0.9;
@@ -11526,7 +11660,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
           const k = M.m.kind, s = M.m.side || 0;
           if (M.ax) { // hinged control surfaces (axis toward +x / +y): + angle = trailing edge down / right
             const th = k === 'aileron' ? -s * ctl.r * 0.35 : k === 'flap' ? 0.5 * ctl.flap : k === 'flaperon' ? -s * ctl.r * 0.3 + 0.32 * ctl.flap
-              : k === 'elevon' ? -s * ctl.r * 0.3 - ctl.p * 0.28 : k === 'rudder' ? ctl.y * 0.35 : 0;
+              : k === 'elevon' ? -s * ctl.r * 0.3 - ctl.p * 0.28 : k === 'rudder' ? ctl.y * 0.35 + (def.rudderBrake ? s * ctl.b * 0.45 : 0) : 0;
             M.inner.quaternion.setFromAxisAngle(M.ax, th);
             continue;
           }
@@ -14584,10 +14718,18 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRvYi
     return z || [{ e: 0, n: 15000, r: 9000 }];
   }
   function fxx(ctx) { return (ctx && ctx.fx) || LAST.fx || {}; }
-  function boom(ctx, p, s, air) {
-    var f = fxx(ctx); if (!f.explosion || !p || !isFinite(p.x + p.y + p.z)) return;
+  // generic blast size s -> impact profile (FL.IMPACT in fx.js); prof forces one
+  function boomProfile(s, air, wat) {
+    if (wat) return s >= 2 ? 'ship' : 'boat';
+    if (air) return s < 0.8 ? 'aam_l' : s < 1.3 ? 'heli' : 'aircraft';
+    return s < 0.6 ? 'rkt80' : s < 1.3 ? 'vehicle' : s < 2.5 ? 'sam' : 'bomb500';
+  }
+  function boom(ctx, p, s, air, prof) {
+    var f = fxx(ctx); if (!p || !isFinite(p.x + p.y + p.z)) return;
     var w = ctx && ctx.world || LAST.world, wat = !air && w && p.y < 4 && waterAt(w, p.x, p.z);
-    f.explosion(p.clone(), s, { water: !!wat, air: !!air });
+    var id = f.impact && FL.IMPACT ? (prof || boomProfile(s, air, wat)) : null, P = id && FL.IMPACT[id];
+    if (P) { f.impact(id, p.clone(), { air: !!air, water: !!wat, scale: P.look.s > 0 ? clamp(s / P.look.s, 0.5, 2.2) : 1 }); return; }
+    if (f.explosion) f.explosion(p.clone(), s, { water: !!wat, air: !!air });
   }
   function puff(ctx, p, s, life, gray) { var f = fxx(ctx); if (f.smokePuff && isFinite(p.x + p.y + p.z)) f.smokePuff(p, s, life, gray); }
 
@@ -30119,7 +30261,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRvYi
   }
   function downW(cause) {
     var fx = R.opt.fx;
-    if (fx && fx.explosion) { try { fx.explosion(W.aim.clone(), 1.4, { air: true }); } catch (e) { /* ignore */ } }
+    if (fx && fx.impact) { try { fx.impact('aircraft', W.aim.clone(), { air: true }); } catch (e) { /* ignore */ } }
+    else if (fx && fx.explosion) { try { fx.explosion(W.aim.clone(), 1.4, { air: true }); } catch (e) { /* ignore */ } }
     st.wreckP.copy(W.aim); st.wreckV.copy(W.vel); st.wreckT = 8;
     st.lostNo = missionNo(); st.lostT = clock;
     despawnW(); setState('down');
@@ -30133,7 +30276,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRvYi
     var fx = R.opt.fx, gy = gAt(st.wreckP.x, st.wreckP.z);
     st.smkT -= dt;
     if (st.smkT <= 0 && fx && fx.smokePuff) { st.smkT = 0.06; fx.smokePuff(st.wreckP, 7, 3.5, 0.18); }
-    if (st.wreckP.y <= gy) { st.wreckT = 0; if (fx && fx.explosion) { try { fx.explosion(st.wreckP.clone(), 1.0, { air: false, water: gy <= 0.5 }); } catch (e) { /* ignore */ } } }
+    if (st.wreckP.y <= gy) { st.wreckT = 0; if (fx && (fx.impact || fx.explosion)) { try { if (fx.impact) fx.impact('crash', st.wreckP.clone(), { air: false, water: gy <= 0.5, scale: 0.8 }); else fx.explosion(st.wreckP.clone(), 1.0, { air: false, water: gy <= 0.5 }); } catch (e) { /* ignore */ } } }
   }
 
   // ======================================================================= perception
@@ -31405,7 +31548,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRvYi
         W.boomT = W.t < 12 ? 0.6 + Math.random() * 1.2 : 2.5;
         nv1.set((Math.random() - 0.5) * 50, CY + 2, (Math.random() - 0.5) * 260).applyQuaternion(g.quaternion).add(g.position);
         nv1.y = Math.max(nv1.y, 3);
-        if (W.t < 14 && SHARED.fx.explosion) SHARED.fx.explosion(nv1, 1.6 + Math.random() * 1.8, { air: false });
+        if (W.t < 14 && SHARED.fx.impact) SHARED.fx.impact('ship', nv1, { air: false, scale: 1 + Math.random() * 0.8 });
+        else if (W.t < 14 && SHARED.fx.explosion) SHARED.fx.explosion(nv1, 1.6 + Math.random() * 1.8, { air: false });
         else if (SHARED.fx.smokePuff) SHARED.fx.smokePuff(nv1, 40, 12, 0.1);
       }
       for (var k = 0; k < W.fires.length; k++) W.fires[k].visible = W.t < 45;
@@ -31799,7 +31943,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRvYi
       var gp = null; try { gp = combat.groupPos ? combat.groupPos(raid.group) : null; } catch (er) { gp = null; }
       if (gp && raid.hits < 3 && Math.hypot(gp.x - P.x, gp.z - P.z) < 2200) {
         raid.hits++;
-        if (fx && fx.explosion) for (var i = 0; i < 2; i++) { tv2.set(P.x + (Math.random() - 0.5) * 120, K.D + 2, P.z + (Math.random() - 0.5) * 120); fx.explosion(tv2, 1.4, { water: Math.random() < 0.6, air: false }); }
+        if (fx && fx.explosion) for (var i = 0; i < 2; i++) { tv2.set(P.x + (Math.random() - 0.5) * 120, K.D + 2, P.z + (Math.random() - 0.5) * 120); if (fx.impact) fx.impact(Math.random() < 0.6 ? 'boat' : 'cookoff', tv2, { air: false, scale: 1.2 }); else fx.explosion(tv2, 1.4, { water: Math.random() < 0.6, air: false }); }
         if (raid.hits === 1) call('cvhit', 'Overlord. The carrier is hit! Kill those bombers.');
       }
       if (raid.t > 240) raid.active = false;
@@ -34577,7 +34721,11 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRvYi
     }
     function bossZone(id, m) {
       var w = W(), b = BOSS[id];
-      if (b.need === 'sea') { var ns = seaSpot(11000); return ns ? { id: 'sea', name: 'the open sea', e: ns.e, n: ns.n, r: 3000 } : null; }
+      if (b.need === 'sea') {
+        var ns = seaSpot(11000);
+        if (!ns && FL.navalSpot) { try { ns = FL.navalSpot(w, C.pE(), C.pN(), 11000, null); } catch (e) { ns = null; } }   // forced on a map with far water
+        return ns ? { id: 'sea', name: 'the open sea', e: ns.e, n: ns.n, r: 3000 } : null;
+      }
       if (id === 'tu160') { var hb = w.hangar || w.spawn || { e: 0, n: 0 }; return { id: 'home', name: w.name ? w.name + ' airfield' : 'our airfield', e: hb.e, n: hb.n, r: 1500 }; }
       if (id === 'fortress') return landZone(/canyon|gorge|mesa|mountain|hills|valley/) || C.chooseZone('sead');
       if (id === 'railfort') return landZone(/volcano|crater|summit|peak|mountain|glacier|ice/) || C.chooseZone('strike');
@@ -36231,7 +36379,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRvYi
   function onCrash() {
     crashHandled = true; crashT = 0; glog('CRASH: ' + st.crashed + ' at alt ' + Math.round(st.pos.y) + ' m, ' + Math.round(st.speed * 3.6) + ' km/h, agl ' + Math.round(st.agl) + ', view ' + VIEWS[view]);
     var water = st.crashed.indexOf('SPLASH') === 0;
-    fx.explosion(st.pos.clone(), 1.8, { water: water, air: st.agl > 25 });
+    if (fx.impact) fx.impact(st.agl > 25 ? 'aircraft' : 'crash', st.pos.clone(), { water: water, air: st.agl > 25, scale: 1.3, vel: st.vel });
+    else fx.explosion(st.pos.clone(), 1.8, { water: water, air: st.agl > 25 });
     plane.group.visible = false;
     sound.play('explode'); combat.setGun(false);
     sound.setLoop('locking', false); sound.setLoop('locked', false); sound.setLoop('missileWarning', false);
@@ -38545,7 +38694,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRvYi
     updatePlaneVisual(dt);
     updateTeammates(dt); pfMark(4);
     updateCamera(dt); if (extras) extras.updateCamera(rdt);
-    if (weather) { try { weather.update(dt, { vel: st.vel }); } catch (e) {} }
+    if (weather) { try { weather.update(dt, { vel: st.vel, pos: st.pos }); } catch (e) {} }
     world.update(dt, camera);
     if (carrier) { try { carrier.update(dt, camera); } catch (e) {} }
     pfMark(5);
@@ -38889,7 +39038,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRvYi
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793157160', updShown = false;
+  var BUILD = '1793157239', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
@@ -39080,8 +39229,12 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRvYi
       if (FL.createPost) { post = FL.createPost(renderer, scene, camera); post.setSize(W, H, Math.min(devicePixelRatio || 1, 1.6)); }
       if (FL.createWeather) {
         try {
-          weather = FL.createWeather({ scene: scene, camera: camera, renderer: renderer, world: world, audio: null,
-            onThunder: function (d) { try { if (audio.thunder) audio.thunder(d); } catch (e) {} if (d < 2500 && started && st && !st.crashed) addTrauma(0.12 * (1 - d / 2500)); } });
+          weather = FL.createWeather({ scene: scene, camera: camera, renderer: renderer, world: world, audio: null, fx: fx,
+            onStrikePlane: function (p) { if (started && st && !st.crashed && player) { player.damage(12, 'lightning'); addTrauma(0.5); flash('LIGHTNING STRIKE'); } },
+            onThunder: function (d, pos, delayS) {
+              try { if (audio.thunder) audio.thunder(d); } catch (e) {}
+              if (d < 2500) setTimeout(function () { if (started && st && !st.crashed) addTrauma(0.12 * (1 - d / 2500)); }, Math.max(0, (delayS != null ? delayS : d / 343)) * 1000);
+            } });
         } catch (e) { weather = null; console.warn('weather', e); }
         renderWx();
       }
