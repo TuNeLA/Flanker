@@ -52960,7 +52960,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"uh60m":{"side":"data:image/webp;base64,UklGRgAn
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793214798', updShown = false;
+  var BUILD = '1793216267', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
