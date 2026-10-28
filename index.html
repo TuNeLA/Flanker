@@ -12044,8 +12044,9 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
       for (const sd of x > 0.01 ? [1, -1] : [0]) {
         const sid = sd < 0 ? 'L' + id.slice(1) : id, px = sd * x || 0;
         let y = -0.5;
-        const h = hit([px, -12, z], [0, 1, 0], 14) || hit([px, -12, z - 0.4], [0, 1, 0], 14);
-        if (h) y = h.y;
+        const h = r[5] != null ? null : hit([px, -12, z], [0, 1, 0], 14) || hit([px, -12, z - 0.4], [0, 1, 0], 14);
+        if (r[5] != null) y = r[5];   // explicit skin height (stations on moving panels, e.g. F/A-18E folding wingtips)
+        else if (h) y = h.y;
         out[sid] = { id: sid, x: px, y, z, kind, drop, side: sd };
       }
     }
@@ -13060,6 +13061,885 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
       for (const sx of [1, -1]) P.movers.push({ geo: sx > 0 ? g : mirrorX(g), pivot: [sx * 4.0, 0, zle(4.0)], kind: 'aux', aux: 'slat', move: [0, -0.05, -0.2] });
     };
   }
+})();
+
+</script>
+<script>
+/* ---- aircraft_b2.js ---- */
+/* aircraft_b2.js — Flanker: roster batch 2 jets (ROSTER.md section 5): F-14A, F/A-18E, Rafale M, F-22A, YF-23, J-20, MiG 1.44,
+   F-15C, F-15E, Typhoon, Su-37 (+ Su-57 internal bays). Loads AFTER aircraft_b1.js. Same build path as batch 1:
+   FL.acBuildKit + FL.registerAircraft(id, def, spec, { stations, muzzle }).
+   Moving parts (api.setAux(name, 0..1)): 'sweep' (F-14 outer wings, 20 -> 75 deg), 'vane' (F-14 glove vanes), 'fold' (F/A-18E wing fold),
+   'hook' (carrier jets), 'bay' / 'sbay' (bay doors), 'srail' (J-20 side-bay rail), 'gundoor' (F-22), 'ramp' (F-15 intakes),
+   'tgp' (F-15E targeting pod head), 'decoy' (Typhoon towed decoy paid out). jetsig.js drives them; net.js sends them to co-op mates.
+   Station kind 'bay' = internal bay (campaign.js layout codes b / s / i): its stores are hidden while the doors are shut.
+   Axes: nose -Z, up +Y, right +X, origin near the CG, wheel bottoms at y = -2.4 with gear down. Real lengths, spans and stations. */
+(function () {
+  'use strict';
+  const FL = (window.FL = window.FL || {});
+  const B = FL.acBuildKit;
+  if (!B || !FL.registerAircraft) { console.warn('aircraft_b2: aircraft.js registration hook missing'); return; }
+  const { T, loft, wingPair, fin, planform, intake, plateYZ, paint, box, cylZ, sphere, mirrorX, merge, decal, store, canopy, cantFin, clamp01, DEG, TIT } = B;
+  const PI = Math.PI;
+  const side = (o) => (o > 0 ? 'right' : 'left');
+  const pitot = (M, x, y, z, len, r) => M.push(paint(cylZ(r || 0.03, 0.012, len || 0.9, 6, false).translate(x, y, z - (len || 0.9)), 0.7, 0.7, 0.72));
+  const ring = (M, x, y, z, r, len) => M.push(paint(cylZ(r, r * 0.97, len, 18, true).translate(x, y, z), ...TIT));
+  const lin = (a, b, t) => a + (b - a) * t;
+
+  // ---------------------------------------------------------------- missile meshes for new weapons
+  Object.assign(B.MSPEC, {
+    pl15: { L: 4.0, r: 0.1, nose: 'ogive', w: [0.08, 0.6], t: [0.17, 0.22], col: [0.82, 0.83, 0.82] },
+    pl10: { L: 3.0, r: 0.08, nose: 'dome', t: [0.16, 0.2], c: [0.1, 0.14, 'delta'] },
+    mica: { L: 3.1, r: 0.08, nose: 'ogive', w: [0.05, 1.4], t: [0.17, 0.2], col: [0.84, 0.85, 0.84] },
+  });
+
+  // ---------------------------------------------------------------- shared moving-part builders
+  // tail hook: arm from the pivot aft, swings down by 40 deg (aux 'hook')
+  function hookMv(P, y, z, len) {
+    P.movers.push({ geo: merge([box(0.07, 0.07, len, 0, 0, len / 2), box(0.13, 0.1, 0.16, 0, -0.03, len)], false, false), pivot: [0, y, z], kind: 'aux', aux: 'hook', rot: [0.7, 0, 0], local: true });
+  }
+  // pair of ventral bay doors hinged on their outer edges (aux name); dark bay roof just under the skin
+  // y = door plane (a little under the skin), hw = half width, inner = x of the inner edge (0 = centre line)
+  function bayDoors(P, z0, z1, hw, y, aux, o) {
+    o = o || {};
+    const L = z1 - z0, zc = (z0 + z1) / 2, inner = o.inner || 0, w = hw - inner;
+    for (const s of [1, -1]) {
+      P.metal.push(paint(box(w - 0.03, 0.02, L - 0.05, s * (inner + w / 2), y + 0.012, zc), 0.08, 0.085, 0.09));
+      P.movers.push({ geo: box(w, 0.025, L, -s * w / 2, 0, 0), pivot: [s * hw, y, zc], kind: 'aux', aux, side: s, rot: [0, 0, s * (o.ang || 1.45)], local: true });
+    }
+  }
+  // stealth jets: bay outlines on the skin (def.panels rows)
+  const bayPanel = (z0, z1, x0, x1, y) => [z0, z1, x0, x1, 'under', y];
+
+  // ===================================================================================================== F-14A Tomcat
+  // 19.1 m, span 19.55 m spread / 11.65 m swept / 10.15 m oversweep, height 4.88 m. Variable-sweep outer wings on pivots 2.72 m out
+  // from the centre line (20 -> 68 deg, 75 deg parked), fixed glove with retractable glove vanes, "pancake" centre body between widely
+  // spaced TF30 nacelles, raked box intakes, twin fins, all-moving tailerons, beaver tail with top + bottom speed brakes, tandem cockpit.
+  const SW0 = 20 * DEG, PIV = [2.72, 0.3, -0.2];
+  const f14LE = (x) => -1.4 + (x - 2.55) * Math.tan(SW0), f14C = (x) => 3.55 - (x - 2.55) * (2.3 / 7.23);
+  const F14 = {
+    b2x: { tipAux: 'sweep', bayAux: null, idle: 'sweep' },
+    surf: false,
+    gearSpec: [
+      { x: 0, y: -0.5, z: -6.4, r: 0.28, w: 0.17, wheels: 2, nose: true, fold: [1, 0, 0], ang: PI / 2, lift: 0.12, sr: 0.075 },
+      { x: 2.35, y: -0.2, z: 0.9, r: 0.5, w: 0.27, fold: [1, 0, 0], ang: PI / 2, twist: PI / 2, lift: 0.22, sr: 0.1, well: [-0.3, 0.42, -2.1, 0.3] },
+    ],
+    cockpitStyle: 'se_analog', canTop: 1.1, rearSeat: [0.06, 1.3],
+    fins: [[1.62, 1.3, 7.0], [-1.62, 1.3, 7.0]],
+    nation: 'US', seed: 14, len: [-9.5, 9.7], hs: 9.8, radomeZ: -7.4,
+    frames: [-7.4, -6.0, -2.6, 0.5, 3.4, 6.2, 8.2],
+    // 1970s US Navy: light gull grey over gloss white, CVW-14 "NK" tail code, black modex
+    liv: { pattern: 'patches', base: '#a5a9aa', under: '#e6e6e2', radome: '#8e9293', patches: [] },
+    marks: { badge: 'us', sq: 'VF-1', badgeCol: '#c8a02a', fin: 'tail', tail: 'NK', serial: 'NAVY 160390', tailCol: '#1b1c1d' },
+    code: { text: '101', color: '#1b1c1d', stroke: null },
+    engines: [{ x: -1.55, y: -0.18, z: 8.55, r: 0.55, len: 0.95 }, { x: 1.55, y: -0.18, z: 8.55, r: 0.55, len: 0.95 }],
+    gear: [{ x: 0, y: -0.5, z: -6.4, r: 0.28, nose: 1 }, { x: 2.35, y: -0.2, z: 0.9, r: 0.5 }, { x: -2.35, y: -0.2, z: 0.9, r: 0.5 }],
+    wingtips: [[-9.75, 0.3, 2.2], [9.75, 0.3, 2.2]], navs: [[-9.7, 0.34, 1.6], [9.7, 0.34, 1.6]],
+    build(P) {
+      // forward fuselage + flat centre body ("pancake") + beaver tail
+      P.body.push(loft([
+        [-9.45, -0.2, 0.01, 0.01, 0.01, 2], [-9.1, -0.18, 0.2, 0.2, 0.18, 2], [-8.3, -0.12, 0.42, 0.42, 0.38, 2], [-7.2, -0.04, 0.6, 0.6, 0.52, 2.1],
+        [-6.0, 0.0, 0.7, 0.66, 0.6, 2.2], [-4.8, 0.02, 0.76, 0.66, 0.62, 2.3], [-3.6, 0.02, 0.82, 0.62, 0.6, 2.5], [-2.0, 0.02, 1.05, 0.52, 0.5, 3],
+        [0.5, 0.02, 1.25, 0.4, 0.42, 3.4], [3.5, 0.02, 1.2, 0.36, 0.38, 3.4], [6.0, 0.02, 0.95, 0.3, 0.32, 3], [7.8, 0.02, 0.72, 0.22, 0.22, 2.8],
+        [9.0, 0.02, 0.55, 0.12, 0.12, 3], [9.5, 0.02, 0.32, 0.05, 0.05, 2.5], [9.62, 0.02, 0.01, 0.01, 0.01, 2],
+      ], 28, 3, 0));
+      P.body.push(loft([[-2.7, 0.48, 0.3, 0.16, 0.1], [0.0, 0.42, 0.45, 0.13, 0.1], [4.0, 0.36, 0.4, 0.1, 0.1], [6.6, 0.32, 0.05, 0.03, 0.03]], 14, 3, 0));   // spine
+      // nacelles: raked box intakes (upper lip forward) into round engine bays
+      const NAC = [[-4.3, -0.34, 0.5, 0.52, 0.5, 6, -0.35], [-3.6, -0.32, 0.55, 0.55, 0.52, 5.5, -0.1], [-1.5, -0.27, 0.6, 0.56, 0.55, 4], [2.0, -0.22, 0.62, 0.55, 0.55, 3],
+        [5.5, -0.2, 0.6, 0.55, 0.55, 2.4], [7.8, -0.18, 0.59, 0.58, 0.58, 2.1], [8.55, -0.18, 0.57, 0.57, 0.57, 2]];
+      for (const sx of [-1, 1]) {
+        P.body.push(loft(NAC, 22, 3, sx * 1.55));
+        intake(P, NAC[0], sx * 1.55, { lip: 0.045, depth: 2.4, shrink: 0.82, lipCol: [0.62, 0.64, 0.64] });
+        P.metal.push(plateYZ([[-4.15, 0.2], [-2.6, 0.05], [-2.6, 0.0], [-4.15, 0.15]], sx * 1.55, 0.9, [0.2, 0.21, 0.22]));   // intake ramp
+      }
+      // fixed glove (highly swept) on the fuselage top
+      const GL = [[0.85, -5.6], [1.6, -3.7], [2.75, -1.35], [3.1, -0.6], [3.1, 2.4], [0.85, 4.2]];
+      const gl = planform(GL, 0.17, 0.05, 0.3, (ax) => 1 - 0.35 * clamp01((ax - 0.9) / 2.2));
+      P.body.push(gl, mirrorX(gl));
+      // outer wing panels on the pivots (drawn at 20 deg); flaps ride on them (m.on = 'sweep')
+      const xr = 2.55, xt = 9.78, x0 = 3.5, x1 = 8.9, H = (x) => f14LE(x) + 0.74 * f14C(x), TE = (x) => f14LE(x) + f14C(x);
+      const PAN = [[xr, f14LE(xr)], [xt, f14LE(xt)], [xt, TE(xt)], [x1, TE(x1)], [x1, H(x1)], [x0, H(x0)], [x0, TE(x0)], [xr, TE(xr)]];
+      const pan = planform(PAN, 0.15, 0.045, PIV[1], (ax) => 1 - 0.55 * clamp01((ax - 2.6) / 7.2));
+      const flp = planform([[x0 + 0.02, H(x0)], [x1 - 0.02, H(x1)], [x1 - 0.02, TE(x1)], [x0 + 0.02, TE(x0)]], 0.07, 0.02, PIV[1] - 0.01);
+      const A = [x0, PIV[1] - 0.01, H(x0)], Bp = [x1, PIV[1] - 0.01, H(x1)], d = new T.Vector3(Bp[0] - A[0], 0, Bp[2] - A[2]).normalize();
+      for (const s of [1, -1]) {
+        P.movers.push({ geo: s > 0 ? pan : mirrorX(pan), pivot: [s * PIV[0], PIV[1], PIV[2]], kind: 'aux', aux: 'sweep', side: s, rot: [0, -s * 55 * DEG, 0] });
+        P.movers.push({ geo: s > 0 ? flp : mirrorX(flp), pivot: [s * A[0], A[1], A[2]], kind: 'flap', side: s, axis: s > 0 ? [d.x, d.y, d.z] : [d.x, -d.y, -d.z], on: 'sweep' });
+        // glove vane: hidden in the glove leading edge, swings out at high Mach (aux 'vane')
+        P.movers.push({ geo: planform([[0, 0], [0.18, 0.95], [0.62, 0.95]], 0.04, 0.012, 0), pivot: [s * 1.05, 0.3, -4.75], kind: 'aux', aux: 'vane', side: s, rot: [0, s * 40 * DEG, 0], local: true, ...(s < 0 ? { geo: mirrorX(planform([[0, 0], [0.18, 0.95], [0.62, 0.95]], 0.04, 0.012, 0)) } : {}) });
+      }
+      // twin fins, ventral fins, tailerons
+      for (const sx of [-1, 1]) {
+        P.body.push(cantFin(fin([[5.1, 0.42], [8.35, 0.42], [9.05, 2.45], [8.05, 2.45]], 0.1, 0.04, sx * 1.62, 0.45), sx * 1.62, 0.42, -sx * 5 * DEG));
+        P.body.push(cantFin(fin([[6.6, -0.72], [8.2, -0.72], [8.3, -1.25], [7.6, -1.25]], 0.05, 0.02, sx * 1.75, 0), sx * 1.75, -0.72, sx * 15 * DEG));
+      }
+      for (const s of [1, -1]) {
+        let st = planform([[0, -1.3], [3.0, 0.55], [3.0, 1.3], [0, 1.55]], 0.08, 0.03, 0);
+        if (s < 0) st = mirrorX(st);
+        P.movers.push({ geo: st, pivot: [s * 2.1, -0.12, 7.95], kind: 'stab', side: s, local: true });
+      }
+      // beaver tail speed brakes (top + bottom), hook under it
+      P.movers.push({ geo: box(0.9, 0.04, 1.1, 0, 0.16, 8.75), pivot: [0, 0.16, 8.2], kind: 'brakeTop' });
+      P.movers.push({ geo: box(0.9, 0.04, 1.1, 0, -0.16, 8.75), pivot: [0, -0.16, 8.2], kind: 'brakeBot', side: 0 });
+      hookMv(P, -0.22, 7.9, 1.65);
+      canopy(P, [[-7.0, 0.55, 0.05, 0.05, 0.05], [-6.6, 0.58, 0.36, 0.34, 0.1], [-5.9, 0.6, 0.46, 0.52, 0.1], [-5.0, 0.62, 0.48, 0.54, 0.1],
+        [-4.1, 0.62, 0.46, 0.5, 0.1], [-3.3, 0.62, 0.4, 0.42, 0.1], [-2.7, 0.6, 0.05, 0.05, 0.05]]);
+      const M = P.metal;
+      pitot(M, 0, -0.2, -9.45, 0.5);
+      P.body.push(loft([[-8.1, -0.6, 0.02, 0.02, 0.02, 2], [-7.9, -0.62, 0.14, 0.1, 0.1, 2], [-7.2, -0.62, 0.15, 0.1, 0.11, 2], [-6.9, -0.6, 0.02, 0.02, 0.02, 2]], 10, 2, 0));   // TCS chin pod
+      M.push(paint(sphere(0.09, 0, -0.73, -7.95), 0.1, 0.12, 0.16));
+      M.push(paint(box(0.06, 0.1, 0.45, -0.66, -0.25, -6.3), 0.05, 0.05, 0.05)); // M61 port (left)
+      for (const sx of [-1, 1]) { ring(M, sx * 1.55, -0.18, 8.2, 0.59, 0.35); M.push(paint(cylZ(0.05, 0.04, 0.3, 8).translate(sx * 1.72, 2.4, 9.0), 0.2, 0.2, 0.21)); }
+      for (const sx of [-1, 1]) { store(P.stores, 'aim54', sx * 0.55, -0.6, -1.9, 0.12); store(P.stores, 'aim9x', sx * 2.95, 0.05, -0.3, 0.15); }
+      for (const sx of [-1, 1]) P.decals.push(decal(0, 1.2, 1.2, 'top', sx * 1.9, 0.4, 1.4), decal(0, 1.2, 1.2, 'bottom', sx * 1.9, 0.15, 1.4));
+      for (const o of [-1, 1]) P.decals.push(decal(0, 1.0, 1.0, side(o), o * 2.15, -0.2, 3.6));
+      for (const sx of [-1, 1]) for (const o of [-1, 1]) P.decals.push(decal(3, 1.4, 1.4, side(o), sx * 1.72 + o * 0.06, 1.6, 7.6));
+      for (const o of [-1, 1]) P.decals.push(decal(1, 0.9, 0.45, side(o), o * 0.62, 0.05, -7.4));
+      for (const o of [-1, 1]) P.decals.push(decal(2, 0.45, 0.45, side(o), o * 0.82, 0.25, -3.0));
+    },
+  };
+  FL.registerAircraft('f14', F14, {
+    tier: 5, price: 200000, unlockLevel: 12, roughness: 0.3, hardpoints: 6, pylonLayout: 'w w w w w', engineSound: 'twin', carrier: 'catobar',
+    name: 'Grumman F-14A Tomcat', nation: 'US', year: 1974, role: 'Fleet defender',
+    blurb: 'The Navy\'s big cat: the wings sweep by themselves, wide for a tight turn and back for speed. Six Phoenix missiles reach 60 km. Catapult and tail hook for the carrier.',
+    // real: TF30-P-414A 54.9 / 93 kN x2, wing 52.5 m2 (spread), ~26 t combat, Mach 2.34, climb 229 m/s, 10 stations, 6,600 kg, M61A1
+    mass: 26000, wingArea: 52.5, thrustMil: 109800, thrustAB: 186000, arcadeThrust: 1.5,
+    rollRate: 210, pitchRate: 105, yawRate: 45, drift: 1.0, maxG: 7.5, missiles: 8, gun: 'm61', gunName: 'M61A1 Vulcan 20 mm',
+    cd0: 0.022, machMax: 2.34, topSpeedKmh: 2485, ceiling: 15200, climbRate: 229,
+    stats: { speed: 4, agility: 3, firepower: 4, toughness: 4 },
+  }, { stations: [['R1', 2.95, -0.3, 'wing', 0.15], ['R2', 2.3, -0.5, 'wing', 0.38], ['R3', 0.55, -1.9, 'belly', 0.12], ['R4', 0.55, 2.4, 'belly', 0.12], ['R5', 1.55, 0.9, 'belly', 0.2]], muzzle: [-0.66, -0.25, -6.6] });
+
+  // ===================================================================================================== F/A-18E Super Hornet
+  // 18.31 m, span 13.62 m (9.32 m folded), height 4.88 m. LEX to the windscreen, caret intakes under the LEX, wing folds at 4.66 m,
+  // twin fins canted 20 deg out, all-moving stabs, two F414 close together, M61 in the nose, 11 stations, tail hook.
+  const F18 = {
+    b2x: { tipAux: 'fold', idle: 'fold' },
+    surf: [{ a: 0.05, b: 0.97, c: 0.3, kind: 'flap' }],
+    gearSpec: [
+      { x: 0, y: -0.48, z: -5.7, r: 0.28, w: 0.17, wheels: 2, nose: true, fold: [1, 0, 0], ang: PI / 2, lift: 0.12, sr: 0.075 },
+      { x: 1.55, y: -0.48, z: 1.3, r: 0.42, w: 0.25, fold: [1, 0, 0], ang: -PI / 2, twist: PI / 2, lift: 0.2, sr: 0.09 },
+    ],
+    cockpitStyle: 'us_glass', canTop: 1.12,
+    fins: [[1.05, 1.3, 6.2], [-1.05, 1.3, 6.2]],
+    nation: 'US', lowVis: true, seed: 18, len: [-9.2, 9.2], hs: 6.8, radomeZ: -7.6,
+    frames: [-7.6, -6.2, -3.4, -0.6, 2.2, 4.8, 7.2],
+    // US Navy tactical paint: light ghost grey with darker ghost grey on the top
+    liv: { pattern: 'patches', base: '#9ea4a8', under: '#a9aeb1', radome: '#8a9094',
+      patches: [{ c: '#80878c', fin: true, p: [[-6.5, 0], [-6.5, 0.5], [8.6, 0.9], [8.6, 0]] }, { c: '#80878c', p: [[-1.2, 1.1], [0.1, 4.6], [2.6, 4.6], [3.4, 1.1]] }] },
+    marks: { badge: 'us', sq: 'VFA-14', badgeCol: '#c8a02a', fin: 'tail', tail: 'NH', serial: 'NAVY 166620', tailCol: '#5a6166' },
+    code: { text: '200', color: '#5a6166', stroke: null },
+    engines: [{ x: -0.56, y: 0.0, z: 8.3, r: 0.45, len: 0.8 }, { x: 0.56, y: 0.0, z: 8.3, r: 0.45, len: 0.8 }],
+    gear: [{ x: 0, y: -0.48, z: -5.7, r: 0.28, nose: 1 }, { x: 1.55, y: -0.48, z: 1.3, r: 0.42 }, { x: -1.55, y: -0.48, z: 1.3, r: 0.42 }],
+    wingtips: [[-6.8, 0.05, 1.6], [6.8, 0.05, 1.6]], navs: [[-6.55, 0.08, 0.9], [6.55, 0.08, 0.9]],
+    build(P) {
+      P.body.push(loft([
+        [-9.15, -0.14, 0.01, 0.01, 0.01, 2], [-8.8, -0.12, 0.2, 0.2, 0.18, 2], [-7.9, -0.07, 0.42, 0.42, 0.38, 2], [-6.8, -0.02, 0.56, 0.56, 0.5, 2.1],
+        [-5.6, 0.0, 0.64, 0.62, 0.56, 2.2], [-4.4, 0.0, 0.7, 0.62, 0.58, 2.4], [-3.0, 0.0, 0.85, 0.55, 0.56, 2.8], [-1.0, 0.0, 1.05, 0.5, 0.55, 3],
+        [1.5, 0.0, 1.12, 0.48, 0.55, 3], [4.0, 0.0, 1.08, 0.45, 0.5, 2.8], [6.0, 0.02, 1.0, 0.44, 0.44, 2.5], [7.6, 0.02, 1.02, 0.45, 0.45, 2.3], [8.3, 0.02, 1.0, 0.46, 0.46, 2.2],
+      ], 28, 3, 0));
+      const IT = [[-3.3, -0.4, 0.3, 0.34, 0.36, 3.5, -0.25], [-2.7, -0.4, 0.36, 0.38, 0.4, 3], [-0.5, -0.34, 0.4, 0.4, 0.4, 2.6], [2.0, -0.26, 0.34, 0.36, 0.36, 2.2], [3.5, -0.2, 0.1, 0.18, 0.18, 2]];
+      for (const sx of [-1, 1]) { P.body.push(loft(IT, 16, 3, sx * 1.08)); intake(P, IT[0], sx * 1.08, { lip: 0.035, depth: 2.0, shrink: 0.8, lipCol: [0.6, 0.62, 0.62] }); }
+      const lex = planform([[0.5, -6.7], [0.95, -5.0], [1.5, -3.0], [1.8, -1.2], [0.5, -1.2]], 0.07, 0.025, 0.16);
+      P.body.push(lex, mirrorX(lex));
+      // inner wing (flaps), outer folding panel (aux 'fold') with the aileron and the tip rail
+      P.body.push(...wingPair([[1.0, -1.5], [4.68, -0.17], [4.68, 3.0], [1.0, 3.65]], 0.16, 0.05, 0.02, (ax) => 1 - 0.35 * clamp01((ax - 1) / 3.7)));
+      const OUT = planform([[4.66, -0.17], [6.55, 0.5], [6.55, 2.0], [4.66, 2.21]], 0.12, 0.04, 0.02, (ax) => 0.65 - 0.25 * clamp01((ax - 4.66) / 1.9));
+      const AIL = planform([[4.72, 2.22], [6.48, 2.01], [6.48, 2.5], [4.72, 3.0]], 0.06, 0.02, 0.01);
+      const RAIL = box(0.1, 0.12, 2.6, 6.68, 0.02, 1.0);
+      const aA = [4.72, 0.01, 2.22], aB = [6.48, 0.01, 2.01], ad = new T.Vector3(aB[0] - aA[0], 0, aB[2] - aA[2]).normalize();
+      for (const s of [1, -1]) {
+        const g = merge([OUT, RAIL], false, false);
+        P.movers.push({ geo: s > 0 ? g : mirrorX(g), pivot: [s * 4.66, 0.02, 1.2], kind: 'aux', aux: 'fold', side: s, rot: [0, 0, s * 100 * DEG] });
+        P.movers.push({ geo: s > 0 ? AIL : mirrorX(AIL), pivot: [s * aA[0], aA[1], aA[2]], kind: 'aileron', side: s, axis: s > 0 ? [ad.x, ad.y, ad.z] : [ad.x, -ad.y, -ad.z], on: 'fold' });
+      }
+      // twin fins canted 20 deg out (rudders follow), all-moving stabs
+      for (const sx of [-1, 1]) P.body.push(cantFin(fin([[4.4, 0.4], [7.25, 0.4], [8.05, 2.95], [6.85, 2.95]], 0.1, 0.04, sx * 1.05, 0.45), sx * 1.05, 0.4, -sx * 20 * DEG));
+      for (const s of [1, -1]) {
+        let st = planform([[0, -1.05], [2.25, 0.5], [2.25, 1.1], [0, 1.4]], 0.07, 0.03, 0);
+        if (s < 0) st = mirrorX(st);
+        P.movers.push({ geo: st, pivot: [s * 1.2, -0.02, 7.35], kind: 'stab', side: s, local: true });
+      }
+      hookMv(P, -0.42, 7.2, 1.4);
+      canopy(P, [[-6.6, 0.5, 0.05, 0.05, 0.05], [-6.2, 0.53, 0.34, 0.3, 0.1], [-5.5, 0.56, 0.44, 0.5, 0.1], [-4.7, 0.58, 0.44, 0.46, 0.1], [-4.0, 0.58, 0.36, 0.34, 0.1], [-3.5, 0.58, 0.05, 0.05, 0.05]]);
+      const M = P.metal;
+      pitot(M, 0, -0.14, -9.15, 0.35);
+      M.push(paint(box(0.08, 0.05, 0.3, 0, 0.36, -8.2), 0.05, 0.05, 0.05)); // M61 muzzle on top of the nose
+      M.push(paint(cylZ(0.035, 0.03, 0.9, 6).rotateX(-0.25).translate(0.42, 0.42, -7.2), 0.6, 0.6, 0.62)); // refuel probe (retracted, top right)
+      for (const sx of [-1, 1]) ring(M, sx * 0.56, 0.0, 7.95, 0.48, 0.35);
+      for (const sx of [-1, 1]) { store(P.stores, 'aim9x', sx * 6.68, -0.04, 1.0); store(P.stores, 'aim120', sx * 3.2, -0.25, 1.0, 0.3); }
+      for (const sx of [-1, 1]) P.decals.push(decal(0, 1.0, 1.0, 'top', sx * 3.0, 0.12, 1.6), decal(0, 1.0, 1.0, 'bottom', sx * 3.0, -0.08, 1.6));
+      for (const o of [-1, 1]) P.decals.push(decal(0, 0.8, 0.8, side(o), o * 1.15, 0.05, 3.0));
+      for (const sx of [-1, 1]) for (const o of [-1, 1]) P.decals.push(decal(3, 1.3, 1.3, side(o), sx * (1.05 + 0.6) + o * 0.06, 2.0, 7.0));
+      for (const o of [-1, 1]) P.decals.push(decal(1, 0.9, 0.45, side(o), o * 0.6, 0.05, -6.8));
+      for (const o of [-1, 1]) P.decals.push(decal(2, 0.42, 0.42, side(o), o * 0.72, 0.2, -3.0));
+    },
+  };
+  FL.registerAircraft('f18e', F18, {
+    tier: 6, price: 350000, unlockLevel: 19, roughness: 0.12, hardpoints: 7, pylonLayout: 't w w c w w', engineSound: 'twin', carrier: 'catobar',
+    name: 'Boeing F/A-18E Super Hornet', nation: 'US', year: 2001, role: 'Carrier multirole',
+    blurb: 'The "Rhino": a big carrier Hornet with eleven pylons, wings that fold on the deck and a nose that keeps pointing at 30+ degrees of AoA. Hold the special to override the G limiter.',
+    // real: F414-GE-400 62.3 / 98 kN x2, wing 46.45 m2, ~21.3 t, Mach 1.8, climb 228 m/s, 11 stations, 8,050 kg, M61A2
+    mass: 21300, wingArea: 46.45, thrustMil: 124600, thrustAB: 196000, arcadeThrust: 1.4,
+    rollRate: 230, pitchRate: 120, yawRate: 55, drift: 1.2, maxG: 7.5, missiles: 10, gun: 'm61', gunName: 'M61A2 Vulcan 20 mm',
+    cd0: 0.022, machMax: 1.8, topSpeedKmh: 1915, ceiling: 15000, climbRate: 228, foldPylons: ['L1', 'R1'],
+    stats: { speed: 3, agility: 4, firepower: 5, toughness: 4 },
+  }, { stations: [['R1', 6.68, 1.0, 'tip', 0.07, -0.04], ['R2', 4.3, 1.1, 'wing'], ['R3', 3.2, 1.0, 'wing'], ['C', 0, 0.5, 'belly'], ['R4', 2.1, 0.9, 'wing'], ['R5', 0.95, 0.6, 'belly', 0.1]], muzzle: [0, 0.36, -8.4] });
+
+  // ===================================================================================================== Dassault Rafale M
+  // 15.27 m, span 10.80 m, height 5.34 m. Close-coupled canards over semicircular side intakes, 48 deg delta, single fin, two M88,
+  // GIAT 30 in the right wing root, tail hook and a long nose leg (M). No airbrake: canards nose-down + elevons as brakes.
+  const nationFR = (x) => {
+    x.fillStyle = '#1f3a93'; x.beginPath(); x.arc(256, 256, 246, 0, 6.3); x.fill();
+    x.fillStyle = '#ffffff'; x.beginPath(); x.arc(256, 256, 164, 0, 6.3); x.fill();
+    x.fillStyle = '#d0102a'; x.beginPath(); x.arc(256, 256, 82, 0, 6.3); x.fill();
+  };
+  const RAF = {
+    b2x: { canardBrake: true },
+    surf: [{ a: 0.05, b: 0.48, c: 0.2, kind: 'elevon' }, { a: 0.52, b: 0.95, c: 0.2, kind: 'elevon' }],
+    gearSpec: [
+      { x: 0, y: -0.5, z: -4.6, r: 0.26, w: 0.16, wheels: 2, nose: true, fold: [1, 0, 0], ang: PI / 2, lift: 0.12, sr: 0.07 },
+      { x: 1.35, y: -0.45, z: 1.5, r: 0.4, w: 0.23, fold: [1, 0, 0], ang: PI / 2, twist: PI / 2, lift: 0.2, sr: 0.085 },
+    ],
+    cockpitStyle: 'us_glass', canTop: 1.12,
+    fins: [[0, 1.4, 5.8]],
+    nation: 'FR', seed: 30, len: [-7.75, 7.6], hs: 5.4, radomeZ: -5.9, nationMark: nationFR,
+    frames: [-5.9, -4.6, -2.0, 0.5, 3.0, 5.4],
+    // Marine nationale: overall medium blue-grey, small full-colour roundels, MARINE on the fin, black side number
+    liv: { pattern: 'patches', base: '#6f777d', under: '#7a8288', radome: '#5b6166', patches: [] },
+    marks: { badge: 'us', sq: '12F', badgeCol: '#1f3a93', fin: 'num', num: 'MARINE', numCol: '#1d2124', numStroke: null },
+    code: { text: '12', color: '#1d2124', stroke: null },
+    engines: [{ x: -0.42, y: 0.0, z: 7.0, r: 0.37, len: 0.6 }, { x: 0.42, y: 0.0, z: 7.0, r: 0.37, len: 0.6 }],
+    gear: [{ x: 0, y: -0.5, z: -4.6, r: 0.26, nose: 1 }, { x: 1.35, y: -0.45, z: 1.5, r: 0.4 }, { x: -1.35, y: -0.45, z: 1.5, r: 0.4 }],
+    wingtips: [[-5.4, -0.05, 4.8], [5.4, -0.05, 4.8]], navs: [[-5.3, 0.0, 4.2], [5.3, 0.0, 4.2]],
+    build(P) {
+      P.body.push(loft([
+        [-7.7, -0.06, 0.01, 0.01, 0.01, 2], [-7.4, -0.05, 0.17, 0.17, 0.15, 2], [-6.6, -0.01, 0.36, 0.36, 0.32, 2], [-5.6, 0.02, 0.5, 0.5, 0.44, 2.1],
+        [-4.5, 0.04, 0.58, 0.56, 0.5, 2.2], [-3.4, 0.04, 0.62, 0.55, 0.55, 2.4], [-2.0, 0.02, 0.75, 0.48, 0.55, 2.8], [0.0, 0.0, 0.88, 0.45, 0.52, 3],
+        [2.5, 0.0, 0.92, 0.42, 0.48, 3], [5.0, 0.02, 0.86, 0.4, 0.42, 2.6], [6.6, 0.02, 0.8, 0.38, 0.38, 2.3], [7.05, 0.02, 0.8, 0.38, 0.38, 2.2],
+      ], 28, 3, 0));
+      const IT = [[-3.4, -0.32, 0.27, 0.3, 0.32, 2, 0.12], [-2.9, -0.32, 0.31, 0.34, 0.35, 2.2], [-0.8, -0.27, 0.33, 0.34, 0.36, 2.4], [1.5, -0.2, 0.1, 0.18, 0.2, 2]];
+      for (const sx of [-1, 1]) { P.body.push(loft(IT, 16, 3, sx * 0.8)); intake(P, IT[0], sx * 0.8, { lip: 0.03, depth: 1.8, shrink: 0.8, lipCol: [0.55, 0.58, 0.6] }); }
+      P.body.push(...wingPair([[0.85, -0.9], [5.3, 4.05], [5.3, 5.25], [0.85, 6.55]], 0.13, 0.05, -0.08, (ax) => 1 - 0.5 * clamp01((ax - 0.85) / 4.45)));
+      for (const s of [1, -1]) {
+        let c = planform([[0, -0.75], [1.55, 0.35], [1.55, 0.75], [0, 0.85]], 0.06, 0.025, 0);
+        if (s < 0) c = mirrorX(c);
+        P.movers.push({ geo: c, pivot: [s * 0.8, 0.3, -2.6], kind: 'canard', side: s, local: true });
+      }
+      P.body.push(fin([[3.2, 0.4], [6.6, 0.4], [7.45, 2.9], [6.45, 2.9]], 0.1, 0.04, 0, 0.45));
+      hookMv(P, -0.36, 6.3, 1.2);
+      canopy(P, [[-5.9, 0.42, 0.05, 0.05, 0.05], [-5.5, 0.46, 0.32, 0.3, 0.1], [-4.8, 0.5, 0.42, 0.5, 0.1], [-4.0, 0.52, 0.42, 0.46, 0.1], [-3.3, 0.52, 0.34, 0.34, 0.1], [-2.8, 0.5, 0.05, 0.05, 0.05]]);
+      const M = P.metal;
+      M.push(paint(cylZ(0.035, 0.03, 1.0, 6).translate(0.32, 0.38, -6.9), 0.6, 0.6, 0.62)); // fixed refuel probe
+      M.push(paint(box(0.06, 0.06, 0.3, 0.95, -0.15, -1.9), 0.05, 0.05, 0.05)); // GIAT 30 port
+      M.push(paint(sphere(0.1, 0, 0.42, -5.95), 0.15, 0.2, 0.26)); // OSF optronics
+      for (const sx of [-1, 1]) ring(M, sx * 0.42, 0.0, 6.75, 0.4, 0.3);
+      for (const sx of [-1, 1]) { store(P.stores, 'mica', sx * 5.35, -0.1, 4.8); store(P.stores, 'mica', sx * 2.9, -0.3, 2.6, 0.26); }
+      for (const sx of [-1, 1]) P.decals.push(decal(0, 0.75, 0.75, 'top', sx * 3.3, -0.02, 3.6), decal(0, 0.75, 0.75, 'bottom', sx * 3.3, -0.12, 3.6));
+      for (const o of [-1, 1]) P.decals.push(decal(0, 0.55, 0.55, side(o), o * 0.88, 0.1, 1.0));
+      for (const o of [-1, 1]) P.decals.push(decal(3, 1.6, 0.5, side(o), o * 0.07, 1.4, 6.0));
+      for (const o of [-1, 1]) P.decals.push(decal(1, 0.6, 0.3, side(o), o * 0.48, 0.05, -5.0));
+      for (const o of [-1, 1]) P.decals.push(decal(2, 0.4, 0.4, side(o), o * 0.6, 0.15, -2.2));
+    },
+  };
+  FL.registerAircraft('rafale', RAF, {
+    tier: 7, price: 450000, unlockLevel: 23, roughness: 0.1, hardpoints: 8, pylonLayout: 't w w w c w w', engineSound: 'twin', carrier: 'catobar', supercruise: 1.2,
+    name: 'Dassault Rafale M', nation: 'FR', year: 2001, role: 'Omnirole (carrier)',
+    blurb: 'France\'s "squall": canards, thirteen pylons and the SPECTRA defence suite. Press the special: radar missiles near you lose their lock. Catapult and tail hook.',
+    // real (M): M88-2 50 / 75 kN x2, wing 45.7 m2, ~15 t, Mach 1.8, climb 305 m/s, 13 stations, 9,500 kg, GIAT 30M791
+    mass: 15000, wingArea: 45.7, thrustMil: 100000, thrustAB: 150000, arcadeThrust: 1.4,
+    rollRate: 300, pitchRate: 125, yawRate: 58, drift: 1.2, maxG: 9, missiles: 10, gun: 'gian30', gunName: 'GIAT 30M791 30 mm',
+    cd0: 0.019, machMax: 1.8, topSpeedKmh: 1912, ceiling: 15835, climbRate: 305,
+    stats: { speed: 3, agility: 5, firepower: 5, toughness: 3 },
+  }, { stations: [['R1', 5.35, 4.8, 'tip'], ['R2', 4.15, 3.75, 'wing'], ['R3', 2.95, 2.75, 'wing'], ['R4', 1.85, 1.8, 'wing'], ['C', 0, 1.6, 'belly'], ['R5', 0.62, -0.9, 'belly', 0.1], ['R6', 0.62, 3.6, 'belly', 0.1]], muzzle: [0.95, -0.15, -2.05] });
+
+  // ===================================================================================================== Eurofighter Typhoon FGR4
+  // 15.96 m, span 10.95 m, height 5.28 m. Canards ahead of the cockpit, ventral "smile" intake, 53 deg delta with DASS wingtip pods,
+  // single fin, dorsal airbrake, two EJ200, BK-27 in the right wing root, towed radar decoy from the right wingtip pod.
+  const nationRAF = (x) => {
+    x.fillStyle = '#8ca0bd'; x.beginPath(); x.arc(256, 256, 246, 0, 6.3); x.fill();
+    x.fillStyle = '#c28c90'; x.beginPath(); x.arc(256, 256, 112, 0, 6.3); x.fill();
+  };
+  const TYP = {
+    b2x: { decoy: [5.38, -0.05, 6.9] },
+    surf: [{ a: 0.05, b: 0.48, c: 0.18, kind: 'elevon' }, { a: 0.52, b: 0.92, c: 0.18, kind: 'elevon' }],
+    gearSpec: [
+      { x: 0, y: -0.5, z: -4.8, r: 0.26, w: 0.16, nose: true, fold: [1, 0, 0], ang: PI / 2, lift: 0.1, sr: 0.065 },
+      { x: 1.25, y: -0.5, z: 2.0, r: 0.4, w: 0.23, fold: [0, 0, 1], ang: -PI / 2, shrink: 0.35, sr: 0.085, doors: 'inner' },
+    ],
+    cockpitStyle: 'us_glass', canTop: 1.12,
+    fins: [[0, 1.4, 6.0]],
+    nation: 'UK', seed: 33, len: [-8.0, 8.0], hs: 5.5, radomeZ: -6.2, nationMark: nationRAF,
+    frames: [-6.2, -4.8, -2.2, 0.6, 3.2, 5.6],
+    // RAF: overall Camouflage Grey (BS 381C 626), low-visibility roundels, 3(F) Sqn codes
+    liv: { pattern: 'patches', base: '#7e868c', under: '#888f94', radome: '#6f767b', patches: [] },
+    marks: { badge: 'us', sq: '3(F) SQN', badgeCol: '#9a8c55', fin: 'tail', tail: 'QO-C', serial: 'ZK342', tailCol: '#2f3438' },
+    code: { text: 'ZK342', color: '#2f3438', stroke: null },
+    engines: [{ x: -0.45, y: 0.0, z: 7.3, r: 0.4, len: 0.65 }, { x: 0.45, y: 0.0, z: 7.3, r: 0.4, len: 0.65 }],
+    gear: [{ x: 0, y: -0.5, z: -4.8, r: 0.26, nose: 1 }, { x: 1.25, y: -0.5, z: 2.0, r: 0.4 }, { x: -1.25, y: -0.5, z: 2.0, r: 0.4 }],
+    wingtips: [[-5.45, -0.05, 6.4], [5.45, -0.05, 6.4]], navs: [[-5.42, 0.04, 5.2], [5.42, 0.04, 5.2]],
+    build(P) {
+      P.body.push(loft([
+        [-7.95, -0.1, 0.01, 0.01, 0.01, 2], [-7.6, -0.09, 0.18, 0.18, 0.16, 2], [-6.7, -0.05, 0.38, 0.38, 0.34, 2], [-5.6, 0.0, 0.52, 0.52, 0.46, 2.1],
+        [-4.5, 0.03, 0.6, 0.58, 0.52, 2.2], [-3.2, 0.03, 0.66, 0.56, 0.52, 2.4], [-1.5, 0.02, 0.75, 0.5, 0.5, 2.6], [1.0, 0.02, 0.85, 0.48, 0.5, 2.8],
+        [3.5, 0.02, 0.88, 0.45, 0.48, 2.8], [5.8, 0.03, 0.85, 0.42, 0.42, 2.5], [7.3, 0.04, 0.82, 0.4, 0.4, 2.2],
+      ], 28, 3, 0));
+      const IT = [[-3.1, -0.68, 0.6, 0.22, 0.3, 4, -0.2], [-2.6, -0.66, 0.66, 0.26, 0.32, 3.8], [-0.5, -0.6, 0.72, 0.3, 0.32, 3], [2.5, -0.5, 0.6, 0.28, 0.28, 2.6], [4.2, -0.38, 0.2, 0.15, 0.15, 2]];
+      P.body.push(loft(IT, 18, 3, 0)); intake(P, IT[0], 0, { lip: 0.035, depth: 2.2, shrink: 0.8, lipCol: [0.55, 0.58, 0.6] });
+      P.body.push(...wingPair([[0.82, -0.4], [5.3, 5.55], [5.3, 6.45], [0.82, 6.75]], 0.12, 0.045, -0.05, (ax) => 1 - 0.5 * clamp01((ax - 0.82) / 4.5)));
+      for (const sx of [-1, 1]) P.body.push(loft([[4.7, -0.05, 0.01, 0.01, 0.01, 2], [5.0, -0.05, 0.1, 0.12, 0.12, 2], [6.6, -0.05, 0.11, 0.12, 0.12, 2], [7.05, -0.05, 0.06, 0.06, 0.06, 2]], 10, 2, sx * 5.38));   // DASS pods
+      for (const s of [1, -1]) {
+        let c = planform([[0, -0.55], [1.45, 0.55], [1.45, 0.85], [0, 0.95]], 0.06, 0.025, 0);
+        if (s < 0) c = mirrorX(c);
+        P.movers.push({ geo: c, pivot: [s * 0.72, 0.1, -4.6], kind: 'canard', side: s, local: true });
+      }
+      P.body.push(fin([[3.7, 0.4], [7.1, 0.4], [7.85, 2.85], [6.85, 2.85]], 0.1, 0.04, 0, 0.45));
+      P.movers.push({ geo: box(0.7, 0.04, 1.1, 0, 0.53, -1.5), pivot: [0, 0.53, -2.05], kind: 'brakeTop' });
+      canopy(P, [[-5.6, 0.45, 0.05, 0.05, 0.05], [-5.2, 0.5, 0.32, 0.3, 0.1], [-4.5, 0.54, 0.42, 0.52, 0.1], [-3.7, 0.56, 0.42, 0.48, 0.1], [-3.0, 0.56, 0.34, 0.34, 0.1], [-2.5, 0.55, 0.05, 0.05, 0.05]]);
+      const M = P.metal;
+      pitot(M, 0, -0.1, -7.95, 0.6);
+      M.push(paint(box(0.06, 0.06, 0.3, 0.9, -0.12, -0.6), 0.05, 0.05, 0.05)); // BK-27 port
+      M.push(paint(sphere(0.11, -0.42, 0.42, -5.85), 0.15, 0.2, 0.26)); // PIRATE IRST
+      for (const sx of [-1, 1]) ring(M, sx * 0.45, 0.0, 7.05, 0.43, 0.3);
+      for (const sx of [-1, 1]) { store(P.stores, 'meteor', sx * 0.7, -0.62, -0.4, 0.05); store(P.stores, 'iris_t', sx * 4.6, -0.18, 4.6, 0.25); }
+      for (const sx of [-1, 1]) P.decals.push(decal(0, 0.8, 0.8, 'top', sx * 3.2, 0.0, 4.2), decal(0, 0.8, 0.8, 'bottom', sx * 3.2, -0.1, 4.2));
+      for (const o of [-1, 1]) P.decals.push(decal(0, 0.65, 0.65, side(o), o * 0.86, 0.1, -1.6));
+      for (const o of [-1, 1]) P.decals.push(decal(3, 1.5, 1.5, side(o), o * 0.07, 1.5, 6.1));
+      for (const o of [-1, 1]) P.decals.push(decal(1, 0.9, 0.3, side(o), o * 0.86, -0.1, 4.6));
+      for (const o of [-1, 1]) P.decals.push(decal(2, 0.4, 0.4, side(o), o * 0.6, 0.18, -3.6));
+    },
+  };
+  FL.registerAircraft('typhoon', TYP, {
+    tier: 7, price: 480000, unlockLevel: 24, roughness: 0.1, hardpoints: 8, pylonLayout: 'w w w w c w w', engineSound: 'twin', supercruise: 1.3,
+    name: 'Eurofighter Typhoon FGR4', nation: 'UK', year: 2003, role: 'Swing-role energy fighter',
+    blurb: 'The best thrust-to-weight of the canard deltas: it climbs like a rocket and supercruises. A radar decoy on a cable behind the right wingtip eats one radar missile every 25 s.',
+    // real: EJ200 60 / 90 kN x2, wing 51.2 m2, ~16 t, Mach 2.0, climb 315 m/s, 13 stations, 7,500 kg, Mauser BK-27
+    mass: 16000, wingArea: 51.2, thrustMil: 120000, thrustAB: 180000, arcadeThrust: 1.38,
+    rollRate: 300, pitchRate: 125, yawRate: 55, drift: 1.2, maxG: 9, missiles: 10, gun: 'bk27', gunName: 'Mauser BK-27 27 mm',
+    cd0: 0.019, machMax: 2.0, topSpeedKmh: 2495, ceiling: 19800, climbRate: 315,
+    stats: { speed: 4, agility: 5, firepower: 4, toughness: 3 },
+  }, { stations: [['R1', 4.55, 4.65, 'wing'], ['R2', 3.7, 3.7, 'wing'], ['R3', 2.8, 2.9, 'wing'], ['R4', 1.9, 2.2, 'wing'], ['C', 0, 1.8, 'belly'], ['R5', 0.7, -0.4, 'belly', 0.06], ['R6', 0.7, 3.4, 'belly', 0.06]], muzzle: [0.9, -0.12, -0.75] });
+
+  // ===================================================================================================== F-15C Eagle / F-15E Strike Eagle
+  // 19.43 m, span 13.05 m, height 5.63 m. Big rectangular intakes whose front cowls nod with AoA (aux 'ramp'), shoulder wing (45 deg),
+  // twin vertical fins on tail booms, all-moving stabs, huge dorsal speed brake, M61 in the right wing root.
+  // F-15E: tandem cockpit (WSO), conformal fuel tanks with bomb rows, LANTIRN pods under the intakes (aux 'tgp' = pod head).
+  function eagleBuild(P, o) {
+    const E = !!o.e;
+    P.body.push(loft([
+      [-9.7, -0.25, 0.01, 0.01, 0.01, 2], [-9.35, -0.24, 0.2, 0.2, 0.18, 2], [-8.5, -0.18, 0.42, 0.42, 0.38, 2], [-7.3, -0.08, 0.6, 0.62, 0.55, 2.1],
+      [-6.0, 0.0, 0.7, 0.7, 0.62, 2.2], [-4.8, 0.02, 0.75, 0.7, 0.65, 2.3], [-3.6, 0.02, 0.85, 0.64, 0.62, 2.6], [-2.0, 0.0, 1.1, 0.58, 0.6, 3],
+      [0.5, 0.0, 1.35, 0.52, 0.6, 3.2], [3.5, 0.0, 1.35, 0.48, 0.55, 3.2], [6.0, 0.0, 1.27, 0.45, 0.52, 3], [8.0, 0.0, 1.25, 0.5, 0.52, 2.6], [8.95, 0.0, 1.24, 0.55, 0.55, 2.4],
+    ], 28, 3, 0));
+    if (E) P.body.push(loft([[-2.6, 0.62, 0.35, 0.2, 0.1], [0.0, 0.56, 0.5, 0.16, 0.1], [3.5, 0.5, 0.45, 0.12, 0.1], [6.0, 0.48, 0.06, 0.03, 0.03]], 14, 3, 0));
+    // fixed intake trunks + the nodding front cowls (movers)
+    const TR = [[-3.2, -0.22, 0.46, 0.64, 0.66, 5.5], [-1.5, -0.15, 0.48, 0.62, 0.62, 4], [1.5, -0.08, 0.42, 0.55, 0.55, 3], [3.5, -0.05, 0.1, 0.3, 0.3, 2]];
+    const CW = [[-4.35, -0.25, 0.42, 0.6, 0.62, 6, -0.2], [-3.75, -0.24, 0.45, 0.63, 0.65, 5.6], [-3.15, -0.22, 0.46, 0.64, 0.66, 5.5]];
+    for (const sx of [-1, 1]) {
+      P.body.push(loft(TR, 20, 3, sx * 1.3));
+      intake(P, TR[0], sx * 1.3, { lip: 0.03, depth: 2.4, shrink: 0.82, lipCol: [0.5, 0.52, 0.54] });
+      P.movers.push({ geo: loft(CW, 20, 3, sx * 1.3), pivot: [sx * 1.3, -0.86, -3.15], kind: 'aux', aux: 'ramp', side: sx, rot: [-11 * DEG, 0, 0] });
+      if (E) { // conformal fuel tank on the intake side, under the wing root
+        P.body.push(loft([[-2.8, -0.12, 0.02, 0.02, 0.02, 2], [-2.4, -0.13, 0.3, 0.4, 0.46, 2.5], [1.5, -0.1, 0.34, 0.44, 0.5, 2.6], [4.0, -0.05, 0.28, 0.36, 0.4, 2.4], [4.7, 0.0, 0.02, 0.02, 0.02, 2]], 16, 3, sx * 1.88));
+      }
+    }
+    P.body.push(...wingPair([[1.6, -0.75], [6.52, 4.15], [6.52, 5.6], [1.6, 6.25]], 0.17, 0.05, 0.28, (ax) => 1 - 0.5 * clamp01((ax - 1.6) / 4.92)));
+    const boom = [[4.4, 0.1, 0.05, 0.05, 0.05, 3], [5.2, 0.1, 0.2, 0.22, 0.2, 3], [9.4, 0.1, 0.2, 0.2, 0.2, 3], [9.8, 0.1, 0.02, 0.02, 0.02, 2]];
+    P.body.push(loft(boom, 10, 2, 1.75), loft(boom, 10, 2, -1.75));
+    for (const sx of [-1, 1]) P.body.push(fin([[4.9, 0.4], [8.5, 0.4], [9.25, 3.15], [8.25, 3.15]], 0.11, 0.04, sx * 1.75, 0.45));
+    for (const s of [1, -1]) {
+      let st = planform([[0, -1.3], [2.35, 0.2], [2.35, 1.1], [0, 1.25]], 0.08, 0.03, 0);
+      if (s < 0) st = mirrorX(st);
+      P.movers.push({ geo: st, pivot: [s * 2.0, 0.08, 8.45], kind: 'stab', side: s, local: true });
+    }
+    P.movers.push({ geo: box(1.25, 0.04, 2.3, 0, E ? 0.72 : 0.62, -1.0), pivot: [0, E ? 0.72 : 0.62, -2.15], kind: 'brakeTop' });
+    if (E) canopy(P, [[-6.9, 0.55, 0.05, 0.05, 0.05], [-6.5, 0.6, 0.36, 0.36, 0.1], [-5.7, 0.64, 0.48, 0.6, 0.1], [-4.8, 0.66, 0.5, 0.6, 0.1], [-3.8, 0.68, 0.5, 0.6, 0.1],
+      [-3.0, 0.68, 0.44, 0.48, 0.1], [-2.4, 0.66, 0.05, 0.05, 0.05]]);
+    else canopy(P, [[-6.9, 0.55, 0.05, 0.05, 0.05], [-6.5, 0.6, 0.36, 0.36, 0.1], [-5.7, 0.64, 0.48, 0.6, 0.1], [-4.8, 0.66, 0.48, 0.58, 0.1], [-4.0, 0.66, 0.4, 0.42, 0.1], [-3.4, 0.64, 0.05, 0.05, 0.05]]);
+    const M = P.metal;
+    pitot(M, 0, -0.25, -9.7, 0.4);
+    M.push(paint(box(0.08, 0.08, 0.35, 1.95, 0.35, -0.75), 0.05, 0.05, 0.05)); // M61 port in the right wing root
+    for (const sx of [-1, 1]) { ring(M, sx * 0.68, 0.0, 8.7, 0.6, 0.35); M.push(paint(cylZ(0.05, 0.04, 0.35, 8).translate(sx * 1.75, 3.0, 9.0), 0.2, 0.2, 0.21)); }
+    if (E) for (const sx of [-1, 1]) { // LANTIRN pods: nav (left), targeting (right) with a turning head
+      P.metal.push(paint(cylZ(0.17, 0.17, 2.0, 12, false).translate(sx * 1.05, -1.02, -3.2), 0.45, 0.47, 0.48));
+      if (sx > 0) P.movers.push({ geo: merge([sphere(0.17, 0, 0, 0), box(0.12, 0.12, 0.05, 0, -0.06, -0.17)], false, false), pivot: [1.05, -1.02, -3.3], kind: 'aux', aux: 'tgp', side: 1, rot: [-1.4, 0, 0], local: true });
+    }
+    if (!E) for (const sx of [-1, 1]) { store(P.stores, 'aim120', sx * 1.05, -0.6, -1.4, 0.05); store(P.stores, 'aim9x', sx * 3.25, 0.05, 1.85, 0.28); }
+    else for (const sx of [-1, 1]) { store(P.stores, 'aim120', sx * 3.25, 0.05, 1.85, 0.28); }
+    for (const sx of [-1, 1]) P.decals.push(decal(0, 1.2, 1.2, 'top', sx * 4.2, 0.35, 3.6), decal(0, 1.2, 1.2, 'bottom', sx * 4.2, 0.1, 3.6));
+    for (const o2 of [-1, 1]) P.decals.push(decal(0, 0.9, 0.9, side(o2), o2 * 1.78, -0.05, -1.6));
+    for (const sx of [-1, 1]) for (const o2 of [-1, 1]) P.decals.push(decal(3, 1.5, 1.5, side(o2), sx * 1.75 + o2 * 0.06, 1.8, 7.6));
+    for (const o2 of [-1, 1]) P.decals.push(decal(1, 0.9, 0.45, side(o2), o2 * 0.62, 0.05, -7.7));
+    for (const o2 of [-1, 1]) P.decals.push(decal(2, 0.45, 0.45, side(o2), o2 * 0.82, 0.25, -2.4));
+  }
+  const EAGLE = {
+    surf: [{ a: 0.06, b: 0.5, c: 0.22, kind: 'flap' }, { a: 0.54, b: 0.92, c: 0.22, kind: 'aileron' }],
+    gearSpec: [
+      { x: 0, y: -0.52, z: -5.9, r: 0.28, w: 0.17, nose: true, fold: [1, 0, 0], ang: PI / 2, lift: 0.1, sr: 0.07 },
+      { x: 1.4, y: -0.58, z: 1.4, r: 0.45, w: 0.27, fold: [1, 0, 0], ang: PI / 2, twist: PI / 2, lift: 0.2, sr: 0.09 },
+    ],
+    canTop: 1.1, fins: [[1.75, 1.4, 7.0], [-1.75, 1.4, 7.0]],
+    nation: 'US', lowVis: true, len: [-9.75, 9.7], hs: 6.55, radomeZ: -7.6,
+    frames: [-7.6, -6.2, -3.6, -0.6, 2.4, 5.0, 7.4],
+    engines: [{ x: -0.68, y: 0.0, z: 8.95, r: 0.56, len: 0.95 }, { x: 0.68, y: 0.0, z: 8.95, r: 0.56, len: 0.95 }],
+    gear: [{ x: 0, y: -0.52, z: -5.9, r: 0.28, nose: 1 }, { x: 1.4, y: -0.58, z: 1.4, r: 0.45 }, { x: -1.4, y: -0.58, z: 1.4, r: 0.45 }],
+    wingtips: [[-6.52, 0.28, 4.9], [6.52, 0.28, 4.9]], navs: [[-6.48, 0.32, 4.3], [6.48, 0.32, 4.3]],
+  };
+  const F15C = Object.assign({}, EAGLE, {
+    cockpitStyle: 'se_analog', seed: 15,
+    // "Mod Eagle": two greys (FS 36251 / 36176), 18th Wing Kadena "ZZ"
+    liv: { pattern: 'patches', base: '#8f979d', under: '#99a1a7', radome: '#7d858b',
+      patches: [{ c: '#737b81', fin: true, p: [[-6.0, -0.2], [-6.0, 0.5], [9.0, 0.9], [9.0, -0.2]] }, { c: '#737b81', p: [[0.5, 1.5], [3.2, 5.0], [5.0, 5.0], [4.2, 1.5]] }] },
+    marks: { badge: 'us', sq: '18 WG', badgeCol: '#c8a02a', fin: 'tail', tail: 'ZZ', serial: 'AF 84-010', tailCol: '#545c62' },
+    code: { text: '010', color: '#545c62', stroke: null },
+    build(P) { eagleBuild(P, {}); },
+  });
+  FL.registerAircraft('f15c', F15C, {
+    tier: 6, price: 280000, unlockLevel: 16, roughness: 0.15, hardpoints: 6, pylonLayout: 'w w w c w w', engineSound: 'twin', aaOnly: true,
+    name: 'McDonnell Douglas F-15C Eagle', nation: 'US', year: 1979, role: 'Air superiority',
+    blurb: 'Air-to-air only, and never lost a dogfight: more thrust than weight, it accelerates straight up. Once per life a killing hit leaves you with 1 HP.',
+    // real: F100-PW-220 65 / 106 kN x2, wing 56.5 m2, ~20.2 t, Mach 2.5, climb 254 m/s, 11 stations, 7,300 kg (no bombs in USAF service), M61A1
+    mass: 20200, wingArea: 56.5, thrustMil: 130000, thrustAB: 212000, arcadeThrust: 1.45,
+    rollRate: 260, pitchRate: 115, yawRate: 52, drift: 1.1, maxG: 9, missiles: 8, gun: 'm61', gunName: 'M61A1 Vulcan 20 mm',
+    cd0: 0.02, machMax: 2.5, topSpeedKmh: 2655, ceiling: 20000, climbRate: 254,
+    stats: { speed: 5, agility: 4, firepower: 4, toughness: 4 },
+  }, { stations: [['R1', 3.28, 1.85, 'wing', 0.25], ['R2', 2.62, 1.85, 'wing', 0.25], ['R3', 2.95, 2.05, 'wing', 0.5], ['C', 0, 1.0, 'belly'], ['R4', 1.05, -1.4, 'belly', 0.05], ['R5', 1.05, 2.8, 'belly', 0.05]], muzzle: [1.95, 0.35, -0.95] });
+  const F15E = Object.assign({}, EAGLE, {
+    b2x: { tgp: true },
+    cockpitStyle: 'us_glass', seed: 151, rearSeat: [0.06, 1.35],
+    // Gunship Gray (FS 36118) overall, 48th FW Lakenheath "LN"
+    liv: { pattern: 'mottle', base: '#51565b', tones: ['#4b5055', '#575c61'], under: '#565b60', radome: '#46494d' },
+    marks: { badge: 'us', sq: '48 FW', badgeCol: '#c8a02a', fin: 'tail', tail: 'LN', serial: 'AF 91-0315', tailCol: '#2c3034' },
+    code: { text: '315', color: '#2c3034', stroke: null },
+    build(P) { eagleBuild(P, { e: true }); },
+  });
+  FL.registerAircraft('f15e', F15E, {
+    tier: 6, price: 400000, unlockLevel: 21, roughness: 0.15, hardpoints: 6, pylonLayout: 'w w w c w w', engineSound: 'twin', cftBoost: 1.4,
+    name: 'Boeing F-15E Strike Eagle', nation: 'US', year: 1989, role: 'Strike fighter (2 seats)',
+    blurb: 'The "Mudhen": an Eagle with a weapons officer in the back seat and conformal tanks full of bombs. The WSO keeps the laser on the target while you turn away and dogfight.',
+    // real: F100-PW-229 79 / 129 kN x2, wing 56.5 m2, ~26 t, Mach 2.5 (clean), 11 stations + CFT rows, 10,400 kg, M61A1; CFTs: boost x1.4
+    mass: 26000, wingArea: 56.5, thrustMil: 158000, thrustAB: 258000, arcadeThrust: 1.35,
+    rollRate: 240, pitchRate: 105, yawRate: 48, drift: 1.0, maxG: 9, missiles: 8, gun: 'm61', gunName: 'M61A1 Vulcan 20 mm',
+    cd0: 0.022, machMax: 2.5, topSpeedKmh: 2655, ceiling: 18200, climbRate: 254,
+    stats: { speed: 4, agility: 3, firepower: 5, toughness: 4 },
+  }, { stations: [['R1', 3.28, 1.85, 'wing', 0.25], ['R2', 2.62, 1.85, 'wing', 0.25], ['R3', 2.95, 2.05, 'wing', 0.5], ['C', 0, 1.0, 'belly'], ['R4', 2.02, -1.4, 'belly', 0.1], ['R5', 2.02, 2.2, 'belly', 0.1]], muzzle: [1.95, 0.35, -0.95] });
+
+  // ===================================================================================================== F-22A Raptor
+  // 18.92 m, span 13.56 m, height 5.08 m. Chined faceted body, caret intakes, diamond wing (42 / -17 deg), twin fins canted 28 deg,
+  // big stabs, 2D thrust-vectoring nozzles in square shrouds, main bay (6 AIM-120) + 2 side bays (AIM-9X) in the intakes,
+  // M61A2 under a door in the right wing root.
+  const F22 = {
+    b2x: { bayAux: ['bay', 'sbay'], idle: 'bay' },
+    surf: [{ a: 0.05, b: 0.55, c: 0.22, kind: 'flaperon' }, { a: 0.58, b: 0.95, c: 0.22, kind: 'aileron' }],
+    gearSpec: [
+      { x: 0, y: -0.36, z: -6.2, r: 0.3, w: 0.18, nose: true, fold: [1, 0, 0], ang: PI / 2, lift: 0.12, sr: 0.07 },
+      { x: 1.65, y: -0.55, z: 1.7, r: 0.45, w: 0.26, fold: [0, 0, 1], ang: -PI / 2, shrink: 0.35, sr: 0.09, doors: 'inner' },
+    ],
+    cockpitStyle: 'us_glass', canTop: 1.08, goldCanopy: true,
+    fins: [[2.3, 1.2, 6.6], [-2.3, 1.2, 6.6]],
+    nation: 'US', lowVis: true, seed: 22, len: [-9.45, 9.5], hs: 6.8, radomeZ: -6.9, flat: true,
+    frames: [-6.9, -5.2, -2.6, 0.4, 3.4, 6.2],
+    panels: [bayPanel(-1.5, 2.9, -1.0, 1.0, -0.5), bayPanel(-2.1, 0.1, 1.0, 1.78, -0.62), bayPanel(-2.1, 0.1, -1.78, -1.0, -0.62)],
+    // radar-absorbent "Have Glass" grey with darker panels
+    liv: { pattern: 'patches', base: '#848a8e', under: '#8a9094', radome: '#7a8084',
+      patches: [{ c: '#6e7478', fin: true, p: [[-7.0, -0.3], [-7.0, 0.3], [8.8, 0.6], [8.8, -0.3]] }, { c: '#72787c', p: [[0.5, 1.8], [3.4, 5.6], [4.4, 5.6], [5.2, 1.8]] }] },
+    marks: { badge: 'us', sq: '1 FW', badgeCol: '#5d6367', fin: 'tail', tail: 'FF', serial: 'AF 09-4191', tailCol: '#5a6064' },
+    code: { text: '4191', color: '#5a6064', stroke: null },
+    engines: [{ x: -0.74, y: 0.02, z: 8.6, r: 0.38, len: 0.6, tvc: '2d' }, { x: 0.74, y: 0.02, z: 8.6, r: 0.38, len: 0.6, tvc: '2d' }],
+    gear: [{ x: 0, y: -0.36, z: -6.2, r: 0.3, nose: 1 }, { x: 1.65, y: -0.55, z: 1.7, r: 0.45 }, { x: -1.65, y: -0.55, z: 1.7, r: 0.45 }],
+    wingtips: [[-6.78, 0.0, 3.2], [6.78, 0.0, 3.2]], navs: [[-6.72, 0.05, 2.6], [6.72, 0.05, 2.6]],
+    build(P) {
+      P.body.push(loft([
+        [-9.45, -0.06, 0.01, 0.01, 0.01, 2], [-9.0, -0.05, 0.22, 0.15, 0.12, 2, 0, 0.5, 0.8], [-8.0, -0.01, 0.5, 0.32, 0.26, 2, 0, 0.55, 0.85], [-6.8, 0.02, 0.72, 0.46, 0.36, 2.1, 0, 0.55, 0.85],
+        [-5.5, 0.03, 0.88, 0.54, 0.42, 2.3, 0, 0.6, 0.85], [-4.2, 0.02, 1.1, 0.55, 0.45, 2.6, 0, 0.65, 0.85], [-2.6, 0.0, 1.55, 0.52, 0.48, 3, 0, 0.7, 0.85],
+        [-0.5, 0.0, 1.75, 0.5, 0.5, 3.2, 0, 0.75, 0.85], [2.5, 0.0, 1.8, 0.46, 0.48, 3.2, 0, 0.75, 0.85], [5.0, 0.0, 1.7, 0.42, 0.42, 3, 0, 0.7, 0.8],
+        [7.2, 0.02, 1.4, 0.36, 0.34, 2.8, 0, 0.6, 0.6], [8.6, 0.02, 1.25, 0.42, 0.42, 3.5, 0, 0.3, 0.3], [9.4, 0.02, 1.2, 0.42, 0.42, 4],
+      ], 16, 3, 0, true));
+      const nac = [[-4.6, -0.26, 0.42, 0.38, 0.4, 4, 0.5, 0.2, 0.6], [-3.9, -0.26, 0.47, 0.42, 0.42, 4, 0.15, 0.2, 0.5], [-1.5, -0.21, 0.5, 0.45, 0.45, 3.5, 0], [2.0, -0.15, 0.48, 0.42, 0.42, 3, 0], [4.0, -0.1, 0.1, 0.2, 0.2, 2, 0]];
+      for (const sx of [-1, 1]) { P.body.push(loft(nac, 12, 3, sx * 1.38, true)); intake(P, nac[0], sx * 1.38, { lip: 0.03, depth: 2.4, shrink: 0.8, dy: 0.05, lipCol: [0.5, 0.53, 0.55] }); }
+      P.body.push(...wingPair([[1.5, -2.4], [6.78, 2.35], [6.78, 4.1], [1.5, 5.7]], 0.12, 0.04, 0.0, (ax) => 1 - 0.5 * clamp01((ax - 1.5) / 5.3)));
+      for (const sx of [-1, 1]) P.body.push(cantFin(fin([[4.6, 0.38], [8.0, 0.38], [8.45, 3.0], [7.25, 3.0]], 0.09, 0.035, sx * 1.9, 0.45), sx * 1.9, 0.38, -sx * 28 * DEG));
+      for (const s of [1, -1]) {
+        let st = planform([[0, -1.6], [2.6, 0.45], [2.6, 1.35], [0, 1.5]], 0.07, 0.03, 0);
+        if (s < 0) st = mirrorX(st);
+        P.movers.push({ geo: st, pivot: [s * 2.0, 0.0, 7.7], kind: 'stab', side: s, local: true });
+      }
+      // square 2D-nozzle shrouds (open at the back; the round TVC nozzle pitches inside)
+      for (const sx of [-1, 1]) {
+        const x = sx * 0.74, M = P.metal, c = [0.33, 0.33, 0.33];
+        M.push(paint(box(1.0, 0.05, 1.0, x, 0.47, 9.05), ...c), paint(box(1.0, 0.05, 1.0, x, -0.43, 9.05), ...c), paint(box(0.05, 0.9, 1.0, x + 0.5, 0.02, 9.05), ...c), paint(box(0.05, 0.9, 1.0, x - 0.5, 0.02, 9.05), ...c));
+      }
+      bayDoors(P, -1.5, 2.9, 1.0, -0.52, 'bay');
+      bayDoors(P, -2.1, 0.1, 1.78, -0.64, 'sbay', { inner: 1.0 });
+      P.movers.push({ geo: box(0.36, 0.02, 0.8, 0, 0, -0.4), pivot: [1.42, 0.43, -1.6], kind: 'aux', aux: 'gundoor', side: 1, rot: [0.9, 0, 0], local: true });
+      canopy(P, [[-7.3, 0.45, 0.05, 0.05, 0.05], [-6.8, 0.48, 0.4, 0.4, 0.1], [-5.9, 0.52, 0.52, 0.62, 0.1], [-4.9, 0.55, 0.52, 0.6, 0.1], [-4.0, 0.55, 0.42, 0.44, 0.1], [-3.3, 0.55, 0.05, 0.05, 0.05]]);
+      const M = P.metal;
+      M.push(paint(box(0.08, 0.05, 0.3, 1.42, 0.4, -2.2), 0.04, 0.04, 0.04)); // gun port under the door
+      for (const o of [-1, 1]) P.decals.push(decal(0, 0.9, 0.9, side(o), o * 1.72, -0.05, 1.2));
+      for (const sx of [-1, 1]) P.decals.push(decal(0, 1.1, 1.1, 'top', sx * 4.6, 0.08, 3.0), decal(0, 1.1, 1.1, 'bottom', sx * 4.6, -0.05, 3.0));
+      for (const sx of [-1, 1]) for (const o of [-1, 1]) P.decals.push(decal(3, 1.3, 1.3, side(o), sx * (1.9 + 0.75) + o * 0.06, 1.8, 7.2));
+      for (const o of [-1, 1]) P.decals.push(decal(1, 0.7, 0.35, side(o), o * 1.4, 0.05, -5.0));
+    },
+  };
+  FL.registerAircraft('f22', F22, {
+    tier: 8, price: 800000, unlockLevel: 35, roughness: 0.05, hardpoints: 8, pylonLayout: 's b b b w w', engineSound: 'twin', supercruise: 1.5,
+    bayMap: { L1: 'sbay', R1: 'sbay', L2: 'bay', R2: 'bay', L3: 'bay', R3: 'bay', L4: 'bay', R4: 'bay' },
+    name: 'Lockheed Martin F-22A Raptor', nation: 'US', year: 2005, role: 'Stealth air dominance',
+    blurb: 'Stealth, supercruise and vectored thrust. Eight missiles hide inside. Ghost: enemies find you at half range, until the bay doors open or you hang stores outside.',
+    // real: F119-PW-100 116 / 156 kN x2, wing 78.04 m2, ~29.4 t, Mach 2.25, supercruise 1.8, main bay 6 + side bays 2 + 4 external, M61A2
+    mass: 29400, wingArea: 78.04, thrustMil: 232000, thrustAB: 312000, arcadeThrust: 1.4,
+    rollRate: 290, pitchRate: 130, yawRate: 60, drift: 1.4, maxG: 9, missiles: 8, gun: 'm61', gunName: 'M61A2 Vulcan 20 mm',
+    cd0: 0.018, machMax: 2.25, topSpeedKmh: 2414, ceiling: 19800, climbRate: 330,
+    stats: { speed: 5, agility: 5, firepower: 4, toughness: 4 },
+  }, { stations: [['R1', 1.4, -1.0, 'bay', 0.04], ['R2', 0.22, 0.7, 'bay', 0.03], ['R3', 0.52, 0.7, 'bay', 0.03], ['R4', 0.82, 0.7, 'bay', 0.03], ['R5', 3.3, 2.2, 'wing'], ['R6', 4.7, 3.0, 'wing']], muzzle: [1.42, 0.4, -2.4] });
+
+  // ===================================================================================================== Northrop YF-23 Black Widow II
+  // 20.6 m, span 13.3 m, height 4.3 m. Long chined forebody, diamond wing (40 / -40 deg), all-moving V tail (ruddervators, 50 deg),
+  // engines in wide nacelles with the exhaust in tiled troughs on top of the rear body (cold tail), one long main bay.
+  const YF23 = {
+    b2x: { bayAux: ['bay'], idle: 'bay', vtail: true, trough: [[-1.6, 0.36, 9.4], [1.6, 0.36, 9.4]] },
+    surf: [{ a: 0.1, b: 0.5, c: 0.22, kind: 'flaperon' }, { a: 0.52, b: 0.92, c: 0.22, kind: 'aileron' }], noRudder: true,
+    gearSpec: [
+      { x: 0, y: -0.32, z: -6.4, r: 0.3, w: 0.18, nose: true, fold: [1, 0, 0], ang: PI / 2, lift: 0.12, sr: 0.07 },
+      { x: 1.6, y: -0.72, z: 2.1, r: 0.45, w: 0.26, fold: [1, 0, 0], ang: PI / 2, twist: PI / 2, lift: 0.2, sr: 0.09 },
+    ],
+    cockpitStyle: 'us_glass', canTop: 1.1,
+    nation: 'US', lowVis: true, seed: 23, len: [-10.35, 10.3], hs: 6.7, radomeZ: -7.8, flat: true,
+    frames: [-7.8, -5.8, -2.6, 0.6, 3.8, 7.0],
+    panels: [bayPanel(-2.4, 5.0, -0.75, 0.75, -0.42)],
+    // PAV-1 "Gray Ghost": charcoal grey overall
+    liv: { pattern: 'patches', base: '#4f545a', under: '#565b60', radome: '#474c51', patches: [{ c: '#5a5f65', p: [[1.0, 2.0], [4.0, 6.2], [5.2, 6.2], [6.4, 2.0]] }] },
+    marks: { badge: 'us', sq: 'ATF', badgeCol: '#8c939a', fin: 'tail', tail: 'YF-23', serial: '87-800', tailCol: '#8e959b' },
+    code: { text: '800', color: '#8e959b', stroke: null },
+    engines: [{ x: -1.6, y: 0.22, z: 9.0, r: 0.3, len: 0.35, plain: true }, { x: 1.6, y: 0.22, z: 9.0, r: 0.3, len: 0.35, plain: true }],
+    gear: [{ x: 0, y: -0.32, z: -6.4, r: 0.3, nose: 1 }, { x: 1.6, y: -0.72, z: 2.1, r: 0.45 }, { x: -1.6, y: -0.72, z: 2.1, r: 0.45 }],
+    wingtips: [[-6.65, 0.05, 2.6], [6.65, 0.05, 2.6]], navs: [[-6.6, 0.1, 2.3], [6.6, 0.1, 2.3]],
+    build(P) {
+      P.body.push(loft([
+        [-10.3, -0.1, 0.01, 0.01, 0.01, 2], [-9.8, -0.09, 0.2, 0.14, 0.11, 2, 0, 0.5, 0.8], [-8.6, -0.05, 0.48, 0.3, 0.24, 2, 0, 0.55, 0.85], [-7.2, 0.0, 0.68, 0.42, 0.32, 2.1, 0, 0.6, 0.85],
+        [-5.8, 0.02, 0.8, 0.5, 0.38, 2.3, 0, 0.6, 0.85], [-4.4, 0.02, 0.9, 0.5, 0.4, 2.5, 0, 0.65, 0.85], [-2.6, 0.0, 1.05, 0.45, 0.42, 2.8, 0, 0.7, 0.85],
+        [0.0, 0.0, 1.0, 0.42, 0.42, 3, 0, 0.7, 0.85], [3.0, 0.0, 0.9, 0.4, 0.4, 3, 0, 0.7, 0.8], [6.0, 0.0, 0.75, 0.35, 0.35, 2.8, 0, 0.5, 0.5],
+        [8.5, 0.0, 0.55, 0.28, 0.28, 2.4], [10.0, 0.0, 0.3, 0.15, 0.15, 2], [10.3, 0.0, 0.01, 0.01, 0.01, 2],
+      ], 16, 3, 0, true));
+      const nac = [[-2.4, -0.45, 0.48, 0.4, 0.42, 4, 0.3, 0.2, 0.6], [-1.8, -0.42, 0.55, 0.45, 0.45, 4, 0.1, 0.2, 0.5], [1.0, -0.3, 0.62, 0.5, 0.45, 3.5, 0], [5.0, -0.1, 0.65, 0.48, 0.4, 3.2, 0],
+        [8.0, 0.05, 0.6, 0.38, 0.3, 3.5, 0], [9.6, 0.1, 0.55, 0.2, 0.2, 4, 0], [10.0, 0.1, 0.02, 0.02, 0.02, 2, 0]];
+      for (const sx of [-1, 1]) { P.body.push(loft(nac, 12, 3, sx * 1.6, true)); intake(P, nac[0], sx * 1.6, { lip: 0.03, depth: 2.2, shrink: 0.8, dy: 0.05, lipCol: [0.4, 0.42, 0.45] }); }
+      P.body.push(...wingPair([[1.0, -2.6], [6.65, 2.15], [6.65, 2.95], [1.0, 7.7]], 0.12, 0.04, 0.02, (ax) => 1 - 0.5 * clamp01((ax - 1.0) / 5.65)));
+      // exhaust troughs: dark tiles on the nacelle tops behind the engines
+      for (const sx of [-1, 1]) P.metal.push(paint(box(0.9, 0.03, 1.4, sx * 1.6, 0.33, 9.6), 0.2, 0.18, 0.16));
+      // V tail: all-moving ruddervators canted 50 deg (pitch + yaw: aircraft_b2 post)
+      for (const s of [1, -1]) {
+        const dc = merge([decal(3, 1.2, 1.2, 'right', 0.09, 1.2, 0.5), decal(3, 1.2, 1.2, 'left', -0.09, 1.2, 0.5)], true, false);
+        P.movers.push({ geo: fin([[-1.5, 0], [1.6, 0], [2.25, 2.7], [0.9, 2.7]], 0.09, 0.04, 0, 0.4), decal: dc, pivot: [s * 2.3, 0.34, 7.6], kind: 'tail', side: s, cant: -s * 50 * DEG, vtail: true, local: true });
+      }
+      bayDoors(P, -2.4, 5.0, 0.75, -0.44, 'bay');
+      canopy(P, [[-7.0, 0.42, 0.05, 0.05, 0.05], [-6.6, 0.45, 0.34, 0.32, 0.1], [-5.8, 0.5, 0.46, 0.55, 0.1], [-4.9, 0.52, 0.45, 0.5, 0.1], [-4.1, 0.52, 0.36, 0.36, 0.1], [-3.6, 0.5, 0.05, 0.05, 0.05]]);
+      for (const o of [-1, 1]) P.decals.push(decal(0, 0.85, 0.85, side(o), o * 2.18, -0.1, 4.0));
+      for (const sx of [-1, 1]) P.decals.push(decal(0, 1.0, 1.0, 'top', sx * 4.6, 0.1, 2.6), decal(0, 1.0, 1.0, 'bottom', sx * 4.6, -0.05, 2.6));
+      for (const o of [-1, 1]) P.decals.push(decal(1, 0.6, 0.3, side(o), o * 0.95, 0.0, -5.4));
+    },
+  };
+  FL.registerAircraft('yf23', YF23, {
+    tier: 8, price: 850000, unlockLevel: 37, roughness: 0.05, hardpoints: 4, pylonLayout: 'b b b', engineSound: 'twin', supercruise: 1.6,
+    bayMap: { L1: 'bay', R1: 'bay', L2: 'bay', R2: 'bay', L3: 'bay', R3: 'bay' },
+    name: 'Northrop YF-23 Black Widow II', nation: 'US', year: 1990, role: 'Stealth prototype',
+    blurb: 'The ATF that lost to the F-22, and maybe the faster jet. Mach 1.6 with no afterburner, and the boost meter refills while you supercruise. The hot exhaust hides in troughs on top.',
+    // real: YF119 ~104 / 156 kN x2, wing 87.8 m2, ~23.5 t, Mach 2.2, supercruise 1.6; unarmed prototype: main bay (6) + M61 are game-only
+    mass: 23500, wingArea: 87.8, thrustMil: 208000, thrustAB: 312000, arcadeThrust: 1.1,
+    rollRate: 260, pitchRate: 110, yawRate: 50, drift: 1.1, maxG: 7.5, missiles: 6, gun: 'm61', gunName: 'M61A2 20 mm (game)',
+    cd0: 0.016, machMax: 2.2, topSpeedKmh: 2335, ceiling: 19800, climbRate: 280,
+    stats: { speed: 5, agility: 3, firepower: 3, toughness: 3 },
+  }, { stations: [['R1', 0.22, -0.55, 'bay', 0.03], ['R2', 0.52, -0.55, 'bay', 0.03], ['R3', 0.37, 3.15, 'bay', 0.03]], muzzle: [0.7, 0.3, -5.0] });
+
+  // ===================================================================================================== Chengdu J-20 Mighty Dragon
+  // 20.4 m, span 13.0 m, height 4.45 m. Canards on DSI intakes, LERX into a cropped delta, all-moving canted fins, ventral fins,
+  // main bay (PL-15) + side bays (PL-10) whose rail swings out before the door closes.
+  const nationCN = (x) => {
+    x.fillStyle = '#f2c414'; x.fillRect(20, 196, 472, 120);
+    x.fillStyle = '#c8101c'; x.fillRect(30, 206, 452, 100);
+    x.fillStyle = '#f2c414'; x.beginPath(); x.arc(256, 256, 170, 0, 6.3); x.fill();
+    x.fillStyle = '#ffffff'; x.beginPath(); x.arc(256, 256, 158, 0, 6.3); x.fill();
+    x.beginPath(); for (let i = 0; i < 10; i++) { const a = -PI / 2 + (i * PI) / 5, r = i % 2 ? 62 : 152; i ? x.lineTo(256 + Math.cos(a) * r, 262 + Math.sin(a) * r) : x.moveTo(256 + Math.cos(a) * r, 262 + Math.sin(a) * r); }
+    x.closePath(); x.fillStyle = '#c8101c'; x.fill();
+    x.fillStyle = '#f2c414'; x.font = 'bold 92px "Noto Sans CJK SC", "WenQuanYi Zen Hei", sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText('八一', 256, 268);
+  };
+  const J20 = {
+    b2x: { bayAux: ['bay', 'sbay'], idle: 'bay' },
+    surf: [{ a: 0.05, b: 0.5, c: 0.22, kind: 'flaperon' }, { a: 0.52, b: 0.92, c: 0.22, kind: 'aileron' }], noRudder: true,
+    gearSpec: [
+      { x: 0, y: -0.38, z: -6.6, r: 0.3, w: 0.18, nose: true, fold: [1, 0, 0], ang: PI / 2, lift: 0.12, sr: 0.07 },
+      { x: 1.5, y: -0.5, z: 2.0, r: 0.48, w: 0.28, fold: [1, 0, 0], ang: PI / 2, twist: PI / 2, lift: 0.22, sr: 0.1 },
+    ],
+    cockpitStyle: 'ru_glass', canTop: 1.08, goldCanopy: true,
+    nation: 'CN', seed: 20, len: [-10.3, 10.4], hs: 6.6, radomeZ: -7.9, flat: true, nationMark: nationCN,
+    frames: [-7.9, -6.0, -3.0, 0.5, 4.0, 7.2],
+    panels: [bayPanel(-2.6, 1.6, -0.85, 0.85, -0.48), bayPanel(-1.6, 0.6, 1.25, 1.7, -0.3), bayPanel(-1.6, 0.6, -1.7, -1.25, -0.3)],
+    // PLAAF: dark grey with lighter grey edges, red bort number
+    liv: { pattern: 'patches', base: '#5b6268', under: '#646b71', radome: '#4d5358', patches: [{ c: '#6c7379', p: [[-2.0, 1.3], [3.6, 6.4], [5.4, 6.4], [7.2, 1.3]] }] },
+    marks: {},
+    code: { text: '62001', color: '#a8141c', stroke: null },
+    engines: [{ x: -0.8, y: 0.0, z: 9.55, r: 0.5, len: 0.8 }, { x: 0.8, y: 0.0, z: 9.55, r: 0.5, len: 0.8 }],
+    gear: [{ x: 0, y: -0.38, z: -6.6, r: 0.3, nose: 1 }, { x: 1.5, y: -0.5, z: 2.0, r: 0.48 }, { x: -1.5, y: -0.5, z: 2.0, r: 0.48 }],
+    wingtips: [[-6.5, 0.02, 4.8], [6.5, 0.02, 4.8]], navs: [[-6.45, 0.07, 4.2], [6.45, 0.07, 4.2]],
+    build(P) {
+      P.body.push(loft([
+        [-10.25, -0.1, 0.01, 0.01, 0.01, 2], [-9.8, -0.09, 0.22, 0.15, 0.12, 2, 0, 0.5, 0.8], [-8.7, -0.05, 0.5, 0.32, 0.26, 2, 0, 0.55, 0.85], [-7.4, 0.0, 0.7, 0.45, 0.35, 2.1, 0, 0.55, 0.85],
+        [-6.0, 0.03, 0.82, 0.52, 0.4, 2.3, 0, 0.6, 0.85], [-4.6, 0.03, 0.95, 0.55, 0.42, 2.5, 0, 0.65, 0.85], [-3.0, 0.0, 1.25, 0.5, 0.45, 2.8, 0, 0.7, 0.85],
+        [-1.0, 0.0, 1.55, 0.48, 0.48, 3, 0, 0.75, 0.85], [2.0, 0.0, 1.65, 0.45, 0.45, 3.2, 0, 0.75, 0.85], [5.0, 0.0, 1.5, 0.42, 0.4, 3, 0, 0.7, 0.8],
+        [7.5, 0.02, 1.2, 0.38, 0.34, 2.6, 0, 0.5, 0.5], [9.0, 0.02, 1.2, 0.48, 0.48, 2.4], [9.6, 0.02, 1.2, 0.5, 0.5, 2.2],
+      ], 16, 3, 0, true));
+      const nac = [[-4.8, -0.2, 0.42, 0.42, 0.42, 3, 0.35, 0.2, 0.6], [-4.2, -0.2, 0.46, 0.45, 0.45, 3, 0.1, 0.2, 0.5], [-1.5, -0.15, 0.5, 0.45, 0.45, 2.8, 0], [2.5, -0.1, 0.45, 0.42, 0.42, 2.6, 0], [4.5, -0.05, 0.1, 0.2, 0.2, 2, 0]];
+      for (const sx of [-1, 1]) {
+        P.body.push(loft(nac, 12, 3, sx * 1.32, true)); intake(P, nac[0], sx * 1.32, { lip: 0.03, depth: 2.4, shrink: 0.8, lipCol: [0.45, 0.48, 0.5] });
+        P.metal.push(paint(sphere(0.2, sx * 1.12, -0.2, -4.45).scale(1, 1.4, 2.2), 0.36, 0.39, 0.42));   // DSI bump
+      }
+      const lx = planform([[1.0, -2.8], [1.75, -1.0], [2.1, 0.2], [1.0, 0.2]], 0.07, 0.025, 0.05); P.body.push(lx, mirrorX(lx));
+      P.body.push(...wingPair([[1.5, -0.6], [6.5, 3.9], [6.5, 5.45], [1.5, 7.5]], 0.12, 0.04, 0.02, (ax) => 1 - 0.5 * clamp01((ax - 1.5) / 5)));
+      for (const s of [1, -1]) {
+        let c = planform([[0, -0.95], [2.05, 0.25], [2.05, 0.75], [0, 0.85]], 0.07, 0.03, 0);
+        if (s < 0) c = mirrorX(c);
+        P.movers.push({ geo: c, pivot: [s * 1.32, 0.3, -3.5], kind: 'canard', side: s, local: true });
+        const dc = merge([decal(0, 0.9, 0.9, 'right', 0.09, 1.0, 0.4), decal(0, 0.9, 0.9, 'left', -0.09, 1.0, 0.4)], true, false);
+        P.movers.push({ geo: fin([[-1.5, 0], [1.1, 0], [1.9, 2.2], [0.6, 2.2]], 0.09, 0.04, 0, 0.4), decal: dc, pivot: [s * 1.75, 0.38, 7.6], kind: 'tail', side: s, cant: -s * 25 * DEG, local: true });
+        P.body.push(cantFin(fin([[7.0, -0.38], [8.8, -0.38], [9.0, -1.1], [8.2, -1.1]], 0.06, 0.03, s * 1.6, 0), s * 1.6, -0.38, s * 25 * DEG));
+      }
+      bayDoors(P, -2.6, 1.6, 0.85, -0.5, 'bay');
+      // side bays: door on the lower intake side (hinge on top, swings out) + the PL-10 rail that swings out under it
+      for (const s of [1, -1]) {
+        P.movers.push({ geo: box(0.025, 0.42, 2.1, 0, -0.21, 0), pivot: [s * 1.74, -0.12, -0.5], kind: 'aux', aux: 'sbay', side: s, rot: [0, 0, s * 1.5], local: true });
+        const rail = merge([box(0.06, 0.05, 2.0, 0, 0, 0), cylZ(0.08, 0.08, 2.4, 8, false).translate(0, -0.12, -1.2), cylZ(0.002, 0.08, 0.4, 8, false).translate(0, -0.12, -1.6)], false, false);
+        P.movers.push({ geo: rail, pivot: [s * 1.4, -0.28, -0.5], kind: 'aux', aux: 'srail', side: s, move: [s * 0.5, -0.22, 0], local: true });
+      }
+      canopy(P, [[-7.6, 0.45, 0.05, 0.05, 0.05], [-7.1, 0.48, 0.38, 0.36, 0.1], [-6.2, 0.52, 0.5, 0.6, 0.1], [-5.2, 0.55, 0.5, 0.56, 0.1], [-4.4, 0.55, 0.4, 0.42, 0.1], [-3.8, 0.55, 0.05, 0.05, 0.05]]);
+      const M = P.metal;
+      for (const sx of [-1, 1]) ring(M, sx * 0.8, 0.0, 9.3, 0.53, 0.35);
+      M.push(paint(sphere(0.12, 0, -0.42, -7.2), 0.15, 0.2, 0.26)); // EOTS window under the nose
+      for (const sx of [-1, 1]) P.decals.push(decal(0, 1.2, 1.2, 'top', sx * 4.4, 0.1, 3.6), decal(0, 1.2, 1.2, 'bottom', sx * 4.4, -0.05, 3.6));
+      for (const o of [-1, 1]) P.decals.push(decal(1, 1.0, 0.4, side(o), o * 0.75, 0.05, -6.4));
+    },
+  };
+  FL.registerAircraft('j20', J20, {
+    tier: 8, price: 720000, unlockLevel: 33, roughness: 0.06, hardpoints: 6, pylonLayout: 's b b w w', engineSound: 'twin',
+    bayMap: { L1: 'sbay', R1: 'sbay', L2: 'bay', R2: 'bay', L3: 'bay', R3: 'bay' },
+    name: 'Chengdu J-20 Mighty Dragon', nation: 'CN', year: 2017, role: 'Stealth long-range striker',
+    blurb: 'A long, fast stealth canard-delta built to hit far away. Press the special: the radar squeezes into a narrow 8° beam with double lock range for the PL-15.',
+    // real: WS-10C ~86 / 142 kN x2 (est.), wing ~73 m2, ~25 t, Mach 2.0, main bay 4 + side bays 2 + 4 external, ~8,000 kg (est.); no gun (game: GSh-23)
+    mass: 25000, wingArea: 73, thrustMil: 172000, thrustAB: 284000, arcadeThrust: 1.3,
+    rollRate: 240, pitchRate: 115, yawRate: 52, drift: 1.2, maxG: 9, missiles: 6, gun: 'gsh23', gunName: 'GSh-23 (game; the real J-20 has no gun)',
+    cd0: 0.018, machMax: 2.0, topSpeedKmh: 2100, ceiling: 20000, climbRate: 300,
+    stats: { speed: 5, agility: 4, firepower: 4, toughness: 4 },
+  }, { stations: [['R1', 1.4, -0.5, 'bay', -0.45], ['R2', 0.3, -0.5, 'bay', 0.03], ['R3', 0.66, -0.5, 'bay', 0.03], ['R4', 3.0, 2.4, 'wing'], ['R5', 4.3, 3.3, 'wing']], muzzle: [1.2, 0.2, -4.2] });
+
+  // ===================================================================================================== Mikoyan MiG 1.44 (MFI)
+  // 19.0 m, span 15.0 m, height 4.5 m. Canard delta, ventral box intake, twin fins + twin ventral fins on tail booms, 3D TVC AL-41F,
+  // internal bay behind the intake (game), Russian prototype "01".
+  const M144 = {
+    b2x: { bayAux: ['bay'], idle: 'bay' },
+    surf: [{ a: 0.05, b: 0.48, c: 0.2, kind: 'elevon' }, { a: 0.52, b: 0.94, c: 0.2, kind: 'elevon' }],
+    gearSpec: [
+      { x: 0, y: -0.5, z: -5.8, r: 0.3, w: 0.18, wheels: 2, nose: true, fold: [1, 0, 0], ang: PI / 2, lift: 0.12, mudguard: true, hub: 'hubGreen', sr: 0.075 },
+      { x: 1.6, y: -0.48, z: 2.3, r: 0.5, w: 0.3, fold: [1, 0, 0], ang: PI / 2, twist: PI / 2, lift: 0.22, hub: 'hubGreen', sr: 0.1 },
+    ],
+    cockpitStyle: 'ru_glass', canTop: 1.1,
+    fins: [[2.15, 1.2, 7.4], [-2.15, 1.2, 7.4]],
+    nation: 'RU', seed: 144, len: [-9.6, 9.8], hs: 7.5, radomeZ: -7.6,
+    frames: [-7.6, -5.8, -3.0, 0.5, 3.6, 6.6],
+    panels: [bayPanel(1.6, 5.6, -0.85, 0.85, -0.95)],
+    // prototype grey with soft darker blotches, blue "01"
+    liv: { pattern: 'blotch', base: '#899196', tones: ['#9aa1a6', '#767e84'], blot: [[1.0, 1.0, 2.4], [0.8, 0.8, 2.0]], aspect: 1.8, under: '#959ca1', radome: '#5d6468' },
+    marks: { star: 'russian', fin: 'flag' },
+    code: { text: '01', color: '#1d4fb0', stroke: '#ffffff' },
+    engines: [{ x: -0.75, y: 0.0, z: 8.7, r: 0.58, len: 1.05, tvc: true }, { x: 0.75, y: 0.0, z: 8.7, r: 0.58, len: 1.05, tvc: true }],
+    gear: [{ x: 0, y: -0.5, z: -5.8, r: 0.3, nose: 1 }, { x: 1.6, y: -0.48, z: 2.3, r: 0.5 }, { x: -1.6, y: -0.48, z: 2.3, r: 0.5 }],
+    wingtips: [[-7.5, -0.05, 5.8], [7.5, -0.05, 5.8]], navs: [[-7.45, 0.0, 5.3], [7.45, 0.0, 5.3]],
+    build(P) {
+      P.body.push(loft([
+        [-9.55, -0.1, 0.01, 0.01, 0.01, 2], [-9.2, -0.09, 0.2, 0.2, 0.18, 2], [-8.3, -0.05, 0.44, 0.44, 0.4, 2], [-7.1, 0.0, 0.62, 0.6, 0.55, 2.1],
+        [-5.8, 0.03, 0.74, 0.66, 0.6, 2.2], [-4.5, 0.03, 0.82, 0.66, 0.62, 2.3], [-3.0, 0.0, 1.0, 0.6, 0.55, 2.6], [-1.0, 0.0, 1.35, 0.52, 0.55, 3],
+        [2.0, 0.0, 1.5, 0.48, 0.5, 3], [5.0, 0.0, 1.35, 0.45, 0.45, 2.8], [7.5, 0.02, 1.25, 0.5, 0.5, 2.5], [8.7, 0.02, 1.25, 0.55, 0.55, 2.3],
+      ], 28, 3, 0));
+      const IT = [[-3.9, -0.95, 0.88, 0.4, 0.42, 4, -0.3], [-3.3, -0.92, 0.94, 0.42, 0.44, 3.8], [-0.5, -0.8, 0.95, 0.42, 0.42, 3.2], [3.0, -0.62, 0.85, 0.38, 0.38, 2.8], [6.0, -0.45, 0.6, 0.3, 0.3, 2.4], [7.5, -0.3, 0.1, 0.1, 0.1, 2]];
+      P.body.push(loft(IT, 18, 3, 0)); intake(P, IT[0], 0, { lip: 0.04, depth: 2.4, shrink: 0.82, lipCol: [0.55, 0.58, 0.6] });
+      P.metal.push(plateYZ([[-3.85, -0.6], [-2.4, -0.62], [-2.4, -1.25], [-3.85, -1.3]], 0, 0.04, [0.3, 0.32, 0.33]));   // intake splitter
+      P.body.push(...wingPair([[1.5, -1.0], [7.5, 5.0], [7.5, 6.5], [1.5, 7.9]], 0.13, 0.05, -0.05, (ax) => 1 - 0.5 * clamp01((ax - 1.5) / 6)));
+      const boom = [[4.6, 0.05, 0.05, 0.05, 0.05, 3], [5.4, 0.05, 0.24, 0.24, 0.22, 3], [9.4, 0.05, 0.24, 0.22, 0.22, 3], [9.9, 0.05, 0.02, 0.02, 0.02, 2]];
+      P.body.push(loft(boom, 10, 2, 2.15), loft(boom, 10, 2, -2.15));
+      for (const sx of [-1, 1]) {
+        P.body.push(cantFin(fin([[5.6, 0.38], [8.6, 0.38], [9.4, 2.3], [8.3, 2.3]], 0.1, 0.04, sx * 2.15, 0.45), sx * 2.15, 0.38, -sx * 10 * DEG));
+        P.body.push(cantFin(fin([[6.5, -0.3], [8.8, -0.3], [9.0, -1.15], [8.2, -1.15]], 0.06, 0.03, sx * 2.15, 0), sx * 2.15, -0.3, sx * 12 * DEG));
+      }
+      for (const s of [1, -1]) {
+        let c = planform([[0, -0.9], [2.1, 0.3], [2.1, 0.75], [0, 0.95]], 0.07, 0.03, 0);
+        if (s < 0) c = mirrorX(c);
+        P.movers.push({ geo: c, pivot: [s * 1.0, 0.3, -4.8], kind: 'canard', side: s, local: true });
+      }
+      P.movers.push({ geo: box(1.0, 0.05, 1.5, 0, 0.55, -0.4), pivot: [0, 0.55, -1.15], kind: 'brakeTop' });
+      bayDoors(P, 1.6, 5.6, 0.85, -0.97, 'bay');
+      canopy(P, [[-7.0, 0.55, 0.05, 0.05, 0.05], [-6.6, 0.58, 0.34, 0.32, 0.1], [-5.9, 0.62, 0.44, 0.54, 0.1], [-5.1, 0.64, 0.44, 0.5, 0.1], [-4.4, 0.64, 0.36, 0.36, 0.1], [-3.9, 0.62, 0.05, 0.05, 0.05]]);
+      const M = P.metal;
+      pitot(M, 0, -0.1, -9.55, 0.9);
+      M.push(paint(cylZ(0.07, 0.06, 0.4, 8).translate(1.0, 0.1, -4.2), 0.25, 0.26, 0.27)); // GSh-30-1 port
+      for (const sx of [-1, 1]) ring(M, sx * 0.75, 0.0, 8.4, 0.6, 0.35);
+      for (const sx of [-1, 1]) { store(P.stores, 'r77', sx * 4.0, -0.2, 3.4, 0.3); store(P.stores, 'r73', sx * 5.4, -0.2, 4.4, 0.26); }
+      for (const sx of [-1, 1]) for (const o of [-1, 1]) P.decals.push(decal(0, 1.1, 1.1, side(o), sx * 2.33 + o * 0.08, 1.4, 7.9));
+      for (const sx of [-1, 1]) P.decals.push(decal(0, 1.4, 1.4, 'top', sx * 5.0, 0.0, 4.0), decal(0, 1.4, 1.4, 'bottom', sx * 5.0, -0.15, 4.0));
+      for (const o of [-1, 1]) P.decals.push(decal(1, 1.2, 0.6, side(o), o * 0.95, -0.85, -2.6));
+      for (const sx of [-1, 1]) for (const o of [-1, 1]) P.decals.push(decal(3, 0.65, 0.65, side(o), sx * 2.44 + o * 0.07, 2.0, 8.6));
+    },
+  };
+  FL.registerAircraft('mig144', M144, {
+    tier: 7, price: 560000, unlockLevel: 28, roughness: 0.1, hardpoints: 6, pylonLayout: 'b b w w w', engineSound: 'twin', supercruise: 1.3,
+    bayMap: { L1: 'bay', R1: 'bay', L2: 'bay', R2: 'bay' },
+    name: 'Mikoyan MiG 1.44 MFI', nation: 'RU', year: 2000, role: '5th-gen prototype',
+    blurb: 'The Russian answer to the ATF that flew only twice: a huge canard delta with 3D vectoring AL-41F engines. The prototype burner gives the longest boost meter in the game.',
+    // real: AL-41F ~98 / 176 kN x2, wing ~80 m2 (est.), ~24 t, Mach 2.6 (design), supercruise ~1.4; prototype: bay + pylons are game layout
+    mass: 24000, wingArea: 80, thrustMil: 196000, thrustAB: 352000, arcadeThrust: 1.1,
+    rollRate: 260, pitchRate: 120, yawRate: 58, drift: 1.4, maxG: 9, missiles: 8, gun: 'gsh30', gunName: 'GSh-30-1 30 mm',
+    cd0: 0.019, machMax: 2.6, topSpeedKmh: 2700, ceiling: 20000, climbRate: 300,
+    stats: { speed: 5, agility: 4, firepower: 4, toughness: 4 },
+  }, { stations: [['R1', 0.28, 3.6, 'bay', 0.03], ['R2', 0.62, 3.6, 'bay', 0.03], ['R3', 2.7, 2.4, 'wing'], ['R4', 4.0, 3.4, 'wing'], ['R5', 5.4, 4.4, 'wing']], muzzle: [1.0, 0.1, -4.3] });
+
+  // ===================================================================================================== Sukhoi Su-37 Terminator
+  // 22.18 m, span 14.70 m, height 6.43 m. Su-27M airframe (long tail stinger) with LERX canards and AL-37FU 2D thrust-vectoring nozzles
+  // (pitch only). Bort 711 in its sand / brown demonstrator scheme. 12 stations.
+  const D = B.DEFS;
+  if (D.su35) {
+    const sb = D.su35.build;
+    const SU37 = Object.assign({}, D.su35, {
+      cockpitStyle: 'ru_glass', seed: 37, rudderBrake: false,
+      liv: { pattern: 'splinter', base: '#c2bfae', cols: [null, '#9c8a68', '#6e604b'], weights: [0.45, 0.33, 0.22], cell: 1.8, squash: 1.25, under: '#c9cdc9', radome: '#3b3d3a' },
+      marks: { fin: 'flag', star: 'russian' },
+      code: { text: '711', color: '#1d4fb0', stroke: '#ffffff' },
+      engines: D.su35.engines.map((e) => Object.assign({}, e, { tvc: '2d' })),
+      build(P) {
+        sb.call(this, P);
+        for (const s of [1, -1]) {   // canards on the LERX (unscaled Su-27 layout coords)
+          let c = planform([[0, -0.9], [2.05, 0.3], [2.05, 0.78], [0, 0.95]], 0.07, 0.03, 0);
+          if (s < 0) c = mirrorX(c);
+          P.movers.push({ geo: c, pivot: [s * 1.0, 0.15, -4.5], kind: 'canard', side: s, local: true });
+        }
+        P.movers.push({ geo: box(1.0, 0.05, 1.7, 0, 1.0, -0.3), pivot: [0, 1.0, -1.15], kind: 'brakeTop' });
+      },
+    });
+    FL.registerAircraft('su37', SU37, {
+      tier: 7, price: 520000, unlockLevel: 26, roughness: 0.1, hardpoints: 7, pylonLayout: 't w w w c c w', engineSound: 'twin',
+      name: 'Sukhoi Su-37 Terminator', nation: 'RU', year: 1996, role: '2D TVC demonstrator',
+      blurb: 'The one-off airshow Flanker "711": canards and pitch-vectoring nozzles. Chain a Cobra, a Kulbit and a drift hook inside 4 s three times and the Terminator buff wakes up.',
+      // real: AL-37FU 83.4 / 142 kN x2 (2D TVC +-15 deg), wing 62 m2, ~24.5 t, Mach 2.3, 12 stations, 8,000 kg, GSh-30-1
+      mass: 24500, wingArea: 62, thrustMil: 166800, thrustAB: 284000, arcadeThrust: 1.3,
+      rollRate: 300, pitchRate: 125, yawRate: 60, drift: 1.5, maxG: 9, missiles: 12, gun: 'gsh30', gunName: 'GSh-30-1 30 mm',
+      cd0: 0.021, machMax: 2.3, topSpeedKmh: 2440, ceiling: 18800, climbRate: 300,
+      stats: { speed: 5, agility: 5, firepower: 5, toughness: 4 },
+    }, { stations: B.STATIONS.su35.map((r) => r.slice()), muzzle: B.MUZZLES.su35.slice() });
+  }
+
+  // ===================================================================================================== Su-57: internal bays (12 real stations)
+  // Two tandem main bays between the nacelles (C, C2 and L4/R4) and two small side bays at the wing roots (L5/R5): doors 'bay' / 'sbay'.
+  // Layout 't i i w w b s': the old C / C2 belly pylons become bay stations (bombs and missiles up to 500 kg fit; tanks / pods do not).
+  if (D.su57 && !D.su57.__bays) {
+    const ob = D.su57.build; D.su57.__bays = true;
+    D.su57.b2x = { bayAux: ['bay', 'sbay'], idle: 'bay' };
+    D.su57.build = function (P) {
+      ob.call(this, P);
+      bayDoors(P, -3.1, 0.6, 0.62, -0.46, 'bay');
+      bayDoors(P, 0.9, 4.4, 0.62, -0.46, 'bay');
+      bayDoors(P, -2.9, -0.9, 2.75, -0.13, 'sbay', { inner: 2.15 });
+    };
+    const k = 0.962, S57 = B.STATIONS.su57;
+    if (S57) {
+      for (const r of S57) if (r[0] === 'C' || r[0] === 'C2') { r[3] = 'bay'; r[4] = 0.03; }
+      const c = S57.find((r) => r[0] === 'C'), c2 = S57.find((r) => r[0] === 'C2');
+      if (c) c[2] = -1.25 * k; if (c2) c2[2] = 2.6 * k;
+      S57.push(['R4', 0.4, 2.6 * k, 'bay', 0.03], ['R5', 2.45, -1.9 * k, 'bay', 0.03]);
+    }
+    const sp = (FL.AIRCRAFT || []).find((a) => a.id === 'su57');
+    if (sp) { sp.pylonLayout = 't i i w w b s'; sp.bayMap = { C: 'bay', C2: 'bay', L4: 'bay', R4: 'bay', L5: 'sbay', R5: 'sbay' }; }
+    FL.refreshPylons('su57');
+  }
+
+  // ===================================================================================================== post-build: moving-part logic
+  // Wraps FL.buildAircraft for jets with def.b2x: nav lights / wingtip points ride on the swinging or folding panels, bay stores show only
+  // while a door is open, V-tail mixing (YF-23), canards as airbrakes (Rafale), trough exhaust glow (YF-23), towed decoy (Typhoon),
+  // api.hangarIdle(dt): slow showcase loop for the hangar (sweep cycle, wing fold, bay doors).
+  const NAV = new Set();
+  const v1 = new T.Vector3();
+  const obuild = FL.buildAircraft;
+  FL.buildAircraft = function (type, opts) {
+    const api = obuild(type, opts), d = D[type];
+    if (d && d.b2x) { try { post(api, d, opts || {}); } catch (e) { console.warn('aircraft_b2 post ' + type, e); } }
+    return api;
+  };
+  function post(api, d, opts) {
+    const X = d.b2x, MV = [];
+    api.group.traverse((o) => { if (o.userData && o.userData.mv) MV.push({ m: o.userData.mv, pv: o, inner: o.children[0] }); });
+    const oAux = api.setAux, aux = {};
+    // nav lights + wingtip vortex points on the moving outer panels
+    let tips = null;
+    if (X.tipAux) {
+      const navs = []; api.group.children.forEach((o) => { if (o.isMesh && o.geometry && o.geometry.type === 'SphereGeometry' && Math.abs(o.position.x) > 1) navs.push(o); });
+      for (const n of navs) { const P = MV.find((q) => q.m.aux === X.tipAux && Math.sign(q.m.side || 0) === Math.sign(n.position.x)); if (P) { n.position.sub(P.pv.position); P.inner.add(n); } }
+      tips = api.wingtips.map((w) => ({ w, base: w.clone(), P: MV.find((q) => q.m.aux === X.tipAux && Math.sign(q.m.side || 0) === Math.sign(w.x)) })).filter((t) => t.P);
+    }
+    // YF-23 trough glow
+    let glow = null;
+    if (X.trough) {
+      const gm = new T.MeshBasicMaterial({ color: 0xff6a28, transparent: true, opacity: 0, blending: T.AdditiveBlending, depthWrite: false, side: T.DoubleSide });
+      const gg = merge(X.trough.map((p) => box(0.7, 0.01, 1.2, p[0], p[1], p[2])), false, false);
+      glow = new T.Mesh(gg, gm); glow.renderOrder = 6; api.group.add(glow);
+      const oe = api.setEngine;
+      api.setEngine = function (thr, ab, time) { oe(thr, ab, time); gm.opacity = Math.min(0.85, 0.12 + 0.35 * (thr || 0) + 0.5 * (ab || 0)); };
+    }
+    // Typhoon towed decoy: cable + small decoy body behind the right wingtip pod; aux 'decoy' = paid-out length 0..1 (100 m)
+    let dec = null;
+    if (X.decoy) {
+      const p = X.decoy, lg = new T.BufferGeometry();
+      lg.setAttribute('position', new T.BufferAttribute(new Float32Array([p[0], p[1], p[2], p[0], p[1], p[2] + 100]), 3));
+      const line = new T.Line(lg, new T.LineBasicMaterial({ color: 0x1a1c1e })); line.frustumCulled = false;
+      const body = new T.Mesh(merge([cylZ(0.09, 0.09, 0.9, 8, false), cylZ(0.002, 0.09, 0.25, 8, false).translate(0, 0, -0.25)], false, false), new T.MeshStandardMaterial({ color: 0x8a9095, metalness: 0.4, roughness: 0.5 }));
+      const g = new T.Group(); g.add(line, body); g.visible = false; api.group.add(g);
+      dec = { g, line, body, p };
+    }
+    api.setAux = function (name, t) {
+      t = clamp01(t || 0);
+      if (aux[name] === t) return;
+      aux[name] = t; oAux(name, t);
+      if (tips && name === X.tipAux) for (const q of tips) { v1.copy(q.base).sub(q.P.pv.position).applyQuaternion(q.P.inner.quaternion).add(q.P.pv.position); q.w.copy(v1); }
+      if (X.bayAux && X.bayAux.indexOf(name) >= 0 && api.setBayStoresVisible) { let m = 0; for (const n of X.bayAux) m = Math.max(m, aux[n] || 0); api.setBayStoresVisible(m > 0.15); }
+      if (dec && name === 'decoy') {
+        dec.g.visible = t > 0.01; const L = 100 * t, a = dec.line.geometry.attributes.position;
+        a.setZ(1, dec.p[2] + L); a.needsUpdate = true; dec.body.position.set(dec.p[0], dec.p[1], dec.p[2] + L);
+      }
+    };
+    api.auxNames = [...new Set(api.auxNames.concat(X.decoy ? ['decoy'] : []))];
+    // V tail (YF-23): both ruddervators mix pitch (opposite in their own frames) and yaw
+    const oc = api.setControls; let brk = 0, cp = 0, cr = 0, cy = 0;
+    if (X.vtail || X.canardBrake) {
+      const vt = MV.filter((q) => q.m.vtail), cn = MV.filter((q) => q.m.kind === 'canard');
+      api.setControls = function (p, r, y) {
+        oc(p, r, y); cp = p || 0; cr = r || 0; cy = y || 0;
+        for (const q of vt) q.inner.rotation.y = -cy * 0.35 + q.m.side * (cp + q.m.side * cr * 0.3) * 0.3;
+        if (X.canardBrake && brk > 0) for (const q of cn) q.inner.rotation.x -= brk * 0.6;   // Rafale: canards pitch down as the airbrake
+      };
+      if (X.canardBrake) { const ob = api.setAirbrake; api.setAirbrake = function (t) { ob(t); brk = clamp01(t || 0); api.setControls(cp, cr, cy); }; }
+    }
+    // hangar showcase loop (no wing fold while missiles hang on the folding tips: the stores mesh does not fold)
+    let ht = 0, tipLoaded = false;
+    const os = api.setStores, fp = (FL.AIRCRAFT.find((a) => a.id === api.type) || {}).foldPylons || [];
+    api.setStores = function (list) { tipLoaded = !!(list && list.some((it) => it && fp.indexOf(it.pylon) >= 0 && (it.count == null || it.count > 0))); return os(list); };
+    api.hangarIdle = function (dt) {
+      ht += Math.min(0.1, dt || 0);
+      if (X.idle === 'sweep') {      // 20 deg -> 68 deg -> 75 deg (parked) -> 20 deg, 14 s
+        const K = [[0, 20], [2.5, 20], [5.5, 68], [7.5, 68], [8.2, 75], [10.5, 75], [14, 20]], tt = ht % 14;
+        let deg = 20; for (let i = 1; i < K.length; i++) if (tt <= K[i][0]) { const a = K[i - 1], b = K[i], u = (tt - a[0]) / (b[0] - a[0]); deg = a[1] + (b[1] - a[1]) * (0.5 - 0.5 * Math.cos(PI * u)); break; }
+        api.setAux('sweep', (deg - 20) / 55); api.setAux('vane', clamp01((deg - 55) / 10));
+      } else if (X.idle === 'fold') { const tt = ht % 12; api.setAux('fold', tipLoaded ? 0 : tt < 4 ? 0 : tt < 6 ? (tt - 4) / 2 : tt < 10 ? 1 : 1 - (tt - 10) / 2); }
+      else if (X.idle === 'bay') {
+        const tt = ht % 9, v = tt < 3 ? 0 : tt < 3.4 ? (tt - 3) / 0.4 : tt < 8 ? 1 : 1 - (tt - 8) / 0.4;
+        for (const n of X.bayAux) api.setAux(n, clamp01(v));
+        if (type0(api) === 'j20') api.setAux('srail', clamp01(v * 1.2 - 0.2));
+      }
+    };
+  }
+  const type0 = (api) => api.type;
 })();
 
 </script>
@@ -41698,7 +42578,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"x29":{"side":"data:image/webp;base64,UklGRkYgAA
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793174690', updShown = false;
+  var BUILD = '1793175078', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
