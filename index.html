@@ -1330,6 +1330,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         let a, b;
         if (ed === 0) { a = c.vi(i, 0); b = c.vi(i + s, 0); } else if (ed === 1) { a = c.vi(i, c.n); b = c.vi(i + s, c.n); }
         else if (ed === 2) { a = c.vi(0, i); b = c.vi(0, i + s); } else { a = c.vi(c.n, i); b = c.vi(c.n, i + s); }
+        if (hole) { const hx = ed === 3 ? c.n - 1 : ed === 2 ? 0 : i, hy = ed === 1 ? c.n - 1 : ed === 0 ? 0 : i; if (hole[(c.y0 + hy) * nc + c.x0 + hx]) continue; }
         const sa = c.sOff + ed * n1 + i, sb = sa + s;
         IDX[nIdx++] = a; IDX[nIdx++] = sa; IDX[nIdx++] = b; IDX[nIdx++] = b; IDX[nIdx++] = sa; IDX[nIdx++] = sb;
         IDX[nIdx++] = a; IDX[nIdx++] = b; IDX[nIdx++] = sa; IDX[nIdx++] = b; IDX[nIdx++] = sb; IDX[nIdx++] = sa;
@@ -8059,7 +8060,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     liv: { pattern: 'mottle', base: '#1f2c3c', tones: ['#18222f', '#27384c', '#1b2735'], under: '#223040', radome: '#1a1f26' },
     code: { text: '01', color: '#ffffff', stroke: '#1a3a7a' },
     engines: [{ x: -1.4, y: -0.4, z: 8.6, r: 0.56, len: 1.1 }, { x: 1.4, y: -0.4, z: 8.6, r: 0.56, len: 1.1 }],
-    wingtips: [[-8.35, 0.05, -0.7], [8.35, 0.05, -0.7]], navs: [[-8.3, 0.1, -0.9], [8.3, 0.1, -0.9]],
+    wingtips: [[-8.35, 0.05, -0.3], [8.35, 0.05, -0.3]], navs: [[-8.3, 0.1, -0.7], [8.3, 0.1, -0.7]],
     gearSpec: [
       { x: 0, y: -0.55, z: -5.4, r: 0.33, w: 0.22, nose: true, fold: [1, 0, 0], ang: Math.PI / 2, lift: 0.18, mudguard: true, hub: 'hubGreen', sr: 0.075 },
       { x: 2.3, y: -0.35, z: 2.0, r: 0.5, w: 0.3, fold: [1, 0, 0], ang: Math.PI / 2, twist: Math.PI / 2, lift: 0.25, hub: 'hubGreen', sr: 0.1, well: [-0.2, 0.42, -2.05, 0.25] },
@@ -8076,12 +8077,12 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       const nac = [[-5.3, -0.42, 0.45, 0.56, 0.56, 6, -0.4], [-4.2, -0.42, 0.52, 0.57, 0.58, 5, -0.1], [-2.0, -0.44, 0.56, 0.55, 0.6, 3.5, 0],
         [1.0, -0.42, 0.6, 0.55, 0.6, 2.6, 0], [5.0, -0.4, 0.6, 0.55, 0.58, 2.2, 0], [8.6, -0.4, 0.56, 0.56, 0.56, 2, 0]];
       P.body.push(loft(nac, 22, 3, 1.4), loft(nac, 22, 3, -1.4));
-      // forward-swept wing: LE sweeps forward ~20 deg, big inner glove
-      P.body.push(...wingPair([[0.8, -2.4], [2.5, 0.2], [8.35, -1.9], [8.35, -0.55], [4.0, 3.6], [2.5, 5.4], [0.8, 5.6]], 0.15, 0.05, 0.02, (ax) => 1 - 0.55 * clamp01((ax - 2.2) / 6.2)));
+      // forward-swept wing: small swept-back glove, then the outer panel's LE sweeps FORWARD ~20 deg (tips ahead of the roots)
+      P.body.push(...wingPair([[0.8, -1.0], [1.9, 1.2], [8.35, -1.2], [8.35, 0.1], [2.0, 6.2], [0.8, 6.2]], 0.15, 0.05, 0.02, (ax) => 1 - 0.55 * clamp01((ax - 1.9) / 6.4)));
       // unequal tail booms (left one longer)
       for (const sx of [-1, 1]) P.body.push(loft([[4.6, 0.04, 0.05, 0.05, 0.05, 3], [5.4, 0.04, 0.24, 0.2, 0.2, 4], [sx < 0 ? 11.4 : 10.0, 0.04, 0.22, 0.2, 0.2, 4], [sx < 0 ? 12.2 : 10.8, 0.04, 0.02, 0.02, 0.02, 2]], 12, 2, sx * 2.25));
-      const F = [[4.6, 0.25], [9.3, 0.25], [9.9, 4.0], [8.25, 4.0]];
-      P.body.push(fin(F, 0.11, 0.04, 2.2), fin(F, 0.11, 0.04, -2.2));
+      const F = [[4.8, 0.25], [9.3, 0.25], [9.9, 3.7], [8.4, 3.7]];
+      for (const sx of [-1, 1]) P.body.push(cantFin(fin(F, 0.11, 0.04, sx * 2.2), sx * 2.2, 0.25, -sx * 8 * DEG)); // canted outward
       for (const s of [1, -1]) {
         let st = planform([[1.95, 8.6], [4.3, 10.0], [4.3, 10.7], [1.95, 10.85]], 0.08, 0.035, -0.02);
         if (s < 0) st = mirrorX(st);
@@ -8098,14 +8099,14 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         const inl = new T.PlaneGeometry(0.85, 1.0); inl.rotateY(Math.PI); inl.rotateY(-sx * 0.35); inl.translate(sx * 1.45, -0.42, -5.25);
         M.push(paint(nonIdx(inl), 0.01, 0.01, 0.012));
         M.push(paint(cylZ(0.6, 0.58, 0.5, 18, true).translate(sx * 1.4, -0.4, 8.15), ...TIT));
-        M.push(paint(box(0.1, 0.12, 1.4, sx * 8.3, 0.02, -0.9), 0.3, 0.32, 0.35)); // wingtip rail
+        M.push(paint(box(0.1, 0.12, 1.4, sx * 8.3, 0.02, -0.55), 0.3, 0.32, 0.35)); // wingtip rail
       }
       M.push(paint(cylZ(0.03, 0.012, 0.9, 6, false).translate(0, -0.5, -11.85), 0.7, 0.7, 0.72));
       M.push(paint(sphere(0.16, 0.22, 0.72, -7.75), 0.75, 0.8, 0.85));
       M.push(paint(box(0.06, 0.06, 0.3, -1.45, 0.12, -2.85), 0.06, 0.06, 0.06)); // gun port (left wing root)
-      for (const sx of [-1, 1]) { store(P.stores, 'r73', sx * 8.3, -0.12, -0.8); store(P.stores, 'r77', sx * 5.2, -0.1, 1.5, 0.28); }
+      for (const sx of [-1, 1]) { store(P.stores, 'r73', sx * 8.3, -0.12, -0.5); store(P.stores, 'r77', sx * 5.2, -0.1, 1.5, 0.28); }
       for (const sx of [-1, 1]) for (const o of [-1, 1]) P.decals.push(decal(0, 1.4, 1.4, o > 0 ? 'right' : 'left', sx * 2.2 + o * 0.12, 2.0, 8.3));
-      for (const sx of [-1, 1]) P.decals.push(decal(0, 1.3, 1.3, 'top', sx * 5.6, 0.2, 1.0), decal(0, 1.3, 1.3, 'bottom', sx * 5.6, -0.1, 1.0));
+      for (const sx of [-1, 1]) P.decals.push(decal(0, 1.2, 1.2, 'top', sx * 5.6, 0.2, 1.3), decal(0, 1.2, 1.2, 'bottom', sx * 5.6, -0.1, 1.3));
       P.decals.push(decal(1, 1.6, 0.8, 'right', 1.0, 0.0, -7.0), decal(1, 1.6, 0.8, 'left', -1.0, 0.0, -7.0));
     },
   };
@@ -8194,7 +8195,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     f5e: [['R1', 4.07, 1.05, 'tip'], ['R2', 2.95, 1.0, 'wing'], ['R3', 1.85, 0.55, 'wing'], ['C', 0, 0.2, 'belly']],
     mig29: [['R1', 4.4, 2.6, 'wing'], ['R2', 3.45, 2.0, 'wing'], ['R3', 2.55, 1.4, 'wing'], ['C', 0, 0.8, 'belly']],
     f16: [['R1', 4.98, 2.35, 'tip'], ['R2', 3.95, 2.2, 'wing'], ['R3', 2.95, 1.7, 'wing'], ['R4', 2.0, 1.2, 'wing'], ['C', 0, 0.3, 'belly']],
-    su47: [['R1', 7.6, 1.6, 'tip'], ['C', 0, -0.6, 'belly'], ['R2', 5.2, 1.4, 'wing'], ['R3', 3.6, 1.8, 'wing']],
+    su47: [['R1', 8.3, -0.55, 'tip'], ['C', 0, -0.6, 'belly'], ['R2', 5.2, 1.5, 'wing'], ['R3', 3.6, 2.5, 'wing']],
   };
   // gun muzzle (local, right side for paired guns) -> [x, y, z, pair]
   const MUZZLES = {
@@ -27886,7 +27887,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         text((lk.dist / 1000).toFixed(1) + ' KM  ' + (vc >= 0 ? '+' : '−') + Math.abs(Math.round(vc / 10) * 10), lx2, dp.y + 8 * u, 10.5 * u, locked ? RED : HCdim);
         var yW2 = yb + (locked || kL <= 0.01 ? 4 : 12) * u;
         var dT = null; for (i = 0; i < tg.length; i++) if (tg[i].designated) dT = tg[i];
-        if (dT && dT.hp01 != null) { var sbh = hx.shadowBlur; hx.shadowBlur = 0; hpBar(dp.x, yW2 - 3 * u, bs * 2, dT.hp01, u); hx.shadowBlur = sbh; yW2 += 9 * u; }
+        if (dT && dT.hp01 != null && showHp(dT)) { var sbh = hx.shadowBlur; hx.shadowBlur = 0; hpBar(dp.x, yW2 - 3 * u, bs * 2, dT.hp01, u); hx.shadowBlur = sbh; yW2 += 9 * u; }
         if (locked && lk.weaponOK === false) { text(lk.aspectOK === false ? 'GET BEHIND IT' : 'OUT OF RANGE', dp.x, yW2, 11 * u, AMB, 'center'); yW2 += 14 * u; }
         if ((lk.candidates || 0) > 1) text('◀ ▶', dp.x, yW2, 11 * u, HCdim, 'center');
       } else {
@@ -28346,7 +28347,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     text(String(ch.missiles), R, y1 + 0.5 * u, 19 * u, ch.missiles ? HC : AMB, 'right', DISP, '700');
     // flares: 8-segment stock bar
     text('FLR', lx, y2, 11 * u, HCdim, 'left');
-    var fk = clamp(ch.flares / HS.flrMax, 0, 1), segN = 8, bw = slots * iw, segW = (bw - (segN - 1) * 2 * u) / segN, x0 = iconX - bw - 1 * u;
+    var fk = clamp(ch.flares / HS.flrMax, 0, 1), segN = 8, bw = Math.max(slots * iw, 96 * u), segW = (bw - (segN - 1) * 2 * u) / segN, x0 = iconX - bw - 1 * u;
     hx.save(); hx.shadowBlur = 0; hx.fillStyle = HCfaint;
     for (i = 0; i < segN; i++) hx.fillRect(x0 + i * (segW + 2 * u), y2 - 3 * u, segW, 6 * u);
     hx.restore();
