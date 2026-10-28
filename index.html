@@ -1175,7 +1175,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
 
   // ================================================================ map list
   FL.MAPS = [
-    { id: 'lax', name: 'Los Angeles', region: 'California, USA', blurb: 'Open city sprawl between the Pacific and the San Gabriel Mountains, with enemy-held LAX in the middle.', timeOfDay: 'afternoon' },
+    { id: 'lax', name: 'Pacific Coast', region: 'Coastal city, Pacific', blurb: 'A sprawling coastal city between the ocean and a high mountain range, with an enemy-held international airport at its heart and a rocky island offshore.', timeOfDay: 'afternoon' },
     { id: 'fjords', name: 'Norway Winter Fjords', region: 'Nordland, Norway', blurb: 'Snowbound peaks and a maze of narrow, dark fjords: hug the walls and stay below the ridgelines.', timeOfDay: 'overcast' },
     { id: 'cliffs', name: 'Highland Cliffs', region: 'Scotland & Antrim coast', blurb: 'Sheer Atlantic cliffs, sea stacks, Fingal\'s Cave and the Giant\'s Causeway, the jagged Cuillin and long sea lochs.', timeOfDay: 'evening' },
     { id: 'canyon', name: 'Desert Canyon', region: 'Colorado Plateau, USA', blurb: 'A 40 km winding red-rock canyon at sunset: pop up, shoot, drop back in.', timeOfDay: 'sunset' },
@@ -2850,7 +2850,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     }
     function rebuild(ci, cj, high) {
       const cn = K.map(() => 0), cf = K.map(() => 0); total = 0;
-      const RFx = high ? 8 : RF;
+      const RFx = high ? Math.min(RF, 10) : RF;
       for (let dj = -RFx; dj <= RFx; dj++) for (let di = -RFx; di <= RFx; di++) {
         const r2 = di * di + dj * dj; if (r2 > (RFx + 0.5) * (RFx + 0.5)) continue;
         const near = r2 <= (RN + 0.5) * (RN + 0.5) && !high;
@@ -2871,7 +2871,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     let lastHigh = false;
     return {
       update: function (cam) {
-        const ci = Math.floor(cam.x / TS), cj = Math.floor(-cam.z / TS), high = cam.y - Math.max(sampleH(cam.x, -cam.z), 0) > 1800;
+        const ci = Math.floor(cam.x / TS), cj = Math.floor(-cam.z / TS), high = cam.y - Math.max(sampleH(cam.x, -cam.z), 0) > 350;
         if (ci === lastI && cj === lastJ && high === lastHigh) return;
         if (high && lastHigh && Math.abs(ci - lastI) <= 2 && Math.abs(cj - lastJ) <= 2) return;
         lastI = ci; lastJ = cj; lastHigh = high; rebuild(ci, cj, high);
@@ -3205,7 +3205,16 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   function rawHeight(e, n) {
     const d = segDist(S_COAST, e, n);
     _lastD = d; _lastM = 0;
-    if (inPoly(OCEAN_EXT, e, n)) { _lastSea = true; return -4 - Math.min(d * 0.035, 140); }
+    if (inPoly(OCEAN_EXT, e, n)) {
+      const sea = -4 - Math.min(d * 0.035, 140);
+      // Isla Rocosa: rugged island offshore (ridge along WNW-ESE), cliffs into the sea
+      const ie = e + 16000, inn = n + 36000, u = (ie * 0.94 + inn * 0.34) / 9500, v = (-ie * 0.34 + inn * 0.94) / 2600, q = u * u + v * v;
+      if (q < 1.6) {
+        const k = Math.max(0, 1 - q), isl = -60 + 760 * Math.pow(k, 0.8) * (0.55 + 0.6 * ridged(e / 1500 + 2, n / 1500 - 4, 4, 81)) + 120 * sstep(0.0, 0.15, k);
+        if (isl > sea) { _lastSea = isl < 0.3; _lastD = 1000; _lastHill = 100; _lastM = 0; return Math.max(isl, sea); }
+      }
+      _lastSea = true; return sea;
+    }
     _lastSea = false;
     let h = 1.5 + Math.min(d, 20000) * 0.0018;
     h += (fbm(e / 2700 + 11.3, n / 2700 - 7.1, 3, 1) - 0.5) * 20 * sstep(0, 2500, d);
@@ -3271,14 +3280,14 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     const cSand = lin(0xcdbb94), cUrban = lin(0x958b7c), cUrban2 = lin(0x7e786f), cPark = lin(0x5a6436), cOlive = lin(0x6a6a3c), cBrown = lin(0x86704c),
       cValley = lin(0x3e4b25), cRock = lin(0x857a68), cRock2 = lin(0x6b6152), cGrass = lin(0x7a7a4a), cSeabed = lin(0x6e6650), cWet = lin(0xb8a888), cDesert = lin(0xa89a74);
     const t1 = [0, 0, 0];
-    const BASE = { name: 'Rosamond AFB', e: -40500, n: 42200, hdg: 258, len: 3200, w: 50, seed: 31, blend: 900 };
+    const BASE = { name: 'Sierra Mesa AFB', e: -40500, n: 42200, hdg: 258, len: 3200, w: 50, seed: 31, blend: 900 };
     const def = {
-      name: 'Los Angeles', region: 'California, USA', urban: true, N: N,
+      name: 'Pacific Coast', region: 'Coastal city, Pacific', urban: true, N: N,
       sky: { sunAz: 225, sunEl: 28, fog: 0xc3cad0, fogD: 0.0000105, hfogA: 0.000010, hfogB: 1 / 650, zenith: [0.035, 0.11, 0.36], glow: [1.0, 0.70, 0.42] },
       ground: { rockOn: 0.0, faceN: 0, snowH: 1e6 },
       water: { color: 0x062433, shallow: 0x23545e, foam: 0.7, shallowK: 0.45 },
-      bases: [BASE, { name: 'LAX south compound', e: 600, n: -2950, hdg: 83, len: 1800, w: 40, seed: 39, mini: true, enemy: true, compoundOnly: true, blend: 250, minH: 6, q: 0.5 }],
-      ocean: OCEAN, coast: COAST,
+      bases: [BASE, { name: 'Bayside Intl compound', e: 600, n: -2950, hdg: 83, len: 1800, w: 40, seed: 39, mini: true, enemy: true, compoundOnly: true, blend: 250, minH: 6, q: 0.5 }],
+      coast: COAST,
       farHeight: laFar,
       prepare: function (ctx) {
         let lastFM = 0;
@@ -3325,16 +3334,17 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         return u;
       },
       zones: [
-        { id: 'smm', name: 'Santa Monica Mountains', e: -22000, n: 17000, r: 7000, type: 'mountain' },
-        { id: 'sfv', name: 'San Fernando Valley', e: -15000, n: 28500, r: 7000, type: 'valley' },
-        { id: 'anf', name: 'Angeles National Forest', e: 5000, n: 39500, r: 8000, type: 'forest' },
-        { id: 'pv', name: 'Palos Verdes Hills', e: 2200, n: -19000, r: 4500, type: 'hills' },
-        { id: 'polb', name: 'Port of Long Beach', e: 21500, n: -18500, r: 3500, type: 'port' },
-        { id: 'dtla', name: 'Downtown LA', e: 15170, n: 12170, r: 2500, type: 'city' },
-        { id: 'malibu', name: 'Malibu Coast', e: -30000, n: 13600, r: 4000, type: 'coast' },
-        { id: 'verdugo', name: 'Verdugo Hills', e: 12000, n: 28800, r: 3500, type: 'hills' },
-        { id: 'puente', name: 'Puente Hills', e: 30000, n: 7800, r: 4500, type: 'hills' },
-        { id: 'lax', name: 'LAX (enemy-held)', e: 400, n: 70, r: 3200, type: 'airbase', enemy: true }],
+        { id: 'smm', name: 'Seaward Range', e: -22000, n: 17000, r: 7000, type: 'mountain' },
+        { id: 'sfv', name: 'Northvale', e: -15000, n: 28500, r: 7000, type: 'valley' },
+        { id: 'anf', name: 'High Sierra Forest', e: 5000, n: 39500, r: 8000, type: 'forest' },
+        { id: 'pv', name: 'Point Rocas Hills', e: 2200, n: -19000, r: 4500, type: 'hills' },
+        { id: 'polb', name: 'Harbor District', e: 21500, n: -18500, r: 3500, type: 'port' },
+        { id: 'dtla', name: 'Downtown', e: 15170, n: 12170, r: 2500, type: 'city' },
+        { id: 'malibu', name: 'Cove Coast', e: -30000, n: 13600, r: 4000, type: 'coast' },
+        { id: 'verdugo', name: 'Cedar Hills', e: 12000, n: 28800, r: 3500, type: 'hills' },
+        { id: 'puente', name: 'Eastgate Hills', e: 30000, n: 7800, r: 4500, type: 'hills' },
+        { id: 'island', name: 'Isla Rocosa', e: -16000, n: -36000, r: 6000, type: 'hills' },
+        { id: 'lax', name: 'Bayside International (enemy-held)', e: 400, n: 70, r: 3200, type: 'airbase', enemy: true }],
       hillZones: [
         { e: -32000, n: 16800, r: 7000 }, { e: -8000, n: 18500, r: 5500 }, { e: 6000, n: 21500, r: 4500 },
         { e: -32000, n: 29000, r: 7000 }, { e: -15000, n: 29000, r: 7000 }, { e: 2000, n: 29500, r: 5500 },
@@ -3370,7 +3380,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       [33.9467, -118.4350, 33.9502, -118.4020, 3318, 46, '06R', '24L'],
       [33.9491, -118.4310, 33.9521, -118.4020, 2721, 46, '06L', '24R']];
     const runways = [];
-    const apt = new THREE.Group(); apt.name = 'LAX';
+    const apt = new THREE.Group(); apt.name = 'airport';
     apt.position.set(400, AIRPORT_H, -70); apt.rotation.y = 7 * DEG;
     scene.add(apt);
     const rng = makeRng(1234);
@@ -4666,12 +4676,12 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         if (n > coastN(e) - 700 || Math.hypot((e - CB.e) / 1.25, n - CB.n) < 7300) continue;
         if (Math.hypot(e - BASE.e, n - BASE.n) < 4500 || (e > 17000 && n < -3000)) continue;
         if (Math.abs(n - (-1500 + e * 0.12)) < 450 && e < 14000) continue;   // a clear channel through the bay (east-west)
-        const r = 45 + Math.pow(R(), 1.6) * 170, H = 80 + r * (1.5 + R() * 1.1) + R() * 60;
+        const kind = R(), r = kind < 0.15 ? 12 + R() * 18 : 30 + Math.pow(R(), 1.7) * 210, H = kind < 0.15 ? 18 + R() * 40 : Math.min(460, 50 + r * (0.9 + R() * 1.6) + R() * 80);
         if (raw(e, n) > -2) continue;
         let ok = true; const gx = Math.floor(e / 500), gy = Math.floor(n / 500);
         for (let dx = -1; dx <= 1 && ok; dx++) for (let dy = -1; dy <= 1 && ok; dy++) for (const o of (TG.get((gx + dx) + ',' + (gy + dy)) || [])) if (Math.hypot(o[0] - e, o[1] - n) < (o[2] + r) * 0.7 + 12) { ok = false; break; }
         if (!ok) continue;
-        const tw = [e, n, r, H, TW.length]; TW.push(tw); const kk = gx + ',' + gy; if (!TG.has(kk)) TG.set(kk, []); TG.get(kk).push(tw);
+        const tw = [e, n, r, H, TW.length, R()]; TW.push(tw); const kk = gx + ',' + gy; if (!TG.has(kk)) TG.set(kk, []); TG.get(kk).push(tw);
       }
     }
     // lagoon rings (hong): towers around a hidden lagoon, one gap bridged by a rock arch
@@ -4699,7 +4709,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       sky: { sunAz: 215, sunEl: 26, fog: 0xc5d0cc, fogD: 0.0000112, hfogA: 0.00002, hfogB: 1 / 380, zenith: [0.07, 0.13, 0.3], glow: [1.0, 0.85, 0.6], glowW: 0.3, sunCol: [1.0, 0.92, 0.78], disk: 24,
         sunHex: 0xfff0d4, sunI: 2.3, hemiSky: 0xbfd2dc, hemiGround: 0x4a5a3a, hemiI: 0.62, white: 0xe2e8e6, envGround: [0.08, 0.12, 0.08] },
       ground: { rockOn: 1, rock1: 0x7a7466, rock2: 0xb3ab98, rockA: 0.38, rockB: 0.58, sandH: 3, sand: 0xd8cca8, faceN: 1 },
-      water: { color: 0x0c3530, shallow: 0x23705c, foam: 0.3, shallowK: 0.45, roughness: 0.14, normalScale: 0.3 },
+      water: { color: 0x163f33, shallow: 0x2a5a44, foam: 0.25, shallowK: 0.35, roughness: 0.22, normalScale: 0.25 },
       bases: [BASE, EBASE], raw: raw,
       flats: TOWNS.map((t) => ({ e: t.e, n: t.n, hdg: 0, x0: -t.r * 0.8, x1: t.r * 0.8, z0: -t.r * 0.8, z1: t.r * 0.8, blend: 260, minH: 3, q: 0.3 })),
       levels: [{ tile: 1920, cell: 64, max: 100, dilate: 20, score: (e0, n0, e1, n1, g) => {
@@ -4733,7 +4743,15 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     def.extras = function (ctx) {
       const sampleH = ctx.sampleH, F = [], CELL = 2000, cells = new Map();
       const cellOf = (e, n) => { const k = Math.floor(e / CELL) + ',' + Math.floor(n / CELL); let c = cells.get(k); if (!c) cells.set(k, c = { hi: new Builder(), lo: new Builder(), e: (Math.floor(e / CELL) + 0.5) * CELL, n: (Math.floor(n / CELL) + 0.5) * CELL }); return c; };
-      for (const T of TW) { const c = cellOf(T[0], T[1]); buildKarst(c.hi, c.lo, F, T[0], T[1], T[2], T[3], T[4] % 997 + 1, null, { angNoise: 0.4, crown: 1.6, K: T[2] > 120 ? 14 : 10, maxRings: 10 }); }
+      const HC = { lime: lin(0xb4ae9e), dark: lin(0x3f3c36), wet: lin(0x2c2a26), green: lin(0x1e3a16), green2: lin(0x2e4e1e), streaks: 1, tufts: 1 };
+      for (const T of TW) { const c = cellOf(T[0], T[1]); const sh = T[5] === undefined ? 0.5 : T[5], H = T[3], r = T[2];
+        // silhouettes: needles, flat-topped blocks, leaning towers, overhanging tops, plain domes
+        const o = { angNoise: 0.42, crown: 1.4, K: r > 120 ? 14 : 9, maxRings: 10 };
+        if (sh < 0.18 && r > 30) { o.taper = 0.55; o.dome = 0.25; o.crown = 2.2; }                 // needle
+        else if (sh < 0.36) { o.taper = 0.05; o.dome = 0.12; o.crown = 0.6; }                      // flat-topped block
+        else if (sh < 0.5) { const a = sh * 40; o.lean = [Math.cos(a) * 0.18, Math.sin(a) * 0.18]; } // leaning
+        else if (sh < 0.68) { o.overhang = 0.18; o.taper = 0.1; }                                  // overhanging top
+        buildKarst(c.hi, c.lo, F, T[0], T[1], r, H, T[4] % 997 + 1, HC, o); }
       // rock bridges over the lagoon entrances
       const rb = new Builder(), cR = lin(0x9a9384), cG = lin(0x2f5a24);
       const arches = ARCHS.map((S) => Object.assign({ name: S.name, lagoon: S.lagoon }, buildArch(rb, F, S, cR, cG)));
@@ -4756,7 +4774,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         buildJunk(pb, e, n, R() * 360, 1 + R() * 0.3); nj++;
       }
       // meshes
-      const mat = m2RockMat(ctx, 1.45); mat.side = THREE.FrontSide;
+      const mat = m2RockMat(ctx, 1.45); mat.side = THREE.FrontSide; mat.flatShading = true;
       const meshes = [], farAll = new Builder();
       for (const c of cells.values()) {
         const hm = new THREE.Mesh(c.hi.build(), mat); hm.castShadow = true; hm.receiveShadow = true; hm.name = 'karst'; hm.visible = false; ctx.add(hm);
@@ -4923,7 +4941,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         if (iLB.query(e, n) < 2400) return 1e6;
         if (Math.hypot(e - BASE.e, n - BASE.n) < 2500) return 2e5;
         return (hi - lo) * (Math.hypot(e - 4000, n + 4000) < 16000 ? 2 : 1); } },
-      { tile: 480, cell: 16, select: (e0, n0, e1, n1) => { const d = iLB.query((e0 + e1) / 2, (n0 + n1) / 2); return d < 420; } }],
+      { tile: 384, cell: 16, select: (e0, n0, e1, n1) => { const d = iLB.query((e0 + e1) / 2, (n0 + n1) / 2); return d < 420; } }],
       color: function (e, n, h, il, curv, o, cell, k, aux) {
         mix3(o, cMeadow, cMeadow2, sstep(0.4, 0.7, fbm(e / 700, n / 700, 3, 1041)));
         const forest = sstep(0.45, 0.6, fbm(e / 1100 + 3, n / 1100, 3, 1043)) * sstep(650, 900, h) * (1 - sstep(1700, 1950, h)) * sstep(0.55, 0.8, il);
@@ -5106,7 +5124,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     const BASE = { name: 'Romsdal Air Station', e: -33600, n: -17200, hdg: 2, len: 2900, w: 45, seed: 41, blend: 600, minH: 8, q: 0.5 };
     const EBASE = { name: 'Lesja airfield', e: BASIN[0], n: BASIN[1], hdg: 40, len: 1900, w: 40, seed: 42, blend: 450, mini: true, enemy: true, minH: 300, q: 0.4 };
     const flats = TOWNS.map((t) => ({ e: t.e, n: t.n, hdg: 0, x0: -t.r * 0.6, x1: t.r * 0.6, z0: -t.r * 0.6, z1: t.r * 0.6, blend: t.r * 0.6, minH: 4, q: 0.3 }));
-    const cHeath = lin(0x3b3a2c), cGrass = lin(0x55573a), cField = lin(0x6b6a45), cLow = lin(0x4a4a3c), cLowSnow = lin(0xd3d9df), cMid = lin(0x6a6a62), cSea = lin(0x2a3a3a), cShore = lin(0x5a564c), cSnowUnder = lin(0xa9b2ba);
+    const cHeath = lin(0x2c2f23), cGrass = lin(0x454c31), cField = lin(0x66673f), cLow = lin(0x4a4a3c), cLowSnow = lin(0xd3d9df), cMid = lin(0x6a6a62), cSea = lin(0x2a3a3a), cShore = lin(0x5a564c), cSnowUnder = lin(0xa9b2ba);
     const def = {
       name: 'Norway Winter Fjords', region: 'Møre og Romsdal / Sogn, Norway', N: 400, lodK: 0.055, vegFar: 10,
       sky: { sunAz: 205, sunEl: 7, fog: 0xaab6c2, fogD: 0.0000115, hfogA: 0.00003, hfogB: 1 / 520, zenith: [0.10, 0.14, 0.22], glow: [0.9, 0.55, 0.35], glowW: 0.3, sunCol: [1.0, 0.8, 0.6], disk: 18,
@@ -5126,7 +5144,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         let fieldK = 0; for (const T of TOWNS) { const d = Math.hypot(e - T.e, n - T.n); if (d < T.r * 3) fieldK = Math.max(fieldK, 1 - sstep(T.r * 1.2, T.r * 3, d)); }
         mix3(o, o, cField, fieldK * (1 - sstep(80, 200, h)) * 0.8);
         mix3(o, o, cMid, sstep(300, 700, h) * 0.6);
-        mix3(o, o, cLowSnow, 0.15 + 0.35 * sstep(0.55, 0.7, fbm(e / 260, n / 260, 2, 263)) * (1 - fieldK * 0.6) + 0.5 * sstep(500, 1000, h));
+        mix3(o, o, cLowSnow, 0.04 + 0.3 * sstep(0.6, 0.72, fbm(e / 260, n / 260, 2, 263)) * (1 - fieldK * 0.8) + 0.6 * sstep(650, 1150, h));
         mix3(o, o, cSnowUnder, sstep(900, 1300, h));
         mix3(o, o, cShore, (1 - sstep(1, 5, h)) * 0.8);
         return aux || 0;
@@ -5909,11 +5927,12 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   // karst tower (Ha Long style): limestone column with fluted, streaked walls, a sea notch at the waterline and a jungle cap.
   // hi/lo: Builders for the near and far LOD meshes (lo may be null). Adds a solid. Returns top height.
   const KARST_C = { lime: lin(0x858074), dark: lin(0x3c3a33), wet: lin(0x2e2c28), green: lin(0x22421a), green2: lin(0x365a22), vines: 1 };
-  function karstRadius(R0, H, y, tp, nt) { const t = Math.max(0, y) / H; return R0 * (1 - tp * Math.pow(t, tp > 0.3 ? 1.3 : 2)) * (1 - nt * Math.exp(-Math.pow((y - 2) / 5, 2))); }
+  function karstRadius(R0, H, y, tp, nt, ov) { const t = Math.max(0, y) / H; return R0 * (1 + (ov || 0) * sstep(0.55, 0.85, t)) * (1 - tp * Math.pow(t, tp > 0.3 ? 1.3 : 2)) * (1 - nt * Math.exp(-Math.pow((y - 2) / 5, 2))); }
   // opts: {y0 (base height), taper (0.22 karst .. 0.75 needle), notch (sea notch depth), dome (cap height factor), bury}
   function buildKarst(hi, lo, F, e, n, R0, H, seed, cols, opts) {
     const O = opts || {}, C = cols || KARST_C, tp = O.taper === undefined ? 0.22 : O.taper, nt = O.notch === undefined ? 0.16 : O.notch, Y0 = O.y0 || 0, bury = O.bury || 14;
-    const kr = (y) => karstRadius(R0, H, y, tp, nt);
+    const ov = O.overhang || 0, LE = O.lean || [0, 0];
+    const kr = (y) => karstRadius(R0, H, y, tp, nt, ov);
     const dome = Math.min(R0 * (1 - tp) * (O.dome || 0.55), H * 0.2), yW = H - dome, rTop = kr(yW);
     const prof = [];
     const nw = Math.max(4, Math.min(O.maxRings || 14, Math.ceil(H / 26)));
@@ -5926,27 +5945,31 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     const sweep = (b, K, P, flute) => {
       const g = gridGeo(K, P.length - 1, (i, j) => { const ph = i / K * Math.PI * 2, cp = Math.cos(ph), sp = Math.sin(ph), q = P[j], k = flute ? kf(cp, sp, q[1], ph) : 1 + 0.2 * (fbm(cp * 1.5 + seed, sp * 1.5, 2, 811) - 0.5);
         const yy = q[1] > yW - 1 && O.crown ? q[1] + O.crown * dome * (fbm(cp * 2.2 + seed, sp * 2.2, 2, 819) - 0.35) * Math.min(1, (q[1] - yW + dome * 0.3) / dome) : q[1];
-        return [e + cp * q[0] * k, yy + Y0, -n + sp * q[0] * k, ph * R0 / 30, q[1] / 30]; });
+        const ly = Math.max(0, q[1]);
+        return [e + cp * q[0] * k + LE[0] * ly, yy + Y0, -n + sp * q[0] * k - LE[1] * ly, ph * R0 / 30, q[1] / 30]; });
       const base = b.nv; b.geo(g, new THREE.Matrix4(), C.lime);
       const Nn = g.attributes.normal;
       for (let i = 0; i < Nn.count; i++) {
         const v = base + i, x = b.p[v * 3], y = b.p[v * 3 + 1] - Y0, z = b.p[v * 3 + 2], ny = Nn.getY(i);
-        const st = sstep(0.5, 0.75, fbm(Math.atan2(z + n, x - e) * 2.5 + seed, y / 90, 2, 813));
+        const ang = Math.atan2(z + n - LE[1] * Math.max(0, y), x - e - LE[0] * Math.max(0, y));
+        const st = C.streaks ? sstep(0.48, 0.62, fbm(ang * 7 + seed, y / 260, 2, 813)) * (0.6 + 0.4 * sstep(0.2, 0.9, y / (yW + 1))) + 0.25 * sstep(0.6, 0.75, fbm(ang * 2 + seed, y / 60, 2, 814)) : sstep(0.5, 0.75, fbm(ang * 2.5 + seed, y / 90, 2, 813));
         const o = [0, 0, 0]; mix3(o, C.lime, C.dark, st * 0.75);
         if (C.band) mix3(o, o, C.band, sstep(C.bandY - 20, C.bandY + 20, y + Y0 + 30 * (vnoise(x / 60, z / 60, 5) - 0.5)));
         if (nt > 0) mix3(o, o, C.wet, 1 - sstep(1, 7, y));
         let gr = sstep(0.35, 0.65, ny + 0.25 * (vnoise(x / 25, z / 25 + y / 30, seed) - 0.5)) * sstep(8, 30, y);
         if (C.vines) gr = Math.max(gr, sstep(0.52, 0.66, fbm(Math.atan2(z + n, x - e) * 3 + seed, y / 70, 2, 815)) * sstep(6, 25, y) * 0.95, sstep(0.55, 0.85, y / (yW + 1)) * 0.85);
+        if (C.tufts) { gr = sstep(0.45, 0.7, ny + 0.3 * (vnoise(x / 18, z / 18 + y / 22, seed) - 0.5)) * sstep(6, 20, y); gr = Math.max(gr, sstep(yW - dome * 0.2, yW + dome * 0.3, y) * sstep(0.35, 0.55, vnoise(x / 14, z / 14, seed + 1))); }
         mix3(o, o, vnoise(x / 40, z / 40, 3) > 0.5 ? C.green : C.green2, gr);
         b.c[v * 3] = o[0]; b.c[v * 3 + 1] = o[1]; b.c[v * 3 + 2] = o[2];
       }
       g.dispose();
     };
     sweep(hi, O.K || (R0 > 120 ? 16 : 12), prof, true);
-    if (lo) sweep(lo, 7, [[R0 * 0.93, -bury], [kr(yW * 0.5) * 0.93, yW * 0.5], [rTop * 0.93, yW], [rTop * 0.5, yW + dome * 0.85], [rTop * 0.02, yW + dome * 0.95]], false);
+    if (lo) sweep(lo, 7, [[R0 * 0.93, -bury], [kr(yW * 0.25) * 0.93, yW * 0.25], [kr(yW * 0.5) * 0.93, yW * 0.5], [rTop * 0.93, yW], [rTop * 0.5, yW + dome * 0.85], [rTop * 0.02, yW + dome * 0.95]], false);
     const x0 = e, z0 = -n;
-    F.push({ x0: x0 - R0 * 1.15, x1: x0 + R0 * 1.15, z0: z0 - R0 * 1.15, z1: z0 + R0 * 1.15, y0: Y0 - 20, y1: Y0 + H, test: function (x, y, z) {
-      const dx = x - x0, dz = z - z0, d2 = dx * dx + dz * dz, yy = y - Y0;
+    const LX = Math.abs(LE[0]) * H, LZ = Math.abs(LE[1]) * H, RR = R0 * (1.15 + ov);
+    F.push({ x0: x0 - RR - LX, x1: x0 + RR + LX, z0: z0 - RR - LZ, z1: z0 + RR + LZ, y0: Y0 - 20, y1: Y0 + H, test: function (x, y, z) {
+      const yy = y - Y0, ly = yy > 0 ? yy : 0, dx = x - x0 - LE[0] * ly, dz = z - z0 + LE[1] * ly, d2 = dx * dx + dz * dz;
       let r = yy < yW ? kr(yy) : rTop * Math.sqrt(Math.max(0, 1 - Math.pow((yy - yW) / dome, 2)));
       r *= 0.86; return d2 < r * r; } });
     return H;
@@ -10335,7 +10358,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   function decalTexture(def) {
     const c = mkCanvas(2048, 512), x = c.getContext('2d'), M = def.marks || {};
     x.clearRect(0, 0, 2048, 512);
-    if (def.nation === 'SE') {
+    if (def.nationMark) def.nationMark(x); // jet-specific national marking (registered jets), drawn in cell 0 (0..512)
+    else if (def.nation === 'SE') {
       x.fillStyle = '#ffffff'; x.beginPath(); x.arc(256, 256, 246, 0, 6.3); x.fill();
       x.fillStyle = '#005b99'; x.beginPath(); x.arc(256, 256, 238, 0, 6.3); x.fill();
       x.fillStyle = '#fecc02';
@@ -11340,11 +11364,11 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         [-5.25, -0.12, 0.01, 0.01, 0.01, 2], [-5.1, -0.11, 0.22, 0.2, 0.2, 2], [-4.7, -0.08, 0.45, 0.42, 0.38, 2], [-4.0, -0.04, 0.64, 0.58, 0.52, 2.2],
         [-3.1, 0.0, 0.76, 0.66, 0.6, 2.8], [-2.0, 0.02, 0.8, 0.68, 0.62, 3.1], [-0.8, 0.02, 0.79, 0.64, 0.62, 2.9], [0.6, 0.03, 0.72, 0.6, 0.6, 2.6],
         [2.0, 0.06, 0.56, 0.52, 0.5, 2.3], [3.3, 0.12, 0.4, 0.42, 0.36, 2.1], [4.4, 0.18, 0.27, 0.32, 0.22, 2], [5.0, 0.22, 0.14, 0.18, 0.12, 2], [5.2, 0.22, 0.01, 0.01, 0.01, 2],
-      ], 28, 3, 0));
+      ], 26, 3, 0));
       // engine nacelles on the lower fuselage sides: round intakes under the wing roots, jet pipes behind the wing
       const NAC = [[-0.9, -0.22, 0.24, 0.26, 0.26, 2.1, 0.05], [-0.5, -0.22, 0.28, 0.29, 0.29, 2.2], [0.8, -0.2, 0.3, 0.3, 0.3, 2.2], [2.0, -0.17, 0.27, 0.27, 0.27, 2.1], [2.78, -0.15, 0.22, 0.22, 0.22, 2]];
       for (const sx of [-1, 1]) {
-        P.body.push(loft(NAC, 18, 3, sx * 0.62));
+        P.body.push(loft(NAC, 14, 3, sx * 0.62));
         intake(P, NAC[0], sx * 0.62, { lip: 0.03, depth: 1.4, shrink: 0.8, lipCol: [0.6, 0.62, 0.63] });
       }
       // shoulder wing (anhedral: def.wingWarp)
@@ -11508,9 +11532,12 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       if (sb) { // side-by-side two-seater: my seat on the left (eye at -sb), the instructor with his own seat and panel on the right
         CK.hw = Math.min(CK.hw, sb - 0.05); CK.eye = [-sb, CK.eye[1], CK.eye[2]]; CK.sill = Math.min(CK.sill, CK.rail - 0.04); // low walls: you see your instructor
         C.cockpit = merge([K.canopyFrame(cs, arches), K.pilotGeo(hy, hz, CK.s, 'seat').translate(-sb, 0, 0), K.pilotGeo(hy, hz, CK.s).translate(sb, 0, 0)], false, true);
+        C.cockpitLow = merge([K.pilotGeo(hy, hz, CK.s, 'seat').translate(-sb, 0, 0), K.pilotGeo(hy, hz, CK.s, 'seat').translate(sb, 0, 0)], false, true); // 'low' LOD: 2 seats only
         C.pilot.translate(-sb, 0, 0);
       }
       C.cg = K.cockpitGeo(CK);
+      const rs = def.rearSeat; // tandem two-seater: [dy, dz] of the back seat (RIO / WSO / instructor) from the pilot
+      if (rs) { C.cockpit = merge([C.cockpit, K.pilotGeo(hy + rs[0], hz + rs[1], CK.s)], false, true); C.cg.tub = merge([C.cg.tub, C.cg.tub.clone().translate(0, rs[0], rs[1])], true, false); }
       if (sb) {
         const tub2 = C.cg.tub.clone().translate(2 * sb, 0, 0), face2 = C.cg.face.clone().translate(2 * sb, 0, 0);
         for (const k of ['tub', 'inner', 'face', 'hud']) C.cg[k].translate(-sb, 0, 0);
@@ -11519,7 +11546,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         C.cg.stickPivot = [C.cg.stickPivot[0] - sb, C.cg.stickPivot[1], C.cg.stickPivot[2]];
       }
       C.cg.tub = merge([C.cg.tub, K.mirrorsGeo(cs, arches[0])], true, false);
-      C.body = K.cutCockpit(C.body, sb ? Object.assign({}, CK, { hw: Math.min(sb + CK.hw, CK.hwAt(CK.zp) * 0.92) }) : CK);
+      C.body = K.cutCockpit(C.body, sb ? Object.assign({}, CK, { hw: Math.min(sb + CK.hw, CK.hwAt(CK.zp) * 0.92) }) : rs ? Object.assign({}, CK, { zr: CK.zr + rs[1] }) : CK);
       C.gearSys = K.gearSystem(def.gearSpec, hit);
       C.doorMat = new T.MeshStandardMaterial({ color: new T.Color(def.liv.under).convertSRGBToLinear(), metalness: def.metalBody ? 0.6 : 0.3, roughness: def.metalBody ? 0.35 : 0.55, side: T.DoubleSide });
     }
@@ -11546,6 +11573,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     const H = typeCache(type), def = H.def, P = buildP(def, 0.42);
     const L = Object.assign({}, H);
     L.body = merge(P.body.map((g) => bodyUV(def, g, FINS.has(g))), true, false);
+    if (H.cockpitLow) L.cockpit = H.cockpitLow;
     const met = P.metal.filter((g) => g.attributes.position.count >= 150 || g.userData.keepLow);
     L.metal = met.length ? merge(met, false, true) : null;
     L.movers = moversOf(def, P.movers);
@@ -12088,6 +12116,12 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         }
       },
     };
+    // extra moving parts (registered jets): movers with aux: name, rot: [x, y, z] rad and/or move: [x, y, z] m at t = 1
+    api.setAux = function (name, t) {
+      t = clamp01(t || 0);
+      for (const M of movers) if (M.m.aux === name) { const r = M.m.rot, mv = M.m.move; if (r) M.inner.rotation.set(r[0] * t, r[1] * t, r[2] * t); if (mv) M.inner.position.set(mv[0] * t, mv[1] * t, mv[2] * t); }
+    };
+    api.auxNames = [...new Set(movers.map((M) => M.m.aux).filter(Boolean))];
     api.setGear(1);
     api.setEngine(0.2, 0, 0);
     api.setControls(0, 0, 0);
@@ -12122,6 +12156,28 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     }
     spec.pylons = pyl;
   }
+  // ------------------------------------------------------------------ registration hook (aircraft_b1.js ...): more jets on the same build path
+  // FL.registerAircraft(id, def, spec, { stations, muzzle }): DEFS[id] = def, STATIONS / MUZZLES rows, spec into FL.AIRCRAFT (sorted by price), spec.pylons.
+  // FL.acBuildKit = the model helpers above. Stations are data: add a row later and call FL.refreshPylons(id) to raise a jet's pylon count.
+  FL.acBuildKit = { T, K, loft, wingPair, fin, planform, intake, plateYZ, paint, box, cylZ, sphere, latheZ, mirrorX, merge, decal, store, canopy, cantFin, nonIdx, clamp01, DEG, TIT, MSPEC, BSPEC, DEFS, STATIONS, MUZZLES };
+  FL.refreshPylons = function (id) {
+    const spec = FL.AIRCRAFT.find((a) => a.id === id), rows = STATIONS[id]; if (!spec || !rows) return;
+    const pyl = {};
+    for (const r of rows) for (const sd of r[1] > 0.01 ? [1, -1] : [0]) pyl[sd < 0 ? 'L' + r[0].slice(1) : r[0]] = { x: +(sd * r[1] || 0).toFixed(2), y: r[3] === 'belly' ? -0.75 : r[3] === 'tip' ? -0.1 : -0.35, z: r[2], kind: r[3] };
+    spec.pylons = pyl; delete STC[id];
+  };
+  FL.registerAircraft = function (id, def, spec, o) {
+    o = o || {}; DEFS[id] = def;
+    if (o.stations) STATIONS[id] = o.stations;
+    if (o.muzzle) MUZZLES[id] = o.muzzle;
+    if (FL.AIRCRAFT_TYPES.indexOf(id) < 0) FL.AIRCRAFT_TYPES.push(id);
+    if (!spec) return;
+    spec.id = id;
+    const L = FL.AIRCRAFT, old = L.findIndex((a) => a.id === id); if (old >= 0) L.splice(old, 1);
+    const at = L.findIndex((a) => (a.price || 0) > (spec.price || 0));
+    L.splice(at < 0 ? L.length : at, 0, spec);
+    FL.refreshPylons(id);
+  };
 })();
 
 </script>
@@ -17480,6 +17536,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
   }
   var WEAPON_LIST = [
     W({ id: 'gsh23', weight: 0.33, name: 'GSh-23 23 mm', type: 'gun', range: 1000, speed: 715, damage: 6, rate: 40, ammo: 900, price: 0, unlockLevel: 1, desc: 'MiG-21 twin-barrel gun. Fast fire, light hits.' }),
+    W({ id: 'hispano', weight: 0.25, name: '4x Hispano Mk V 20 mm', type: 'gun', range: 900, speed: 840, damage: 5, rate: 44, ammo: 600, price: 0, unlockLevel: 1, desc: 'Vampire nose guns. Four barrels, 600 rounds. Short range.' }),
     W({ id: 'aden', weight: 0.37, name: 'ADEN 30 mm', type: 'gun', range: 1100, speed: 790, damage: 13, rate: 20, ammo: 900, price: 2500, unlockLevel: 2, desc: 'Saab cannon. Good hits. Medium rate of fire.' }),
     W({ id: 'gsh30', weight: 0.39, name: 'GSh-30-1 30 mm', type: 'gun', range: 1300, speed: 870, damage: 14, rate: 25, ammo: 700, blast: 2, price: 6000, unlockLevel: 6, desc: 'Flanker cannon. Slow fire. Heavy hits.' }),
     W({ id: 'm61', weight: 0.26, name: 'M61 Vulcan 20 mm', type: 'gun', range: 1000, speed: 1030, damage: 4, rate: 100, ammo: 2400, price: 8000, unlockLevel: 8, desc: 'Six barrels. Very fast fire.' }),
@@ -17704,7 +17761,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
   }
   function acIdx(id) { var l = acList(); for (var i = 0; i < l.length; i++) if (l[i].id === id) return i; return -1; }
   function acSpec(id) { var l = acList(); for (var i = 0; i < l.length; i++) if (l[i].id === id) return l[i]; return null; }
-  function mapList() { return (FL.MAPS && FL.MAPS.length) ? FL.MAPS : [{ id: 'lax', name: 'Los Angeles' }]; }
+  function mapList() { return (FL.MAPS && FL.MAPS.length) ? FL.MAPS : [{ id: 'lax', name: 'Pacific Coast' }]; }
   function parseMods(str) {
     return String(str || '').split(' ').filter(Boolean).map(function (m) {
       var mm = /^(\w+)([*+])(-?[\d.]+)$/.exec(m);
@@ -17751,7 +17808,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
     if (w.type === 'tank') return kind === 'belly';
     if (w.station) return w.station.indexOf(kind) >= 0;          // specials: 'belly' | 'wing' | 'belly wing'
     if (kind === 'tip') return isAAMw(w) && (w.weight || 0) <= 120;
-    if (kind === 'belly') return w.type === 'bomb' || w.type === 'rocket' || isPod(w);
+    if (kind === 'belly') return w.type === 'bomb' || w.type === 'rocket' || w.type === 'missile' || isPod(w);   // belly: bombs, rockets, pods and missiles (Su-27/F-15 style)
     return true;
   }
   function storeType(w) { return !w ? '' : (isPod(w) || w.type === 'beam' || w.type === 'rail') ? 'gunpod' : w.type === 'tank' ? 'tank' : isAAMw(w) ? 'aam' : w.type === 'missile' ? 'agm' : w.type; }
@@ -17761,8 +17818,14 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
   // Level 1..10 per jet. Mastery XP comes from flying, damage, kills and missions in that jet.
   // Every level gives one thing: a paint, a small stat or a jet special.
   var MASTERY_XP = [0, 100, 300, 600, 1000, 1600, 2400, 3500, 5000, 7000];
-  var PAINTS = [['factory', 'Factory paint'], ['grey', 'Field grey'], ['splinter', 'Splinter camo'], ['desert', 'Desert'], ['ace', 'Ace black and red'], ['gold', 'Gold']];
+  // 3rd field 1 = jet-specific paint: only listed for jets whose milestones give it (aircraft.js def.paints)
+  var PAINTS = [['factory', 'Factory paint'], ['grey', 'Field grey'], ['splinter', 'Splinter camo'], ['desert', 'Desert'], ['ace', 'Ace black and red'], ['gold', 'Gold'],
+    ['raf', 'RAF camo', 1], ['team60', 'Team 60 display', 1]];
+  var PAINT_SWAP = { vampire: { desert: 'raf' } };   // per jet: generic milestone paint -> its own scheme
+  // [name, desc, mods, paint?] (a special with a paint also unlocks that paint)
   var SPECIAL = {
+    vampire: [['Goblin boost', 'Boost thrust +15%. Boost time +3 s.', 'boostMul*0.15 boostDuration+3'], ['Four Hispanos', 'Gun damage +15%. Fire rate +10%.', 'gunDamageMul*0.15 gunRateMul*0.1']],
+    saab105: [['Attack Sk 60', '+1 pylon pair: the inner wing pylons open.', 'pylonsAdd+1'], ['Team 60 paint', 'Team 60 display paint. Turn and roll rate +5%.', 'rateMul*0.05', 'team60']],
     mig21: [['Twin R-60', '+1 missile pair: 2 more air-to-air missiles.', 'reserveAAM+2'], ['Fishbed dash', 'Top speed +5%. Afterburner time +2 s.', 'topSpeedMul*0.05 boostDuration+2']],
     j29: [['Barrel roll', 'Turn and roll rate +6%.', 'rateMul*0.06'], ['Four cannons', 'Gun damage +20%.', 'gunDamageMul*0.2']],
     j35: [['Super stall', 'In a drift you keep 40% more of your speed.', 'driftKeep+0.4'], ['Double delta', 'Thrust +6%.', 'thrustMul*0.06']],
@@ -17787,9 +17850,13 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
       { kind: 'paint', paint: 'ace' },
       { kind: 'special', name: sp[1][0], desc: sp[1][1], mods: sp[1][2] }
     ];
+    var swap = PAINT_SWAP[acId] || {};
+    if (sp[0][3]) L[5].paint = sp[0][3];
+    if (sp[1][3]) L[10].paint = sp[1][3];
     return L.map(function (m, lv) {
       if (!m) return null;
       m.lv = lv;
+      if (m.kind === 'paint' && swap[m.paint]) m.paint = swap[m.paint];
       if (m.kind === 'paint') { var pn = PAINTS.filter(function (p) { return p[0] === m.paint; })[0]; m.name = pn ? pn[1] : m.paint; m.desc = 'New paint for this jet.'; m.mods = ''; }
       m.modList = parseMods(m.mods);
       return m;
@@ -18041,7 +18108,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
       sts = sts || stations(s);
       var out = [], eq = eqOf(P.ac);
       var g = FL.WEAPONS[eq.gun] || FL.WEAPONS.gsh23;
-      out.push({ slot: 'gun', pylon: 'GUN', id: g.id, spec: specCopy(g, s), type: 'gun', count: 1, ammo: g.ammo, mass: Math.round(g.ammo * g.weight) });
+      var noGun = !!(acSpec(P.ac) || {}).noGun;   // e.g. Saab 105: no built-in gun, only gun pods on the pylons (0 rounds; pods still fire on GUN)
+      out.push({ slot: 'gun', pylon: 'GUN', id: g.id, spec: specCopy(g, s), type: 'gun', count: 1, ammo: noGun ? 0 : g.ammo, mass: noGun ? 0 : Math.round(g.ammo * g.weight) });
       var firstAAM = null;
       sts.open.forEach(function (st) {
         var w = FL.WEAPONS[eq.pyl[st.id]];
@@ -18142,7 +18210,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
     function paintOf(acId) { acId = acId || P.ac; var p = P.paint[acId]; return p && paintsOf(acId).indexOf(p) >= 0 ? p : 'factory'; }
     function paintsOf(acId) {
       var ml = masteryLevel(acId), ms = milestones(acId), out = ['factory'];
-      for (var lv = 2; lv <= ml; lv++) if (ms[lv] && ms[lv].kind === 'paint') out.push(ms[lv].paint);
+      for (var lv = 2; lv <= ml; lv++) if (ms[lv] && ms[lv].paint) out.push(ms[lv].paint);   // paint milestones + specials that give a paint
       if (FL.extraPaints) out = out.concat(FL.extraPaints(acId));          // medal paints (extras.js)
       return out;
     }
@@ -19157,7 +19225,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
       if (!el) return;
       var w = W0(), need = xpNeed(P.level), spec = acSpec(P.ac);
       el.querySelector('#flcHead').innerHTML =
-        '<div><p class="flc-kick">Hangar · ' + esc(w.name || 'Los Angeles') + ' · ' + esc(spec ? spec.name : P.ac) + (X ? ' · ' + esc(X.kick()) : '') + '</p><h2 class="flc-h">' + (FL.pilotTitle ? esc(FL.pilotTitle(P.level)) + ' · ' : FL.rankTitle ? esc(FL.rankTitle(P.level)) + ' · ' : '') + esc((function () { try { return localStorage.getItem('flk_name') || 'Flanker One'; } catch (e) { return 'Flanker One'; } })()) + '</h2></div>' +
+        '<div><p class="flc-kick">Hangar · ' + esc(w.name || 'Pacific Coast') + ' · ' + esc(spec ? spec.name : P.ac) + (X ? ' · ' + esc(X.kick()) : '') + '</p><h2 class="flc-h">' + (FL.pilotTitle ? esc(FL.pilotTitle(P.level)) + ' · ' : FL.rankTitle ? esc(FL.rankTitle(P.level)) + ' · ' : '') + esc((function () { try { return localStorage.getItem('flk_name') || 'Flanker One'; } catch (e) { return 'Flanker One'; } })()) + '</h2></div>' +
         '<div class="flc-meta"><div class="flc-lvl"><span class="flc-lab">Level</span><div><b>' + P.level + '</b>' + (P.sp ? '<span class="sp">' + P.sp + ' SP</span>' : '') +
         '</div><div class="flc-bar"><i style="width:' + Math.round(100 * clamp(P.xp / need, 0, 1)) + '%"></i></div></div>' +
         '<div class="flc-cr"><span class="flc-lab">Credits</span><b>' + fmtN(P.credits) + '</b></div></div>';
@@ -19384,7 +19452,9 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
       }
       h += '</div>';
       var have = paintsOf(acId), cur = paintOf(acId);
-      h += '<div class="flc-sec">Paint</div><div class="flc-paints">' + PAINTS.map(function (p) {
+      h += '<div class="flc-sec">Paint</div><div class="flc-paints">' + PAINTS.filter(function (p) {   // only paints this jet can get
+        return p[0] === 'factory' || have.indexOf(p[0]) >= 0 || (FL.ACH_PAINTS && FL.ACH_PAINTS[p[0]]) || ms.some(function (q) { return q && q.paint === p[0]; });
+      }).map(function (p) {
         var ok = have.indexOf(p[0]) >= 0, lvl = 0; ms.forEach(function (q) { if (q && q.paint === p[0]) lvl = q.lv; });
         return '<button class="flc-paint' + (cur === p[0] ? ' on' : '') + '" data-act="paint" data-id="' + p[0] + '" data-key="paint-' + p[0] + '"' + (ok ? '' : ' aria-disabled="true"') + '>' +
           esc(p[1]) + (ok ? '' : FL.ACH_PAINTS && FL.ACH_PAINTS[p[0]] ? ' · medal: ' + esc(FL.medalName(FL.ACH_PAINTS[p[0]])) : ' · mastery ' + lvl) + '</button>';
@@ -26907,6 +26977,10 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
     'uniform float uExposure; uniform float uBloomI; uniform float uTime; uniform vec2 uRes; uniform float uAspect;',
     'uniform float uSpeed; uniform float uTrauma; uniform float uHit; uniform float uFlash; uniform float uBoost; uniform float uCloud;',
     'uniform float uCA; uniform vec3 uSun; uniform vec2 uHeat; uniform float uBloomNorm;',
+    // per-map grade (FL.MAP_LOOK via post.setGrade): white balance + shoulder in scene-linear, split tone / sat / vibrance
+    // in display-linear, lift-gamma-gain + S contrast + vignette in sRGB. Neutral values = the original fixed grade.
+    'uniform vec3 uWB; uniform float uShoulder; uniform vec3 uShT; uniform vec3 uHiT; uniform float uSat; uniform float uVib;',
+    'uniform vec3 uLift; uniform vec3 uGam; uniform vec3 uGain; uniform float uCon; uniform float uVig;',
     'varying vec2 vUv; varying float vSunVis;',
     COMMON,
     'vec3 RRTAndODTFit(vec3 v){ vec3 a = v * (v + 0.0245786) - 0.000090537; vec3 b = v * (0.983729 * v + 0.4329510) + 0.238081; return a / b; }',
@@ -27001,14 +27075,22 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
     '  }',
     '#endif',
     // --- tone map (identical to THREE.ACESFilmicToneMapping) + grade, in display-linear
+    '  col *= uWB;',  // white balance (scene-linear, luma-normalised on the CPU)
+    '  if (uShoulder > 0.001) {',  // extra highlight roll-off above 1.0 (hue kept): snow / sun glint do not clip as early
+    '    float hl = luma(col);',
+    '    if (hl > 1.0) col *= (1.0 + (hl - 1.0) / (1.0 + uShoulder * 0.3 * (hl - 1.0))) / hl;',
+    '  }',
     '  col = acesFilmic(col);',
     '  float l = luma(col);',
-    '  col *= mix(vec3(0.965, 1.0, 1.04), vec3(1.035, 1.0, 0.965), smoothstep(0.02, 0.55, l));',  // teal shadows / warm highlights
-    '  col = max(mix(vec3(luma(col)), col, 1.08), 0.0);',  // saturation
+    '  col *= mix(uShT, uHiT, smoothstep(0.02, 0.55, l));',  // split tone (default: teal shadows / warm highlights)
+    '  float gl0 = luma(col), gmx = max(col.r, max(col.g, col.b)), gmn = min(col.r, min(col.g, col.b));',
+    '  col = max(mix(vec3(gl0), col, max(0.0, uSat * (1.0 + uVib * (1.0 - (gmx - gmn) / max(gmx, 1e-4))))), 0.0);',  // saturation + vibrance
     '  vec3 s = toSRGB(clamp(col, 0.0, 1.0));',
-    '  s = mix(s, s * s * (3.0 - 2.0 * s), 0.2);',  // gentle S contrast
+    '  s = clamp(s * uGain + uLift * (1.0 - s), 0.0, 1.0);',  // lift / gain (3-way colour balance)
+    '  s = pow(s, uGam);',  // gamma (uGam = 1 / gamma)
+    '  s = mix(s, s * s * (3.0 - 2.0 * s), uCon);',  // S contrast
     // --- vignette, damage + kill flashes
-    '  s *= 1.0 - 0.24 * smoothstep(0.35, 1.05, r);',
+    '  s *= 1.0 - uVig * smoothstep(0.35, 1.05, r);',
     '  if (uHit > 0.001) {',
     '    float em = smoothstep(0.25, 1.05, r); em *= em;',
     '    s = mix(s, vec3(0.62, 0.03, 0.02) + s * vec3(0.3, 0.06, 0.05), uHit * (0.05 + 0.75 * em));',
@@ -27118,7 +27200,42 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
       uExposure: { value: 1 }, uBloomI: { value: 0.6 }, uBloomNorm: { value: 1 }, uTime: { value: 0 }, uRes: { value: V2(1, 1) }, uAspect: { value: 1 },
       uSpeed: { value: 0 }, uTrauma: { value: 0 }, uHit: { value: 0 }, uFlash: { value: 0 }, uBoost: { value: 0 }, uCloud: { value: 0 },
       uCA: { value: 0 }, uSun: { value: new T.Vector3() }, uSunR: { value: V2(0.01, 0.01) }, uHeat: { value: V2(0.5, 0.27) },
+      uWB: { value: new T.Vector3(1, 1, 1) }, uShoulder: { value: 0 }, uShT: { value: new T.Vector3() }, uHiT: { value: new T.Vector3() },
+      uSat: { value: 1.08 }, uVib: { value: 0 }, uLift: { value: new T.Vector3() }, uGam: { value: new T.Vector3(1, 1, 1) }, uGain: { value: new T.Vector3(1, 1, 1) },
+      uCon: { value: 0.2 }, uVig: { value: 0.24 },
     };
+    // ---- colour grade (post.setGrade). NEUTRAL = the original fixed grade, so a map without a look is unchanged.
+    // exposure: x scene exposure; temp/tint: -1..1 white balance (warm+ / magenta+); shadows/highlights: split-tone
+    // multipliers (display-linear); sat, vib: saturation, vibrance (low-saturation colours get more); lift/gamma/gain:
+    // per channel, in sRGB; contrast: S curve 0..1; vignette 0..0.6; shoulder 0..1 highlight roll-off;
+    // bloom / bloomThr: x bloom intensity / threshold; glare: x lens flare + sun streak. Applied to the main scene only.
+    const NEUTRAL = { exposure: 1, temp: 0, tint: 0, shadows: [0.965, 1, 1.04], highlights: [1.035, 1, 0.965], sat: 1.08, vib: 0,
+      lift: [0, 0, 0], gamma: [1, 1, 1], gain: [1, 1, 1], contrast: 0.2, vignette: 0.24, shoulder: 0, bloom: 1, bloomThr: 1, glare: 1 };
+    const G = { exposure: 1, bloom: 1, bloomThr: 1, glare: 1 };
+    const fin = (v, d, lo, hi) => (typeof v === 'number' && v === v ? Math.min(hi, Math.max(lo, v)) : d);
+    const fin3 = (dst, a, d, lo, hi) => { for (let k = 0; k < 3; k++) dst.setComponent(k, fin(a && a[k], d[k], lo, hi)); };
+    function setGrade(o) {
+      o = o || NEUTRAL; const u = compU, N = NEUTRAL;
+      G.exposure = fin(o.exposure, 1, 0.25, 4); G.bloom = fin(o.bloom, 1, 0, 4); G.bloomThr = fin(o.bloomThr, 1, 0.2, 5); G.glare = fin(o.glare, 1, 0, 3);
+      const t = fin(o.temp, 0, -1, 1), ti = fin(o.tint, 0, -1, 1);
+      const r = 1 + 0.13 * t + 0.02 * ti, g = 1 - 0.07 * ti, b = 1 - 0.17 * t + 0.02 * ti, ln = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      u.uWB.value.set(r / ln, g / ln, b / ln);
+      u.uShoulder.value = fin(o.shoulder, 0, 0, 1);
+      fin3(u.uShT.value, o.shadows, N.shadows, 0.5, 1.5); fin3(u.uHiT.value, o.highlights, N.highlights, 0.5, 1.5);
+      u.uSat.value = fin(o.sat, N.sat, 0, 2); u.uVib.value = fin(o.vib, 0, -1, 1);
+      fin3(u.uLift.value, o.lift, N.lift, -0.2, 0.3); fin3(u.uGain.value, o.gain, N.gain, 0.5, 1.5);
+      const gm = u.uGam.value; fin3(gm, o.gamma, N.gamma, 0.5, 2); gm.set(1 / gm.x, 1 / gm.y, 1 / gm.z);
+      u.uCon.value = fin(o.contrast, N.contrast, 0, 1); u.uVig.value = fin(o.vignette, N.vignette, 0, 0.6);
+      if (gv) for (const k of GU) { const v = compU[k].value; if (v.isVector3) gv[k].copy(v); else gv[k] = v; }   // in place: no per-frame allocation
+    }
+    let gv = null;
+    // graded uniform values (gv) and the NEUTRAL ones (gn); render() loads one set: other scenes (hangar) stay ungraded
+    const GU = ['uWB', 'uShoulder', 'uShT', 'uHiT', 'uSat', 'uVib', 'uLift', 'uGam', 'uGain', 'uCon', 'uVig'];
+    const snapG = () => { const o = {}; for (const k of GU) { const v = compU[k].value; o[k] = v.clone ? v.clone() : v; } return o; };
+    setGrade(NEUTRAL);
+    const gn = snapG(), gnG = Object.assign({}, G);
+    gv = snapG();
+    function loadG(src) { for (const k of GU) { const v = src[k]; if (v.isVector3) compU[k].value.copy(v); else compU[k].value = v; } }
     // effective config = quality preset + adaptive degrade steps (cheapest visual losses first, before main.js drops resolution):
     //   1: MSAA -> FXAA   2: bloom mip0 at quarter res, one mip less, half the speed-blur taps   3: no lens flare, no speed blur
     let degrade = 0;
@@ -27310,6 +27427,9 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
       getResolutionScale: function () { return resScale; },
       refreshMaterials: refreshMaterials,
       setBloom: function (o) { for (const k in o) if (k in BLOOM) BLOOM[k] = o[k]; },
+      // per-map colour grade (see NEUTRAL above for the fields); null / {} = neutral. Cheap: call it every frame if needed.
+      setGrade: setGrade,
+      GRADE_NEUTRAL: NEUTRAL,
       render: function (dt, fx, scnO, camO) {   // scnO/camO: optional other scene + camera (hangar3d.js)
         const scn = scnO || scene, cam = camO || camera;
         time = (time + (dt || 0)) % 1000;
@@ -27341,6 +27461,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
         const boost = fx && fx.boost01 > 0 ? Math.min(1, fx.boost01) : 0;
         const cloud = fx && fx.cloud01 > 0 ? Math.min(1, fx.cloud01) : 0;
         const ex = renderer.toneMappingExposure || 1;
+        const GG = scnO ? gnG : G;   // grade: main scene only
+        loadG(scnO ? gn : gv);
 
         // 1. scene -> HDR target (fog/sky-white colours swapped to scene-linear equivalents)
         const fog = scn.fog;
@@ -27377,7 +27499,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
         tqBegin(1);
         // 2. bloom: prefilter (threshold + Karis) -> 13-tap downs -> tent ups (additive)
         const L = mips.length;
-        const thr = BLOOM.threshold * (1 - cloud);
+        const thr = BLOOM.threshold * GG.bloomThr * (1 - cloud);
         preMat.uniforms.tSrc.value = sceneRT.texture;
         preMat.uniforms.uSrcScale.value.set(sw / W, sh / H);
         preMat.uniforms.uTexel.value.set(1 / W, 1 / H);
@@ -27416,9 +27538,9 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
         cu.tScene.value = sceneRT.texture; cu.tBloom.value = mips[0].texture;
         cu.uSceneScale.value.set(sw / W, sh / H); cu.uSceneTexel.value.set(1 / W, 1 / H);
         cu.uBloomScale.value.set(actW[0] / mips[0].width, actH[0] / mips[0].height); cu.uBloomTexel.value.set(1 / mips[0].width, 1 / mips[0].height);
-        cu.uExposure.value = ex;
+        cu.uExposure.value = ex * GG.exposure;
         cu.uBloomNorm.value = 1 / L;
-        cu.uBloomI.value = BLOOM.intensity * (1 + 0.45 * boost) * (1 - 0.7 * cloud);
+        cu.uBloomI.value = BLOOM.intensity * GG.bloom * (1 + 0.45 * boost) * (1 - 0.7 * cloud);
         cu.uTime.value = time; cu.uAspect.value = W / H;
         cu.uSpeed.value = speed; cu.uTrauma.value = trauma; cu.uHit.value = hit; cu.uFlash.value = flash; cu.uBoost.value = boost; cu.uCloud.value = cloud;
         cu.uCA.value = Q.baseCA + 0.011 * trauma;
@@ -27431,6 +27553,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
             const ux = v3.x * 0.5 + 0.5, uy = v3.y * 0.5 + 0.5;
             const out = Math.max(Math.max(-ux, ux - 1), Math.max(-uy, uy - 1));
             sunI = (fx.sunVisible === undefined ? 1 : Math.min(1, fx.sunVisible)) * (out > 0 ? Math.max(0, 1 - out / 0.12) : 1) * (1 - 0.85 * cloud);
+            sunI *= GG.glare;
             cu.uSun.value.set(ux, uy, sunI);
           }
         }
@@ -37005,7 +37128,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
       thr01: on ? st.thr : 0, ab01: on ? st.ab : 0, boosting: on && !!st.boosting, speed: on ? st.speed : 0, aoa: on ? st.aoa : 0,
       gLoad: on ? st.gLoad : 1, drift: on && !!st.drift, onGround: on ? st.onGround : true, inCockpit: VIEWS[view] === 'COCKPIT',
       crashed: !on || !!st.crashed, paused: paused || !!(campaign && campaign.hangarOpen),
-      engineType: spec && spec.tier <= 2 ? 'old' : (plane && plane.nozzles && plane.nozzles.length === 1 ? 'single' : 'twin'),
+      engineType: spec && spec.engineSound ? spec.engineSound : spec && spec.tier <= 2 ? 'old' : (plane && plane.nozzles && plane.nozzles.length === 1 ? 'single' : 'twin'),
       others: othersArr
     });
   }
@@ -37648,9 +37771,9 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
   $('bSetup').addEventListener('click', function () { openSetup(false); });
 
   // ---- map picker (main screen). Clients in a room follow the host map and cannot pick.
-  var MAP_SHORT = { lax: 'City, beach and mountains. Large airport.', fjords: 'Snow mountains and narrow fjords.', cliffs: 'Sea cliffs, stacks, caves and the Cuillin.', canyon: 'Grand Canyon, mesas, arches and slot canyons.', volcano: 'Jungle islands, reefs, sea arches and a volcano.' };
+  var MAP_SHORT = { lax: 'Coastal city, beaches and mountains.', fjords: 'Snow mountains and narrow fjords.', cliffs: 'Sea cliffs, stacks, caves and the Cuillin.', canyon: 'Grand Canyon, mesas, arches and slot canyons.', volcano: 'Jungle islands, reefs, sea arches and a volcano.', halong: 'Karst towers in a jade bay.' };
   var mapBusy = false, mapQueued = null, hostMapId = null;
-  function mapsAll() { return (FL.MAPS && FL.MAPS.length) ? FL.MAPS : [{ id: 'lax', name: 'Los Angeles' }]; }
+  function mapsAll() { return (FL.MAPS && FL.MAPS.length) ? FL.MAPS : [{ id: 'lax', name: 'Pacific Coast' }]; }
   function mapInfo(id) { var l = mapsAll(); for (var i = 0; i < l.length; i++) if (l[i].id === id) return l[i]; return { id: id, name: id }; }
   function inClientRoom() { return !!(net && net.connected && !net.isHost); }
   function renderMaps() {
@@ -40081,7 +40204,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793167322', updShown = false;
+  var BUILD = '1793167762', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
