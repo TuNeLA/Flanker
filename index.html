@@ -1900,11 +1900,11 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     const skyVert = 'varying vec3 vDir;\nvoid main(){ vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }';
     const skyFrag = [
       'uniform vec3 uSunDir; uniform vec3 uZenith; uniform vec3 uHorizon; uniform vec3 uGlow; uniform vec3 uSunCol;',
-      'uniform float uSunDisk; uniform float uWhite; uniform vec3 uWhiteCol; uniform float uGlowW; uniform vec3 uBand; uniform float uBandK;',
+      'uniform float uSunDisk; uniform float uWhite; uniform vec3 uWhiteCol; uniform float uGlowW; uniform vec3 uBand; uniform float uBandK; uniform float uSkyExp;',
       'varying vec3 vDir;',
       'void main(){',
       '  vec3 d = normalize(vDir); float h = d.y;',
-      '  float t = pow(clamp(h,0.0,1.0), 0.5);',
+      '  float t = pow(clamp(h,0.0,1.0), uSkyExp);',
       '  vec3 col = mix(uHorizon, uZenith, t);',
       '  col += uBand * uBandK * exp(-abs(h - 0.06) * 14.0) * step(-0.02, h);',
       '  col = mix(col, uHorizon*0.92, 1.0 - smoothstep(-0.25, 0.0, h));',
@@ -1928,7 +1928,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
           uHorizon: { value: new THREE.Vector3(horizonLin[0], horizonLin[1], horizonLin[2]) },
           uGlow: { value: v3(S.glow) }, uSunCol: { value: v3(S.sunCol || [1.0, 0.93, 0.82]) }, uGlowW: { value: S.glowW || 0.22 },
           uBand: { value: v3(S.band || [0, 0, 0]) }, uBandK: { value: S.band ? 1 : 0 },
-          uSunDisk: { value: diskI }, uWhite: { value: 0 }, uWhiteCol: { value: new THREE.Vector3(WHITE_COL.r, WHITE_COL.g, WHITE_COL.b) }
+          uSunDisk: { value: diskI }, uSkyExp: { value: S.skyExp || 0.5 }, uWhite: { value: 0 }, uWhiteCol: { value: new THREE.Vector3(WHITE_COL.r, WHITE_COL.g, WHITE_COL.b) }
         },
         vertexShader: skyVert, fragmentShader: skyFrag, side: THREE.BackSide, depthTest: false, depthWrite: false, fog: false
       });
@@ -4176,7 +4176,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     // layer colours by height
     const L = (h) => lin(h);
     const LAY = [[RIVER + 4, L(0xb39a76)], [1150, L(0x4a3d38)], [1205, L(0x8d8a6c)], [1445, L(0x9a5038)], [1700, L(0x93492f)], [1790, L(0x9c4630)], [1900, L(0xcdb58c)], [1950, L(0xb8946e)], [2075, L(0xb3a58a)], [2250, L(0xb15c3d)], [2400, L(0xc27a55)], [9000, L(0xd59a72)]];
-    const cRiver = L(0xb39a76), cPlat = L(0x8c8668), cPin = L(0x5d6343), cSoil1 = L(0xb48c62), cSoil2 = L(0xa65f3c), cSoil3 = L(0x6f5a45), cScree = L(0x7a5140), tmp = [0, 0, 0];
+    const cRiver = L(0xb39a76), cPlat = L(0x8c8668), cPin = L(0x5d6343), cSoil1 = L(0xb08055), cSoil2 = L(0x9c5434), cSoil3 = L(0x5f4c3a), cScree = L(0x7a5140), tmp = [0, 0, 0];
     function layerCol(h, o, e, n) {
       let i = 0; while (i < LAY.length - 1 && h > LAY[i][0]) i++;
       const c = LAY[i][1], band = 0.9 + 0.12 * Math.sin(h * 0.21 + 2 * Math.sin(h * 0.047)) + 0.06 * (vnoise(e / 300, n / 300, 7) - 0.5);
@@ -4186,7 +4186,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     }
     const def = {
       name: 'Desert Canyon', region: 'Colorado Plateau, USA', N: 400, noWater: true, lodK: 0.05,
-      sky: { sunAz: 262, sunEl: 8, fog: 0xd8b294, fogD: 0.0000072, hfogA: 0.000008, hfogB: 1 / 1400, zenith: [0.02, 0.055, 0.2], glow: [1.35, 0.6, 0.2], glowW: 0.6, sunCol: [1.0, 0.66, 0.32], disk: 24,
+      sky: { sunAz: 262, sunEl: 8, fog: 0xd8b294, fogD: 0.0000072, hfogA: 0.000008, hfogB: 1 / 1400, zenith: [0.012, 0.05, 0.27], skyExp: 0.3, glow: [1.35, 0.6, 0.2], glowW: 0.6, sunCol: [1.0, 0.66, 0.32], disk: 24,
         sunHex: 0xffb47a, sunI: 2.7, hemiSky: 0x8fa2c8, hemiGround: 0x7a4a34, hemiI: 0.55, white: 0xe6c8b8, envGround: [0.2, 0.1, 0.07] },
       ground: { rockOn: 1, rockTint: 1, rock1: 0x8a4a2e, rock2: 0xc07a4a, rockA: 0.2, rockB: 0.42, faceN: 0.12, strataFn: (h, o) => layerCol(h, o, 0, 0), strataOff: -700, strataSpan: 2560 },
       bases: [BASE, EBASE], raw: raw,
@@ -4203,7 +4203,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
           const v1 = fbm(e / 1200 + 3, n / 1200, 3, 673), v2 = fbm(e / 260, n / 260, 2, 675);
           mix3(tmp, cSoil1, cSoil2, sstep(0.35, 0.65, v1)); mix3(tmp, tmp, cSoil3, sstep(0.55, 0.75, v2) * 0.6);
           if (h > 1150 && h < 1215) mix3(tmp, tmp, L(0x8f8c6e), 0.45);
-          mix3(o, o, tmp, flat * 0.8);
+          mix3(o, o, tmp, flat * 0.95);
           mix3(o, o, cScree, sstep(4, 25, curv) * 0.5);
         }
         return 0;
@@ -9720,7 +9720,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     { // colour: light lip interior fading to black
       const p = duct.attributes.position, col = new Float32Array(p.count * 3), lc = o.lipCol || [0.62, 0.64, 0.65];
       for (let i = 0; i < p.count; i++) {
-        const f = clamp01((p.getZ(i) - S[0] - (S[6] || 0) * (p.getY(i) - S[1])) / depth), k = Math.pow(1 - clamp01(f * 1.8), 1.6);
+        const f = clamp01((p.getZ(i) - S[0] - (S[6] || 0) * (p.getY(i) - S[1])) / depth), k = Math.pow(1 - clamp01(f * 3.2), 2.2);
         col[i * 3] = 0.025 + (lc[0] - 0.025) * k; col[i * 3 + 1] = 0.025 + (lc[1] - 0.025) * k; col[i * 3 + 2] = 0.03 + (lc[2] - 0.03) * k;
       }
       duct.setAttribute('color', new T.BufferAttribute(col, 3));
@@ -9914,19 +9914,31 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     };
   }
   // move decals onto the surface they face (ray from 1.5 m outside along -normal)
-  function snapDecals(list, hit) {
+  // conform decals to the skin: every grid vertex is pushed along the decal normal onto the surface beneath it
+  function snapDecals(list, raw) {
     for (const g of list) {
       const u = g.userData; if (!u || !u.c) continue;
-      const o = [u.c[0] + u.n[0] * 1.5, u.c[1] + u.n[1] * 1.5, u.c[2] + u.n[2] * 1.5];
-      const h = hit(o, [-u.n[0], -u.n[1], -u.n[2]], 3.2);
-      if (h) g.translate(h.x + u.n[0] * 0.014 - u.c[0], h.y + u.n[1] * 0.014 - u.c[1], h.z + u.n[2] * 0.014 - u.c[2]);
+      g.computeBoundingBox();
+      const b = g.boundingBox, m = 1.7, n = u.n;
+      const sub = K.filterTris(raw, (x, y, z) => x > b.min.x - m && x < b.max.x + m && y > b.min.y - m && y < b.max.y + m && z > b.min.z - m && z < b.max.z + m);
+      if (!sub.attributes.position.count) continue;
+      const hit = hitter(sub), p = g.attributes.position, cache = new Map();
+      const along = (q) => { const h = hit([q[0] + n[0] * 1.5, q[1] + n[1] * 1.5, q[2] + n[2] * 1.5], [-n[0], -n[1], -n[2]], 3.2); return h ? (h.x - q[0]) * n[0] + (h.y - q[1]) * n[1] + (h.z - q[2]) * n[2] : null; };
+      const d0c = along(u.c), d0 = d0c === null ? 0 : d0c;
+      for (let i = 0; i < p.count; i++) {
+        const q = [p.getX(i), p.getY(i), p.getZ(i)], k = q.map((v) => Math.round(v * 1000)).join(',');
+        let d = cache.get(k);
+        if (d === undefined) { d = along(q); if (d === null || Math.abs(d - d0) > 0.5) d = d0; cache.set(k, d); }
+        p.setXYZ(i, q[0] + n[0] * (d + 0.012), q[1] + n[1] * (d + 0.012), q[2] + n[2] * (d + 0.012));
+      }
+      g.computeVertexNormals();
     }
   }
   function canopy(P, st) { P.canSt = st; }
 
   // decal plane: cells of the decal atlas: 0 = national marking, 1 = code text, 2 = unit badge, 3 = fin marking
   function decal(cell, w, h, orient, x, y, z) {
-    const g = new T.PlaneGeometry(w, h);
+    const g = new T.PlaneGeometry(w, h, 6, 3);
     const uv = g.attributes.uv;
     for (let i = 0; i < uv.count; i++) uv.setX(i, cell * 0.25 + 0.002 + uv.getX(i) * 0.246);
     if (orient === 'top') g.rotateX(-Math.PI / 2);
@@ -10435,7 +10447,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         [-2.7, 0.58, 0.05, 0.05, 0.05]]);
       const M = P.metal;
       // three-position shock cone (dielectric grey-green) with its sliding base
-      const cone = latheZ([[-8.05, 0.001], [-7.85, 0.09], [-7.55, 0.2], [-7.2, 0.3], [-6.95, 0.35], [-6.6, 0.36], [-6.2, 0.33]], 20); M.push(paint(cone, 0.33, 0.38, 0.33));
+      const cone = latheZ([[-8.05, 0.001], [-7.85, 0.09], [-7.55, 0.2], [-7.2, 0.3], [-6.95, 0.35], [-6.6, 0.36], [-6.2, 0.33]], 20); M.push(paint(cone, 0.2, 0.25, 0.21));
       M.push(paint(cylZ(0.37, 0.37, 0.05, 20, true).translate(0, 0, -6.98), 0.55, 0.57, 0.58)); // cone joint ring
       for (const sx of [-1, 1]) { // blow-in auxiliary intake doors + anti-surge flaps on the nose sides
         M.push(paint(box(0.012, 0.16, 0.34, sx * 0.585, -0.08, -5.6), 0.06, 0.06, 0.065));
@@ -10467,7 +10479,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       [-5.8, 0.05, 0.81, 0.74, 0.72, 2.2, 0, 0.1, 0.45], [-4.5, 0.03, 0.9, 0.75, 0.72, 2.35, 0, 0.15, 0.4], [-3.0, 0.0, 1.1, 0.71, 0.66, 2.5, 0, 0.1, 0.25],
       [-1.5, 0.0, 1.47, 0.64, 0.58, 2.7], [0.5, 0.0, 1.85, 0.56, 0.5, 2.8], [3.0, 0.0, 1.88, 0.52, 0.45, 2.8],
       [5.5, 0.0, 1.55, 0.46, 0.38, 2.6], [7.5, 0.02, 0.95, 0.4, 0.32, 2.3],
-      ...(big ? [[9.2, 0.05, 0.58, 0.38, 0.32, 2.1], [10.8, 0.08, 0.47, 0.34, 0.29, 2], [11.7, 0.1, 0.38, 0.28, 0.24, 2], [12.2, 0.1, 0.2, 0.16, 0.13, 2], [12.35, 0.1, 0.01, 0.01, 0.01, 2]]
+      ...(big ? [[9.2, 0.05, 0.56, 0.37, 0.31, 2.1], [10.5, 0.08, 0.42, 0.31, 0.27, 2], [11.3, 0.1, 0.3, 0.23, 0.2, 2], [11.6, 0.1, 0.14, 0.11, 0.1, 2], [11.68, 0.1, 0.01, 0.01, 0.01, 2]]
         : [[9.2, 0.05, 0.5, 0.33, 0.27, 2.1], [10.6, 0.08, 0.32, 0.25, 0.22, 2], [11.2, 0.1, 0.18, 0.14, 0.12, 2], [11.35, 0.1, 0.01, 0.01, 0.01, 2]]),
     ], 34, 3, 0));
     // dorsal spine
@@ -10480,7 +10492,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       P.body.push(loft(nac, 24, 3, sx * 1.35));
       intake(P, nac[0], sx * 1.35, { lip: 0.045, depth: 2.6, shrink: 0.82, dy: 0.25, lipCol: [0.6, 0.63, 0.66] });
       // variable compression ramp under the upper lip + boundary-layer bleed slot behind it
-      P.metal.push(plateYZ([[-4.52, -0.36], [-2.6, -0.62], [-2.6, -0.66], [-4.52, -0.4]], sx * 1.35, 0.84, [0.42, 0.45, 0.47]));
+      P.metal.push(plateYZ([[-4.52, -0.36], [-2.6, -0.62], [-2.6, -0.66], [-4.52, -0.4]], sx * 1.35, 0.84, [0.2, 0.21, 0.22]));
       // intake louvres (auxiliary inlets / FOD grids) on the nacelle undersides
       for (let k = 0; k < 5; k++) P.metal.push(paint(box(0.62, 0.02, 0.06, sx * 1.35, -1.38 + k * 0.006, -3.35 + k * 0.17), 0.06, 0.06, 0.065));
     }
@@ -10516,18 +10528,18 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     // GSh-30-1 gun port in the right LERX root
     M.push(paint(cylZ(0.07, 0.06, 0.4, 8).translate(1.15, 0.1, -5.25), 0.25, 0.26, 0.27), paint(cylZ(0.035, 0.035, 0.05, 8).translate(1.15, 0.1, -5.3), 0.02, 0.02, 0.02));
     // tail stinger: chute / flare tip + arrestor hook under it
-    M.push(paint(cylZ(0.16, 0.12, 0.4, 10, false).translate(0, 0.1, big ? 12.0 : 11.0), 0.25, 0.27, 0.3));
-    M.push(paint(box(0.06, 0.06, 1.3, 0, -0.18, big ? 10.4 : 9.9).rotateX(-0.06), 0.3, 0.3, 0.3), paint(box(0.12, 0.1, 0.12, 0, -0.24, big ? 11.0 : 10.5), 0.85, 0.75, 0.1));
+    M.push(paint(cylZ(big ? 0.2 : 0.16, big ? 0.15 : 0.12, 0.4, 10, false).translate(0, 0.1, big ? 11.3 : 11.0), 0.25, 0.27, 0.3));
+    M.push(paint(box(0.06, 0.06, 1.3, 0, -0.18, 9.9).rotateX(-0.06), 0.3, 0.3, 0.3), paint(box(0.12, 0.1, 0.12, 0, -0.24, 10.5), 0.85, 0.75, 0.1));
     for (const sx of [-1, 1]) {
       store(P.stores, 'r73', sx * 7.27, -0.16, 4.5);
       store(P.stores, 'r77', sx * 4.0, -0.6, 3.0, 0.3);
       store(P.stores, 'r73', sx * 5.55, -0.52, 3.9, 0.26);
     }
     // stars on both fins (both faces), bort number on the intakes, Guards badge under the windscreen
-    for (const sx of [-1, 1]) for (const ob of [-1, 1]) P.decals.push(decal(0, 1.4, 1.4, ob > 0 ? 'right' : 'left', sx * 2.2 + ob * 0.115, 2.0, 7.95));
+    for (const sx of [-1, 1]) for (const ob of [-1, 1]) P.decals.push(decal(0, 1.35, 1.35, ob > 0 ? 'right' : 'left', sx * 2.2 + ob * 0.115, 1.95, 7.7));
     for (const sx of [-1, 1]) P.decals.push(decal(0, 1.5, 1.5, 'top', sx * 5.6, 0.0, 4.1), decal(0, 1.5, 1.5, 'bottom', sx * 5.6, -0.2, 4.1));
     P.decals.push(decal(1, 1.6, 0.8, 'right', 1.935, -0.8, -2.7), decal(1, 1.6, 0.8, 'left', -1.935, -0.8, -2.7));
-    if (o.flag) for (const sx of [-1, 1]) for (const ob of [-1, 1]) P.decals.push(decal(3, 0.75, 0.75, ob > 0 ? 'right' : 'left', sx * 2.2 + ob * 0.115, 3.0, 8.6));
+    if (o.flag) for (const sx of [-1, 1]) for (const ob of [-1, 1]) P.decals.push(decal(3, 0.75, 0.75, ob > 0 ? 'right' : 'left', sx * 2.2 + ob * 0.11, 3.0, 8.3));
     for (const ob of [-1, 1]) P.decals.push(decal(2, 0.5, 0.5, ob > 0 ? 'right' : 'left', ob * 0.8, 0.15, -7.1));
   }
   const FLANKER_SPEC = {
@@ -10547,7 +10559,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
 
   // ---------------------------------------------------------------- Su-27S Flanker-B
   DEFS.su27 = Object.assign({}, FLANKER_SPEC, {
-    cockpitStyle: 'ru_mixed', seed: 27, len: [-11.2, 11.5],
+    cockpitStyle: 'ru_mixed', seed: 27, len: [-11.5, 12.0],
     // VVS three-tone blue-grey "Flanker" camouflage, pale blue underside, dark radome, blue bort number with white outline
     liv: { pattern: 'blotch', base: '#a9bccb', tones: ['#7d97ad', '#5a728a'], blot: [[1.5, 0.9, 2.3], [0.85, 0.7, 1.9]], aspect: 1.7, under: '#c6d3dc', radome: '#48535a' },
     marks: { badge: 'guards', star: 'soviet' },
@@ -10557,7 +10569,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   });
   // ---------------------------------------------------------------- Su-35S Flanker-E
   DEFS.su35 = Object.assign({}, FLANKER_SPEC, {
-    cockpitStyle: 'ru_glass', seed: 35, len: [-12, 12.6], rudderBrake: true,
+    cockpitStyle: 'ru_glass', seed: 35, len: [-11.5, 12.0], rudderBrake: true,
     // VKS two-tone "shark" scheme: pale grey-blue with sharp dark blue-grey splinters, dark radome, Russian flag on the fins
     liv: { pattern: 'splinter', base: '#a3b4c2', cols: [null, '#60758a'], weights: [0.58, 0.42], cell: 2.0, squash: 1.3, under: '#bcc9d3', radome: '#353c43' },
     marks: { fin: 'flag', star: 'russian' },
@@ -10601,7 +10613,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       for (const sx of [-1, 1]) {
         P.body.push(loft(nac, 14, 3, sx * 1.55, true));
         intake(P, nac[0], sx * 1.55, { lip: 0.035, depth: 2.4, shrink: 0.8, dy: 0.1, lipCol: [0.55, 0.6, 0.6] });
-        P.metal.push(plateYZ([[-3.62, -0.06], [-2.2, -0.3], [-2.2, -0.34], [-3.62, -0.1]], sx * 1.55, 0.9, [0.4, 0.44, 0.45]));
+        P.metal.push(plateYZ([[-3.62, -0.06], [-2.2, -0.3], [-2.2, -0.34], [-3.62, -0.1]], sx * 1.55, 0.9, [0.2, 0.21, 0.22]));
       }
       // wing with blended LEVCON (front part), clipped tip, forward-swept trailing edge
       const WING = [[1.4, -5.6], [2.55, -2.2], [2.75, -1.4], [7.05, 3.3], [7.05, 4.7], [4.4, 5.5], [2.3, 6.5], [1.4, 6.5]];
@@ -10665,7 +10677,6 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         [-1.6, 0.73, 0.3, 0.3, 0.1], [-1.2, 0.73, 0.05, 0.05, 0.05]]);
       const M = P.metal;
       M.push(paint(box(0.035, 0.9, 1.6, 0, 0, -4.05), 0.32, 0.33, 0.34)); // intake splitter (nose-wheel bay / duct divider)
-      M.push(paint(cylZ(0.025, 0.01, 0.9, 6, false).translate(0.62, 0.0, -5.6), 0.7, 0.7, 0.72)); // pitot on the right nose
       M.push(paint(box(0.06, 0.06, 0.6, 0, -0.6, 5.0), 0.3, 0.3, 0.3)); // tail bumper skid
       for (const sx of [-0.25, 0.25]) M.push(paint(box(0.08, 0.08, 0.3, sx, -0.62, -3.9), 0.1, 0.1, 0.1)); // gun ports
       M.push(paint(box(0.42, 0.06, 0.55, 0, 0.92, -1.3), 0.25, 0.25, 0.27)); // canopy rail
@@ -10821,7 +10832,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     nation: 'SE', seed: 39, len: [-7.6, 7.0], hs: 4.3, radomeZ: -6.2,
     frames: [-6.2, -4.6, -2.0, 0.8, 3.4, 5.6],
     // overall Gripen grey (medium grey upper, lighter underside), dark radome, F 7 badge on the intakes, code on the fin
-    liv: { pattern: 'blotch', base: '#8b9398', tones: ['#7f878c', '#969ea2'], blot: [[1.0, 1.0, 2.4], [1.0, 1.0, 2.4]], aspect: 1.8, under: '#aab1b4', radome: '#5d6469' },
+    liv: { pattern: 'blotch', base: '#7b8489', tones: ['#71797e', '#858d92'], blot: [[1.0, 1.0, 2.4], [1.0, 1.0, 2.4]], aspect: 1.8, under: '#9fa6aa', radome: '#575e63' },
     marks: { badge: 'se', wing: 'F 7', badgeCol: '#0d4a86' },
     code: { text: '211', color: '#3c4246', stroke: null },
     engines: [{ x: 0, y: 0, z: 6.3, r: 0.46, len: 0.55 }],
@@ -10890,8 +10901,10 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     fins: [[0, 0.9, 5.9]],
     nation: 'US', lowVis: true, seed: 5, len: [-7.4, 6.9], hs: 4.1, radomeZ: -6.6,
     frames: [-6.6, -5.2, -3.6, -1.6, 0.6, 2.8, 4.9],
-    liv: { pattern: 'mottle', base: '#8c98a2', tones: ['#6e7b86', '#a3adb4', '#7c8893'], under: '#b6bec3', radome: '#33383d' },
-    code: { text: '01', color: '#3c4248', stroke: null },
+    // Nellis aggressor "desert snake": tan / brown / sand bands wrapped over the top, light under, Soviet-style red number
+    liv: { pattern: 'snake', base: '#cdb791', tones: ['#7a5a3b', '#a8895d', null], band: 1.35, under: '#cfcabc', radome: '#3b3a34' },
+    marks: { badge: 'us', sq: '64 AGRS', badgeCol: '#c8a02a', fin: 'tail', tail: 'WA', serial: 'AF 74-1534', tailCol: '#2b2b27' },
+    code: { text: '01', color: '#c8101c', stroke: '#ffffff' },
     engines: [{ x: -0.3, y: -0.02, z: 6.45, r: 0.27, len: 0.45 }, { x: 0.3, y: -0.02, z: 6.45, r: 0.27, len: 0.45 }],
     wingtips: [[-4.1, -0.18, 1.45], [4.1, -0.18, 1.45]], navs: [[-3.86, -0.15, 1.25], [3.86, -0.15, 1.25]],
     // gear: nose retracts forward; mains on the wing roots fold inward into the fuselage
@@ -10901,14 +10914,20 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     ],
     cockpitStyle: 'se_analog', canTop: 1.25,
     build(P) {
+      // "shark nose": flattened, chined radome and forebody, area-ruled centre fuselage
       P.body.push(loft([
-        [-7.3, -0.06, 0.01, 0.01, 0.01, 2], [-7.0, -0.06, 0.1, 0.1, 0.09, 2], [-6.0, -0.03, 0.27, 0.27, 0.25, 2], [-4.8, 0.0, 0.41, 0.43, 0.38, 2],
-        [-3.6, 0.0, 0.5, 0.52, 0.47, 2.1], [-2.4, 0, 0.6, 0.54, 0.52, 2.3], [-1.0, 0, 0.72, 0.53, 0.54, 2.5], [1.5, 0, 0.76, 0.5, 0.52, 2.6],
+        [-7.3, -0.06, 0.01, 0.01, 0.01, 2], [-7.0, -0.06, 0.11, 0.08, 0.07, 2, 0, 0.5, 0.9], [-6.0, -0.03, 0.3, 0.22, 0.2, 2, 0, 0.45, 0.85], [-4.8, 0.0, 0.43, 0.41, 0.36, 2, 0, 0.3, 0.6],
+        [-3.6, 0.0, 0.5, 0.52, 0.47, 2.1, 0, 0.1, 0.3], [-2.4, 0, 0.6, 0.54, 0.52, 2.3], [-1.0, 0, 0.72, 0.53, 0.54, 2.5], [1.5, 0, 0.76, 0.5, 0.52, 2.6],
         [4.0, 0.0, 0.72, 0.46, 0.46, 2.5], [5.8, 0.0, 0.66, 0.38, 0.38, 2.4], [6.5, 0.0, 0.64, 0.34, 0.34, 2.4],
       ], 28, 3, 0));
       P.body.push(loft([[-2.0, 0.4, 0.22, 0.2, 0.1], [0.5, 0.45, 0.3, 0.18, 0.1], [3.5, 0.4, 0.24, 0.12, 0.1], [5.4, 0.35, 0.08, 0.05, 0.05]], 14, 3, 0));
-      const trunk = [[-2.95, -0.1, 0.16, 0.3, 0.32, 3, 0], [-2.2, -0.1, 0.25, 0.36, 0.38, 3, 0], [0, -0.1, 0.24, 0.34, 0.36, 2.5, 0], [2.0, -0.08, 0.05, 0.2, 0.2, 2, 0]];
-      P.body.push(loft(trunk, 14, 3, 0.62), loft(trunk, 14, 3, -0.62));
+      // small D-shaped side intakes behind the cockpit, standing off the fuselage behind splitter plates
+      const trunk = [[-2.95, -0.1, 0.17, 0.3, 0.32, 3.2, 0.06, 0, 0.3], [-2.2, -0.1, 0.24, 0.36, 0.38, 3, 0], [0, -0.1, 0.24, 0.34, 0.36, 2.5, 0], [2.0, -0.08, 0.05, 0.2, 0.2, 2, 0]];
+      for (const sx of [-1, 1]) {
+        P.body.push(loft(trunk, 14, 3, sx * 0.76));
+        intake(P, trunk[0], sx * 0.76, { lip: 0.03, depth: 1.6, shrink: 0.8, lipCol: [0.6, 0.6, 0.58] });
+        P.metal.push(plateYZ([[-3.15, 0.22], [-2.4, 0.22], [-2.0, -0.1], [-2.4, -0.44], [-3.15, -0.44]], sx * 0.575, 0.022, [0.45, 0.42, 0.36]));
+      }
       // thin trapezoid wing (24 deg LE) with small LERX, low on the fuselage
       P.body.push(...wingPair([[0.55, -2.7], [0.8, -0.55], [3.86, 0.95], [3.86, 1.65], [0.8, 3.0], [0.55, 3.0]], 0.12, 0.035, -0.2, (ax) => 1 - 0.5 * clamp01((ax - 0.8) / 3.1)));
       P.body.push(fin([[3.1, 0.38], [6.0, 0.38], [6.6, 1.95], [5.85, 1.95]], 0.1, 0.035, 0, 0.5));
@@ -10922,16 +10941,19 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         [-2.3, 0.44, 0.25, 0.24, 0.1], [-1.9, 0.44, 0.05, 0.05, 0.05]]);
       const M = P.metal;
       for (const sx of [-1, 1]) {
-        const inl = new T.PlaneGeometry(0.36, 0.6); inl.rotateY(Math.PI); inl.translate(sx * 0.62, -0.1, -2.95); M.push(paint(nonIdx(inl), 0.01, 0.01, 0.012));
         M.push(paint(box(0.08, 0.1, 1.6, sx * 3.98, -0.2, 1.3), 0.55, 0.57, 0.58)); // wingtip launch rail
         M.push(paint(box(0.05, 0.05, 0.25, sx * 0.3, 0.12, -5.95), 0.1, 0.1, 0.1)); // gun ports
       }
       M.push(paint(cylZ(0.025, 0.01, 0.8, 6, false).translate(0, -0.06, -8.0), 0.7, 0.7, 0.72));
+      M.push(paint(box(0.05, 0.05, 1.0, 0, -0.42, 5.4).rotateX(-0.06), 0.3, 0.3, 0.3), paint(box(0.09, 0.08, 0.09, 0, -0.45, 5.9), 0.85, 0.75, 0.1)); // arrestor hook
+      M.push(paint(cylZ(0.1, 0.08, 0.35, 10, false).translate(0, 0.2, 6.25), 0.2, 0.2, 0.21)); // drag-chute cone between the nozzles
       for (const sx of [-1, 1]) M.push(paint(cylZ(0.29, 0.28, 0.3, 14, true).translate(sx * 0.3, -0.02, 6.2), ...TIT));
       for (const sx of [-1, 1]) store(P.stores, 'rb24', sx * 4.0, -0.32, 1.35);
       for (const sx of [-1, 1]) P.decals.push(decal(0, 0.9, 0.9, 'top', sx * 2.6, -0.1, 1.6), decal(0, 0.9, 0.9, 'bottom', sx * 2.6, -0.3, 1.6));
-      for (const o of [-1, 1]) P.decals.push(decal(1, 0.9, 0.45, o > 0 ? 'right' : 'left', o * 0.07, 1.3, 5.3));
+      for (const o of [-1, 1]) P.decals.push(decal(1, 0.8, 0.4, o > 0 ? 'right' : 'left', o * 0.45, 0.05, -5.3));
+      for (const o of [-1, 1]) P.decals.push(decal(3, 0.95, 0.95, o > 0 ? 'right' : 'left', o * 0.07, 1.25, 5.4));
       for (const o of [-1, 1]) P.decals.push(decal(0, 0.7, 0.7, o > 0 ? 'right' : 'left', o * 0.75, 0.05, 0.2));
+      for (const o of [-1, 1]) P.decals.push(decal(2, 0.42, 0.42, o > 0 ? 'right' : 'left', o * 0.62, 0.12, -1.0));
     },
   };
 
@@ -10941,7 +10963,9 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     fins: [[1.45, 1.0, 6.6], [-1.45, 1.0, 6.6]],
     nation: 'RU', seed: 29, len: [-8.9, 7.9], hs: 5.8, radomeZ: -7.6,
     frames: [-7.6, -6.2, -4.4, -2.4, 0.2, 2.6, 5.0],
-    liv: { pattern: 'mottle', base: '#9aa59e', tones: ['#7b8a83', '#b0b9b3', '#6c7c75'], under: '#b9c3c8', radome: '#d6d8d3' },
+    // Soviet 9.12 grey / grey-green blotches, light blue-grey underside, off-white radome and dielectric panels, Guards badge
+    liv: { pattern: 'blotch', base: '#aab3ae', tones: ['#73847c', '#8b9892'], blot: [[1.3, 0.9, 2.1], [0.7, 0.6, 1.4]], aspect: 1.6, under: '#bac7cd', radome: '#d7d9d2' },
+    marks: { badge: 'guards', star: 'soviet' },
     code: { text: '07', color: '#c8101c', stroke: '#ffffff' },
     engines: [{ x: -1.1, y: -0.22, z: 7.25, r: 0.47, len: 0.9 }, { x: 1.1, y: -0.22, z: 7.25, r: 0.47, len: 0.9 }],
     wingtips: [[-5.7, 0.02, 3.2], [5.7, 0.02, 3.2]], navs: [[-5.66, 0.08, 2.9], [5.66, 0.08, 2.9]],
@@ -10958,9 +10982,17 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         [2.6, 0, 1.4, 0.4, 0.26, 3], [5.0, 0, 0.95, 0.34, 0.24, 2.6], [6.8, 0.04, 0.4, 0.24, 0.2, 2], [7.4, 0.04, 0.03, 0.03, 0.03, 2],
       ], 30, 3, 0));
       P.body.push(loft([[-4.1, 0.5, 0.28, 0.24, 0.1], [-2.6, 0.45, 0.44, 0.24, 0.1], [1.0, 0.4, 0.4, 0.2, 0.1], [4.5, 0.34, 0.25, 0.12, 0.1], [6.2, 0.3, 0.05, 0.04, 0.04]], 16, 3, 0));
-      const nac = [[-3.45, -0.78, 0.44, 0.38, 0.48, 7, -0.6], [-2.6, -0.72, 0.5, 0.44, 0.52, 6, -0.2], [-1.0, -0.62, 0.55, 0.48, 0.55, 4, 0],
+      // raked box intakes under the LERX (lower lip forward, ramp + FOD door at the top), round engine bays behind
+      const nac = [[-3.45, -0.8, 0.42, 0.37, 0.47, 8, 0.36], [-2.8, -0.75, 0.48, 0.42, 0.5, 6.5, 0.12], [-1.0, -0.62, 0.55, 0.48, 0.55, 4, 0],
         [2.0, -0.46, 0.56, 0.5, 0.55, 3, 0], [5.0, -0.32, 0.54, 0.5, 0.52, 2.4, 0], [7.25, -0.22, 0.49, 0.49, 0.49, 2, 0]];
-      P.body.push(loft(nac, 22, 3, 1.1), loft(nac, 22, 3, -1.1));
+      for (const sx of [-1, 1]) {
+        P.body.push(loft(nac, 22, 3, sx * 1.1));
+        intake(P, nac[0], sx * 1.1, { lip: 0.04, depth: 2.2, shrink: 0.82, dy: 0.2, lipCol: [0.6, 0.64, 0.64] });
+        P.metal.push(plateYZ([[-3.28, -0.44], [-1.9, -0.66], [-1.9, -0.7], [-3.28, -0.48]], sx * 1.1, 0.78, [0.2, 0.21, 0.22]));
+        for (let k = 0; k < 6; k++) P.metal.push(paint(box(0.42, 0.012, 0.07, sx * 1.35, 0.135, -3.2 + k * 0.16), 0.08, 0.08, 0.085)); // LERX auxiliary-intake louvres
+      }
+      const VF29 = [[5.5, -0.62], [7.0, -0.62], [7.05, -1.12], [6.4, -1.12]]; // ventral fins under the nacelles
+      P.body.push(fin(VF29, 0.05, 0.02, 1.5, 0), fin(VF29, 0.05, 0.02, -1.5, 0));
       // LERX blending into the 42 deg wing
       P.body.push(...wingPair([[0.6, -5.4], [1.15, -3.4], [1.75, -1.7], [2.55, -0.35], [5.7, 2.55], [5.7, 3.55], [3.4, 4.1], [1.9, 4.5], [0.6, 4.5]], 0.13, 0.045, 0.05, (ax) => 1 - 0.55 * clamp01((ax - 1.5) / 4.2)));
       const boom = [[3.0, -0.05, 0.05, 0.05, 0.05, 3], [3.8, -0.05, 0.2, 0.17, 0.17, 3], [7.2, -0.05, 0.2, 0.17, 0.17, 3], [7.7, -0.05, 0.03, 0.03, 0.03, 2]];
@@ -10977,17 +11009,18 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         [-3.5, 0.53, 0.3, 0.32, 0.1], [-3.0, 0.52, 0.05, 0.05, 0.05]]);
       const M = P.metal;
       for (const sx of [-1, 1]) {
-        const inl = new T.PlaneGeometry(0.82, 0.7); inl.rotateY(Math.PI); inl.rotateX(-0.5); inl.translate(sx * 1.1, -0.86, -3.4);
-        M.push(paint(nonIdx(inl), 0.01, 0.01, 0.012));
         M.push(paint(cylZ(0.51, 0.5, 0.4, 16, true).translate(sx * 1.1, -0.22, 6.9), ...TIT));
       }
       M.push(paint(cylZ(0.03, 0.012, 1.0, 6, false).translate(0, -0.2, -9.6), 0.7, 0.7, 0.72));
-      M.push(paint(sphere(0.14, 0.2, 0.7, -6.6), 0.75, 0.8, 0.85)); // IRST ball
+      M.push(paint(cylZ(0.15, 0.17, 0.22, 12, false).translate(0.2, 0.58, -6.75), 0.3, 0.32, 0.34), paint(sphere(0.14, 0.2, 0.7, -6.6), 0.55, 0.62, 0.7)); // KOLS IRST ball
+      for (const sx of [-1, 1]) M.push(paint(cylZ(0.018, 0.008, 0.4, 5, false).translate(sx * 0.42, -0.12, -7.6), 0.7, 0.7, 0.72)); // side pitots
+      M.push(paint(cylZ(0.12, 0.1, 0.3, 10, false).translate(0, 0.04, 7.35), 0.22, 0.23, 0.24)); // chute fairing tip
       M.push(paint(box(0.06, 0.06, 0.3, -1.3, 0.12, -3.25), 0.08, 0.08, 0.08)); // gun port (left LERX)
       for (const sx of [-1, 1]) { store(P.stores, 'r73', sx * 4.4, -0.3, 2.7, 0.24); store(P.stores, 'r77', sx * 3.45, -0.3, 2.1, 0.26); }
       for (const sx of [-1, 1]) for (const o of [-1, 1]) P.decals.push(decal(0, 1.2, 1.2, o > 0 ? 'right' : 'left', sx * 1.5 + o * 0.1, 1.35, 5.4));
       for (const sx of [-1, 1]) P.decals.push(decal(0, 1.1, 1.1, 'top', sx * 4.0, 0.12, 3.0), decal(0, 1.1, 1.1, 'bottom', sx * 4.0, -0.06, 3.0));
       for (const o of [-1, 1]) P.decals.push(decal(1, 1.2, 0.6, o > 0 ? 'right' : 'left', o * 0.6, -0.05, -6.2));
+      for (const o of [-1, 1]) P.decals.push(decal(2, 0.45, 0.45, o > 0 ? 'right' : 'left', o * 0.66, 0.1, -5.0));
     },
   };
 
@@ -10997,24 +11030,32 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     fins: [[0, 1.0, 5.8]],
     nation: 'US', lowVis: true, seed: 16, len: [-7.6, 7.3], hs: 5.0, radomeZ: -6.4, goldCanopy: true,
     frames: [-6.4, -5.0, -2.6, -0.2, 2.2, 4.6],
-    liv: { pattern: 'mottle', base: '#8e959c', tones: ['#7a8189', '#a2a8ad', '#858c93'], under: '#a9afb4', radome: '#7c838a' },
-    code: { text: '90', color: '#4b5157', stroke: null },
+    // USAF two-tone grey: FS 36118 gunship grey on the spine and inner wings, FS 36270 elsewhere on top, FS 36375 underneath
+    liv: { pattern: 'patches', base: '#858c93', under: '#a5aaaf', radome: '#7b8288',
+      patches: [{ c: '#585e64', p: [[-1.3, 0], [-1.3, 0.38], [0.6, 0.9], [4.6, 0.95], [6.9, 0.55], [6.9, 0]] },
+        { c: '#585e64', p: [[1.15, 1.9], [0.85, 2.5], [2.9, 4.2], [3.6, 4.1], [3.4, 1.9]] }] },
+    marks: { badge: 'us', sq: '52 FW', badgeCol: '#c8a02a', fin: 'tail', tail: 'SP', serial: 'AF 91-338', tailCol: '#41474d' },
+    code: { text: '338', color: '#4b5157', stroke: null },
     engines: [{ x: 0, y: 0.0, z: 6.6, r: 0.55, len: 0.75 }],
     wingtips: [[-4.98, -0.02, 2.4], [4.98, -0.02, 2.4]], navs: [[-4.7, 0.03, 2.0], [4.7, 0.03, 2.0]],
     // gear: nose wheel under the intake retracts backward; mains retract forward into the fuselage, wheels turn flat
     gearSpec: [
-      { x: 0, y: -0.85, z: -3.6, r: 0.24, w: 0.16, nose: true, fold: [1, 0, 0], ang: -Math.PI / 2, lift: 0.08, sr: 0.065 },
+      { x: 0, y: -1.12, z: -3.6, r: 0.24, w: 0.16, nose: true, fold: [1, 0, 0], ang: -Math.PI / 2, lift: 0.08, sr: 0.065 },
       { x: 1.15, y: -0.5, z: 0.7, r: 0.36, w: 0.22, fold: [1, 0, 0], ang: Math.PI / 2, twist: Math.PI / 2, lift: 0.2, sr: 0.085, well: [-0.25, 0.35, -1.5, 0.25] },
     ],
     cockpitStyle: 'us_glass', canTop: 1.1,
     build(P) {
+      // chined forebody: the chines run aft from the radome into the LERX
       P.body.push(loft([
-        [-7.5, -0.06, 0.01, 0.01, 0.01, 2], [-7.1, -0.05, 0.17, 0.17, 0.16, 2], [-6.2, -0.01, 0.37, 0.37, 0.34, 2], [-5.0, 0.02, 0.5, 0.52, 0.46, 2.1],
-        [-3.8, 0.02, 0.6, 0.55, 0.48, 2.3], [-2.5, 0, 0.74, 0.5, 0.5, 2.5], [-1.0, 0, 0.8, 0.48, 0.55, 2.6], [1.5, 0, 0.8, 0.46, 0.56, 2.6],
+        [-7.5, -0.06, 0.01, 0.01, 0.01, 2], [-7.1, -0.05, 0.17, 0.17, 0.15, 2, 0, 0.1, 0.4], [-6.2, -0.01, 0.38, 0.37, 0.32, 2, 0, 0.2, 0.7], [-5.0, 0.02, 0.52, 0.52, 0.44, 2.1, 0, 0.25, 0.85],
+        [-3.8, 0.02, 0.62, 0.55, 0.46, 2.3, 0, 0.25, 0.8], [-2.5, 0, 0.75, 0.5, 0.5, 2.5, 0, 0.15, 0.4], [-1.0, 0, 0.8, 0.48, 0.55, 2.6], [1.5, 0, 0.8, 0.46, 0.56, 2.6],
         [4.0, 0, 0.72, 0.46, 0.52, 2.4], [5.8, 0, 0.6, 0.48, 0.5, 2.1], [6.6, 0, 0.56, 0.5, 0.5, 2],
       ], 28, 3, 0));
-      // chin intake duct
-      P.body.push(loft([[-4.45, -0.74, 0.42, 0.32, 0.3, 5, -0.25], [-3.6, -0.72, 0.48, 0.38, 0.36, 4, 0], [-1.5, -0.64, 0.5, 0.4, 0.4, 3, 0], [1.5, -0.5, 0.44, 0.4, 0.38, 2.6, 0], [3.4, -0.38, 0.08, 0.2, 0.2, 2, 0]], 18, 3, 0));
+      // chin intake ("smile" mouth, upper lip forward) hanging below the forebody on a diverter, duct blending aft
+      const CH = [[-4.55, -0.86, 0.5, 0.27, 0.38, 2.8, -0.3, 0, 0.1], [-3.6, -0.82, 0.52, 0.33, 0.4, 2.8, 0], [-1.5, -0.7, 0.52, 0.42, 0.4, 2.6, 0], [1.5, -0.52, 0.44, 0.42, 0.38, 2.4, 0], [3.4, -0.38, 0.08, 0.2, 0.2, 2, 0]];
+      P.body.push(loft(CH, 20, 3, 0));
+      intake(P, CH[0], 0, { lip: 0.04, depth: 2.4, shrink: 0.82, dy: 0.25, lipCol: [0.64, 0.66, 0.68] });
+      P.body.push(plateYZ([[-4.4, -0.42], [-2.4, -0.4], [-2.4, -0.62], [-4.25, -0.62]], 0, 0.1)); // diverter
       P.body.push(loft([[-1.0, 0.42, 0.2, 0.18, 0.1], [1.5, 0.42, 0.34, 0.2, 0.1], [4.5, 0.42, 0.3, 0.14, 0.1], [6.0, 0.42, 0.1, 0.06, 0.06]], 14, 3, 0));
       // blended LERX + 40 deg cropped-delta wing
       P.body.push(...wingPair([[0.6, -4.6], [1.0, -3.0], [1.5, -1.6], [2.1, -0.3], [4.72, 1.9], [4.72, 2.85], [0.6, 3.35]], 0.12, 0.04, 0.0, (ax) => 1 - 0.55 * clamp01((ax - 1.0) / 3.7)));
@@ -11031,14 +11072,19 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       canopy(P, [[-6.0, 0.4, 0.05, 0.05, 0.05], [-5.5, 0.42, 0.36, 0.36, 0.1], [-4.6, 0.45, 0.48, 0.6, 0.1], [-3.6, 0.46, 0.47, 0.62, 0.1],
         [-2.6, 0.45, 0.36, 0.45, 0.1], [-1.6, 0.44, 0.2, 0.22, 0.1], [-1.0, 0.44, 0.05, 0.05, 0.05]]);
       const M = P.metal;
-      M.push(paint(plane(0.82, 0.58, 0, -0.76, -4.42, '-z'), 0.01, 0.01, 0.012));
-      M.push(paint(box(0.86, 0.04, 0.15, 0, -0.45, -4.45), 0.3, 0.32, 0.34)); // intake lip
+      M.push(paint(box(0.05, 0.05, 1.1, 0, -0.42, 6.0).rotateX(-0.06), 0.3, 0.3, 0.3), paint(box(0.1, 0.08, 0.1, 0, -0.46, 6.55), 0.85, 0.75, 0.1)); // arrestor hook
+      for (const sx of [-1, 1]) {
+        M.push(paint(box(0.012, 0.13, 0.05, sx * 0.22, 0.46, -6.1).rotateZ(sx * 0.6), 0.12, 0.12, 0.13)); // IFF "bird slicer" blades
+        M.push(paint(cylZ(0.016, 0.008, 0.32, 5, false).translate(sx * 0.48, -0.1, -6.0), 0.7, 0.7, 0.72)); // AoA / pitot probes
+      }
+      M.push(paint(cylZ(0.07, 0.07, 0.6, 8).translate(0, 2.42, 6.35), 0.32, 0.34, 0.36)); // fin-tip ECM / light fairing
       for (const sx of [-1, 1]) M.push(paint(box(0.08, 0.1, 1.8, sx * 4.86, -0.02, 2.25), 0.55, 0.57, 0.58));
       M.push(paint(cylZ(0.58, 0.56, 0.35, 18, true).translate(0, 0, 6.3), ...TIT));
       M.push(paint(box(0.08, 0.06, 0.25, -0.62, 0.28, -3.5), 0.08, 0.08, 0.08)); // M61 port
       for (const sx of [-1, 1]) { store(P.stores, 'rb24', sx * 4.92, -0.12, 2.4); store(P.stores, 'r77', sx * 3.95, -0.1, 2.2, 0.26); }
       for (const sx of [-1, 1]) P.decals.push(decal(0, 0.9, 0.9, 'top', sx * 3.3, 0.06, 2.1), decal(0, 0.9, 0.9, 'bottom', sx * 3.3, -0.12, 2.1));
-      for (const o of [-1, 1]) P.decals.push(decal(1, 1.0, 0.5, o > 0 ? 'right' : 'left', o * 0.08, 1.4, 5.5));
+      for (const o of [-1, 1]) P.decals.push(decal(3, 1.15, 1.15, o > 0 ? 'right' : 'left', o * 0.08, 1.5, 5.6));
+      for (const o of [-1, 1]) P.decals.push(decal(2, 0.4, 0.4, o > 0 ? 'right' : 'left', o * 0.56, -0.62, -2.9));
       for (const o of [-1, 1]) P.decals.push(decal(0, 0.7, 0.7, o > 0 ? 'right' : 'left', o * 0.82, 0.0, 0.8));
     },
   };
@@ -11109,12 +11155,32 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
 
   // ------------------------------------------------------------------ per-type shared cache
   const TC = {};
+  // non-uniform scale z *= k of a geometry (normals use the inverse transpose)
+  function zScaleGeo(g, k) {
+    const p = g.attributes.position, n = g.attributes.normal;
+    for (let i = 0; i < p.count; i++) p.setZ(i, p.getZ(i) * k);
+    if (n) for (let i = 0; i < n.count; i++) { const x = n.getX(i), y = n.getY(i), z = n.getZ(i) / k, l = Math.hypot(x, y, z) || 1; n.setXYZ(i, x / l, y / l, z / l); }
+    return g;
+  }
+  function zScaleP(P, k) { // real overall length: the build's hard-coded layout is scaled along the fuselage axis
+    for (const g of P.body.concat(P.metal)) zScaleGeo(g, k);
+    for (const g of P.decals) { zScaleGeo(g, k); if (g.userData && g.userData.c) g.userData.c[2] *= k; }
+    P.stores = P.stores.map((it) => (it.deferred ? Object.assign({}, it, { z: it.z * k }) : zScaleGeo(it, k)));
+    for (const m of P.movers) {
+      zScaleGeo(m.geo, k); if (m.decal) zScaleGeo(m.decal, k);
+      m.pivot = [m.pivot[0], m.pivot[1], m.pivot[2] * k];
+      if (m.axis) { const a = [m.axis[0], m.axis[1], m.axis[2] * k], l = Math.hypot(...a) || 1; m.axis = a.map((v) => v / l); }
+    }
+    if (P.canSt) P.canSt = P.canSt.map((q) => [q[0] * k].concat(q.slice(1)));
+    for (const st of (P.wrec || []).concat((P.frec || []).map((f) => f.st))) for (const q of st) { q[1] *= k; q[2] *= k; }
+  }
   function buildP(def, k) { // run a jet's build() at tessellation factor k
     const P = { body: [], metal: [], stores: [], decals: [], canopy: [], movers: [] };
     LODK = k; WREC = []; FREC = [];
     SURF = { P, def, wingDone: false, rudders: 0, last: null };
     try { def.build(P); } finally { SURF = null; LODK = 1; }
     P.wrec = WREC; P.frec = FREC; WREC = null; FREC = null;
+    if (def.zk && def.zk !== 1) zScaleP(P, def.zk);
     return P;
   }
   function moversOf(def, list) {
@@ -11175,11 +11241,22 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       if (hb) P.metal.push(paint(blade(hb.y + 0.02, zb - 0.8, -1), 0.2, 0.21, 0.22));
       const hw = hit([0, 8, zb + 2.0], [0, -1, 0], 12);
       if (hw) P.metal.push(paint(cylZ(0.012, 0.005, 0.5, 5).rotateX(-1.2).translate(0, hw.y, zb + 2.0), 0.15, 0.15, 0.16));
+      // static dischargers on the outer wing trailing edges
+      const ws = P.wrec[0];
+      if (ws && ws.length > 2) for (const f of [0.04, 0.16, 0.3]) {
+        const a = ws[ws.length - 1], b = ws[0], sp = a[0] - f * (a[0] - b[0]), t = (sp - a[0]) / (b[0] - a[0] || 1);
+        let i = ws.length - 1; while (i > 0 && ws[i - 1][0] > sp) i--;
+        const q0 = ws[Math.max(0, i - 1)], q1 = ws[i], u = clamp01((sp - q0[0]) / ((q1[0] - q0[0]) || 1)), zt = q0[2] + (q1[2] - q0[2]) * u;
+        for (const sg of [-1, 1]) {
+          const h = hit([sg * sp, 6, zt - 0.06], [0, -1, 0], 12); if (!h || t > 1) continue;
+          P.metal.push(paint(cylZ(0.009, 0.004, 0.2, 4, false).translate(sg * sp, h.y - 0.02, zt - 0.08), 0.1, 0.1, 0.1));
+        }
+      }
     }
     C.hit = hit;
     C.body = raw;
     P.stores = resolveStores(P.stores, hit);
-    snapDecals(P.decals, hit);
+    snapDecals(P.decals, raw);
     C.metal = P.metal.length ? merge(P.metal, false, true) : null;
     C.stores = P.stores.length ? merge(P.stores, false, true) : null;
     C.decals = P.decals.length ? merge(P.decals, true, false) : null;
@@ -11562,18 +11639,30 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   // ------------------------------------------------------------------ paints (campaign.paint(acId): factory | grey | splinter | desert | ace)
   const PAINT_LIV = {
     grey: { pattern: 'mottle', base: '#8e979e', tones: ['#7d868d', '#9ea6ac', '#868f96'], under: '#aab2b7' },
-    splinter: { pattern: 'splinter', cols: ['#9a7a4c', '#55683a', '#2f3e27', '#1c1e1b'], base: '#55683a', under: '#a3a7a5' },
+    splinter: { pattern: 'splinter', cols: ['#9a7a4c', '#55683a', '#2f3e27', '#1c1e1b'], tones: ['#2f3e27', '#9a7a4c', '#1c1e1b'], base: '#55683a', under: '#a3a7a5', cell: 1.7 },
     desert: { pattern: 'mottle', base: '#c2a477', tones: ['#a8875a', '#d4bd94', '#8f7350'], under: '#cdd3d6' },
     ace: { pattern: 'mottle', base: '#26282c', tones: ['#1d1f22', '#5a1216', '#2e3035'], under: '#2a2c30', radome: '#8a1015' },
     gold: { pattern: 'mottle', base: '#c9a13b', tones: ['#b88f2c', '#dcb54d', '#a87f22'], under: '#d8bf72', radome: '#2a2416' },   // medal paint (extras.js: 100 S ranks)
   };
   const PAINT_TINT = { grey: [0.88, 0.9, 0.93], splinter: [0.68, 0.84, 0.52], desert: [1.18, 0.96, 0.68], ace: [0.3, 0.28, 0.32], gold: [1.35, 1.05, 0.45] }; // Su-27 (fx.js livery) tints
+  // a paint variant keeps the jet's own camouflage pattern and swaps its colours (bare-metal jets take the variant's own pattern)
+  function recolour(def, name) {
+    const V = PAINT_LIV[name], L0 = def.liv;
+    if (!L0.pattern || L0.pattern === 'metal' || V.pattern === 'splinter') return V; // 'splinter' paint = the full Swedish four-colour scheme
+    const t = V.tones, pick = (i) => t[Math.max(0, Math.min(i, t.length - 1))];
+    const L = Object.assign({}, L0, { base: V.base, under: V.under, radome: V.radome || L0.radome, underTones: null });
+    if (L0.cols) L.cols = L0.cols.map((c, i) => (c == null ? null : i === 0 ? V.base : pick(i - 1)));
+    if (V.cols && L0.pattern === 'splinter' && L0.cols.length === V.cols.length) L.cols = L0.cols.map((c, i) => (c == null ? null : V.cols[i]));
+    if (L0.tones) L.tones = L0.tones.map((c, i) => (c == null ? null : pick(i)));
+    if (L0.patches) L.patches = L0.patches.map((q) => Object.assign({}, q, { c: V.dark || pick(0) }));
+    return L;
+  }
   function paintMat(C, name) {
     if (!PAINT_LIV[name]) return C.bodyMat;
     C.paints = C.paints || {};
     if (C.paints[name]) return C.paints[name];
     const b = C.bodyMat;
-    return (C.paints[name] = new T.MeshStandardMaterial({ map: bodyTexture(C.def, PAINT_LIV[name]), normalMap: b.normalMap, normalScale: b.normalScale,
+    return (C.paints[name] = new T.MeshStandardMaterial({ map: bodyTexture(C.def, recolour(C.def, name)), normalMap: b.normalMap, normalScale: b.normalScale,
       roughnessMap: b.roughnessMap, metalnessMap: b.metalnessMap, metalness: C.def.metalBody ? 0.35 : 1, roughness: 1 }));
   }
   const TINTED = {};
@@ -11756,6 +11845,23 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     attachPaint(api, C.bodyMat, (n) => paintMat(C, n));
     return attachStores(api, type, C.hit, defStores);
   };
+  // Real overall lengths (with pitot): Su-27 / Su-35S 21.9 m, Su-47 22.6 m, Su-57 20.1 m, JA 37 16.4 m, JAS 39C 14.1 m, J 29F 10.2 m.
+  // The hand-made layouts came out longer, so the whole airframe of these jets is scaled along z (wings, gear, pylons, cockpit too).
+  const ZK = { su27: 0.944, su35: 0.944, su47: 0.94, su57: 0.962, ja37: 0.915, jas39: 0.945, j29: 0.956 };
+  for (const id of Object.keys(ZK)) {
+    const d = DEFS[id], k = ZK[id]; if (!d) continue;
+    const zp = (a, i) => a.map((q) => q.map((v, j) => (j === i ? v * k : v)));
+    d.zk = k;
+    d.len = d.len.map((v) => v * k); d.radomeZ *= k;
+    d.frames = (d.frames || []).map((v) => v * k);
+    d.engines = d.engines.map((e) => Object.assign({}, e, { z: e.z * k }));
+    d.gear = (d.gear || []).map((g) => Object.assign({}, g, { z: g.z * k }));
+    d.gearSpec = d.gearSpec.map((g) => Object.assign({}, g, { z: g.z * k }, g.well ? { well: [g.well[0], g.well[1], g.well[2] * k, g.well[3] * k] } : {}));
+    d.wingtips = zp(d.wingtips, 2); d.navs = zp(d.navs, 2); d.fins = zp(d.fins || [], 2);
+    if (d.panels) d.panels = d.panels.map((q) => [q[0] * k, q[1] * k].concat(q.slice(2)));
+    if (STATIONS[id]) STATIONS[id] = STATIONS[id].map((r) => r.map((v, j) => (j === 2 ? v * k : v)));
+    if (MUZZLES[id]) MUZZLES[id] = MUZZLES[id].map((v, j) => (j === 2 ? v * k : v));
+  }
   // hangar / campaign: pylon positions per jet (model local; y approximate)
   for (const spec of FL.AIRCRAFT) {
     const rows = STATIONS[spec.id]; if (!rows) continue;
@@ -34706,7 +34812,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRvYi
     kirov: { name: 'Battlecruiser', label: 'Sink the battlecruiser', need: 'sea', bounty: 15000,
       intro: ['Overlord. Priority target. A Kirov battlecruiser, {dir}, {km}.', 'Kill the SAM cells first. Then the masts, the gun and the bridge. Stay low.'],
       p2: 'The battlecruiser burns. Keep hitting it.', p3: 'It lists. One more run!', kill: 'The battlecruiser sinks. That is a big kill, Flanker One.' },
-    cbg: { name: 'Carrier group', label: 'Sink the carrier and the cruiser', need: 'sea', bounty: 22000,
+    cbg: { name: 'Carrier group', label: 'Sink carrier and cruiser', need: 'sea', bounty: 22000,
       intro: ['Overlord. Priority target. Their carrier battle group, {dir}, {km}.', 'Carrier, battlecruiser, two frigates and an air wing. Kill the ships.'],
       p2: 'The group is hit. Their jets launch!', p3: 'They are almost finished. Push!', kill: 'Carrier group destroyed. Their navy is finished.' },
     tu160: { name: 'Blackjack raid', label: 'Stop the Tu-160s', need: 'any', bounty: 12000,
@@ -35072,7 +35178,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRvYi
         if (d.reached && !xs.failed && C.alive(g) > 0) { xs.failed = 1; say('tuf', 'The bombers are over the base.', 3); C.later(3, function () { if (C.mission() === m) C.fail('bomber'); }); }
       } else if (m.boss === 'railfort' && ent) {
         var fi = d.fireIn;
-        m.label = (d.capsAlive > 0 ? 'Kill the capacitors · ' + d.capsAlive : 'Destroy the rail cannon') + (fi != null ? ' · fire ' + mmss(fi) : '');
+        m.label = (d.capsAlive > 0 ? 'Kill capacitors' : 'Kill the cannon') + (fi != null ? ' · fires ' + mmss(fi) : '');
         if (d.openEv && !xs.open) { xs.open = 1; say('rfo', 'Capacitors down. The shield is off. Hit the cannon!', 3); }
         if (fi != null && fi < 3.6 && fi > 0.5 && simT - (xs.rfw || -99) > 10) { xs.rfw = simT; say('rfw', 'Rail cannon charges! Break now!', 3); }
       } else if (m.boss === 'fortress' && ent) {
@@ -37258,26 +37364,21 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRvYi
     if (touchOn && W >= H) off = Math.max(110 * u, Math.min(off, W - ins.r - 232 - cx - tw / 2));
     updateVBands();
     tapeBox(u, cx - off, my, kmh, -1, SPD, HS.kmhRate * 5);
-    if (!crashed && VB.vs > 0) {
-      text('VS ' + Math.round(VB.vs), cx - off, my + th / 2 + 6 * u, 10 * u, kmh < VB.vs * 1.25 && !st.onGround ? AMB : HCdim, 'center');
-      if (!st.onGround && st.agl > 20 && kmh < VB.vs * 1.02 && !st.drift && !st.cobraPhase) {
-        hx.globalAlpha = Math.sin(simTime * 14) > -0.2 ? 1 : 0.4;
-        spaced('STALL', cx, my - Math.min(W, H) * 0.12, 20 * u, AMB, 5 * u, W * 0.3);
-        hx.globalAlpha = 1;
-      }
-    }
+    var stallRow = !crashed && VB.vs > 0;      // stall speed: a row under the speed tape; the warning goes to the lower stack
+    if (stallRow && !st.onGround && st.agl > 20 && kmh < VB.vs * 1.02 && !st.drift && !st.cobraPhase)
+      want('low', 97, 3, 28 * u, function (y, mw) { hx.globalAlpha = Math.sin(simTime * 14) > -0.2 ? 1 : 0.4; spaced('STALL', W / 2, y + 14 * u, 20 * u, AMB, 5 * u, Math.min(mw, W * 0.3)); hx.globalAlpha = 1; });
     tapeBox(u, cx + off, my, st.pos.y, 1, ALT, st.vel.y * 5);
     var ry = my + th / 2 + 18 * u, g = st.gLoad, aoaD = st.aoa / DEG;
-    rows(u, cx - off, ry, tw, [
+    rows(u, cx - off, ry, tw, (stallRow ? [['STALL', String(Math.round(VB.vs)), kmh < VB.vs * 1.25 && !st.onGround ? AMB : HCdim]] : []).concat([
       ['M', (st.speed / 340).toFixed(2), HC],
       ['G', g.toFixed(1), Math.abs(g) > 9 ? RED : Math.abs(g) > 7 ? AMB : HC],
-      ['AOA', Math.round(aoaD) + '°', Math.abs(aoaD) > 35 ? AMB : HC]]);
+      ['AOA', Math.round(aoaD) + '°', Math.abs(aoaD) > 35 ? AMB : HC]]));
     var vs = st.vel.y;
     rows(u, cx + off, ry, tw, [
       ['VS', (vs >= 0 ? '+' : '−') + Math.abs(Math.round(vs)), HC],
       ['AGL', String(Math.round(st.agl)), st.agl < 150 ? AMB : HC]]);
     hx.globalAlpha = 1;
-    HS.tapeBox = [cx - off - tw / 2 - 14 * u, cx - off + tw / 2 + 8 * u, cx + off - tw / 2 - 8 * u, cx + off + tw / 2 + 14 * u, my - th / 2 - 44 * u, ry + 3 * 18 * u + 4 * u];
+    HS.tapeBox = [cx - off - tw / 2 - 14 * u, cx - off + tw / 2 + 8 * u, cx + off - tw / 2 - 8 * u, cx + off + tw / 2 + 14 * u, my - th / 2 - 44 * u, ry + 4 * 18 * u + 4 * u];
 
     // ---- centre symbology
     if (!crashed) {
@@ -38031,7 +38132,10 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRvYi
         // keep the chevrons off the text stacks: slide them along their bearing out of the lower / upper stack
         var rB = r2, hw2 = 150 * u, ey = cys + sn * rB;
         if (Math.abs(cs * rB) < hw2 + 20 * u) {
-          if (sn > 0.05 && HS.lowBot > HS.lowTop && ey > HS.lowTop - 20 * u && ey < HS.lowBot + 10 * u) rB = Math.max(rB, (HS.lowBot + 14 * u - cys) / sn);
+          if (sn > 0.05 && HS.lowBot > HS.lowTop && ey > HS.lowTop - 20 * u && ey < HS.lowBot + 10 * u) {
+            rB = Math.max(rB, (HS.lowBot + 14 * u - cys) / sn);                                  // below the stack...
+            if (cys + sn * (rB + 24 * kk) > (HS.bossTop || H) - 6 * u) rB = Math.max(30 * u, (HS.lowTop - 30 * kk - cys) / sn);   // ...or above it
+          }
           if (sn < -0.05 && HS.upBottom && ey < HS.upBottom + 10 * u) rB = Math.min(rB, (cys - HS.upBottom - 24 * u) / -sn);
         }
         for (var z = 0; z < 2; z++) {
@@ -39111,7 +39215,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRvYi
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793158624', updShown = false;
+  var BUILD = '1793158802', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
@@ -39237,6 +39341,38 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRvYi
     else if (m && !props.get(m).currentProgram) warmList.push(o);
   }
   function needsWarm() { warmList.length = 0; scene.traverse(warmCollect); return warmList.length > 0; }
+  // boot: one hidden copy of every enemy kind (bosses too) and every jet (full + teammate 'low' LOD), then one frame
+  // with every pooled object shown and frustum culling off (debris, wrecks, fx), so the main-pass and the shadow-depth
+  // programs all link before play. Warm copies leave the scene; only their geometry is freed (materials keep the programs).
+  function warmBoot() {
+    var t0 = performance.now(), ri = renderer.info, n0 = ri.programs ? ri.programs.length : 0, nb = 0, i;
+    var g = new T.Group(); g.name = 'shaderWarm';
+    var K = FL.ENEMY_KINDS || {};
+    Object.keys(K).forEach(function (k) {
+      var d = K[k]; if (!d || typeof d.build !== 'function') return;
+      try { var m = d.build(0); if (m && m.group) { g.add(m.group); nb++; } } catch (e) {}
+    });
+    if (FL.buildAircraft) (FL.AIRCRAFT || []).forEach(function (a) {
+      [null, { light: false, lod: 'low' }].forEach(function (o) { try { var m = o ? FL.buildAircraft(a.id, o) : FL.buildAircraft(a.id); if (m && m.group) { g.add(m.group); nb++; } } catch (e) {} });
+    });
+    g.position.copy(st.pos); scene.add(g); g.updateMatrixWorld(true);
+    var hid = [], cul = [];
+    scene.traverse(function (o) {
+      if (!o.visible) { hid.push(o); o.visible = true; }
+      if (o.frustumCulled && (o.isMesh || o.isPoints || o.isLine || o.isSprite)) { cul.push(o); o.frustumCulled = false; }
+    });
+    try {
+      warmShaders('boot');
+      world.sun.position.copy(st.pos).addScaledVector(world.sunDir, 400); world.sun.target.position.copy(st.pos); world.sun.target.updateMatrixWorld();
+      if (post && post.enabled) post.render(0, postParams(0)); else renderer.render(scene, camera);
+    } catch (e) { glog('shader pre-warm frame failed: ' + e.message); }
+    for (i = 0; i < hid.length; i++) hid[i].visible = false;
+    for (i = 0; i < cul.length; i++) cul[i].frustumCulled = true;
+    scene.remove(g);
+    g.traverse(function (o) { if (o.geometry && o.geometry.dispose) o.geometry.dispose(); });
+    var n1 = ri.programs ? ri.programs.length : 0;
+    glog('shader pre-warm (boot set): ' + nb + ' models, ' + (n1 - n0) + ' programs, ' + Math.round(performance.now() - t0) + ' ms');
+  }
   function warmTick(dt) {
     warmT += dt; if (warmT < 0.25) return; warmT = 0;
     if (warmSkip > 0) { warmSkip--; return; }
@@ -39400,7 +39536,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRvYi
       renderMaps(); syncLever();
       // pre-warm: compile the shaders of every pooled, still hidden object now (explosion debris, wrecks, fx sprites,
       // teammate jets…), so the first crash / kill / join does not stall a frame on shader compiles
-      warmShaders('boot');
+      warmBoot();
       $('loading').hidden = true;
       window.__flanker = {
         phys: phys, combat: combat, world: function () { return world; }, camera: camera, start: startGame, campaign: function () { return campaign; }, carrier: function () { return carrier; }, weather: function () { return weather; }, setResMode: setResMode, resMode: function () { return resMode; },
