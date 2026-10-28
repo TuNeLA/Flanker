@@ -2192,6 +2192,16 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       if (!path || path.length < 2) continue;
       path[0] = [A[0], A[1]]; path[path.length - 1] = [B[0], B[1]];
       path = resample(chaikin(simplify(path, 35), 3), ROAD_STEP);
+      { // gentle meander so plateau roads are not ruler-straight (kept on land, tapered at the ends)
+        const sd = net.links.indexOf(Lk) * 17 + 3, n = path.length, out = [];
+        for (let i = 0; i < n; i++) {
+          const a = path[Math.max(i - 1, 0)], c = path[Math.min(i + 1, n - 1)], dx = c[0] - a[0], dy = c[1] - a[1], l = Math.hypot(dx, dy) || 1;
+          const taper = Math.min(1, i / 15, (n - 1 - i) / 15), off = taper * (55 * Math.sin(i * ROAD_STEP / 900 + sd) + 30 * (fbm(i * ROAD_STEP / 600, sd, 2, 91) - 0.5));
+          const q = [path[i][0] - dy / l * off, path[i][1] + dx / l * off];
+          out.push(hf(q[0], q[1]) > 1.6 ? q : path[i]);
+        }
+        path = resample(chaikin(out, 1), ROAD_STEP);
+      }
       roads.push({ P: path, kind: Lk[2] || 'road', hw: Lk[2] === 'hwy' ? 7 : 4.6 });
     }
     for (const b of ctx.bases || []) roads.push({ P: resample([b.gate, b.gateOut], ROAD_STEP), kind: 'road', hw: 4.6 });
@@ -2226,7 +2236,9 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     const sampleH = ctx.sampleH;
     const bH = new Builder(), bR = new Builder(), rd3 = [];
     for (const r of RP.roads) {
-      const P = r.P, hw = r.hw, b = r.kind === 'hwy' ? bH : bR, Y = new Float32Array(P.length);
+      const P = r.P.slice(), hw = r.hw, b = r.kind === 'hwy' ? bH : bR;
+      if (P.length > 1) { const ext = (i0, i1) => { const dx = P[i0][0] - P[i1][0], dy = P[i0][1] - P[i1][1], l = Math.hypot(dx, dy) || 1; return [P[i0][0] + dx / l * hw, P[i0][1] + dy / l * hw]; }; P[0] = ext(0, 1); P[P.length - 1] = ext(P.length - 1, P.length - 2); }
+      const Y = new Float32Array(P.length);
       for (let i = 0; i < P.length; i++) {
         const a = P[Math.max(i - 1, 0)], c = P[Math.min(i + 1, P.length - 1)], dx = c[0] - a[0], dy = c[1] - a[1], l = Math.hypot(dx, dy) || 1, nx = -dy / l, ny = dx / l;
         Y[i] = Math.max(r.Y[i] - 0.35, sampleH(P[i][0], P[i][1]), sampleH(P[i][0] + nx * hw, P[i][1] + ny * hw), sampleH(P[i][0] - nx * hw, P[i][1] - ny * hw)) + 0.22;
@@ -2245,7 +2257,11 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     }
     for (const [b, hwy] of [[bH, true], [bR, false]]) {
       if (!b.nv) continue;
-      const m = new THREE.Mesh(b.build(), patchFog(new THREE.MeshStandardMaterial({ map: roadTex(ctx.renderer, hwy), roughness: 0.9, metalness: 0, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }), ctx.fogU));
+      const rm = new THREE.MeshStandardMaterial({ map: roadTex(ctx.renderer, hwy), roughness: 0.9, metalness: 0, side: THREE.DoubleSide });
+      // the log depth buffer ignores polygonOffset: pull the ribbon 0.35 % toward the camera instead (no z-fight at any range)
+      rm.onBeforeCompile = function (sh) { sh.vertexShader = sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n  mvPosition.xyz *= 0.9965; gl_Position = projectionMatrix * mvPosition;'); };
+      rm.customProgramCacheKey = function () { return 'fl-road'; };
+      const m = new THREE.Mesh(b.build(), patchFog(rm, ctx.fogU, 'road'));
       m.receiveShadow = true; m.name = hwy ? 'highways' : 'roads'; ctx.add(m);
     }
     return { roads: RP.roads.map((r) => r.P.map((q) => [Math.round(q[0]), Math.round(q[1])])), r3: rd3 };
@@ -2359,7 +2375,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
           if (!t) t = tile(ci + di, cj + dj);
           const L = t[k.ki];
           if (near) { const A = k.im.instanceMatrix.array; for (let q = 0; q < L.length && cn[k.ki] < k.cap; q += 5) put(A, (cn[k.ki]++) * 16, L[q], L[q + 1], L[q + 2], L[q + 3], L[q + 4]); }
-          else { const A = k.far.instanceMatrix.array; for (let q = 0; q < L.length && cf[k.ki] < k.fcap; q += 5) put(A, (cf[k.ki]++) * 16, L[q], L[q + 1], L[q + 2], L[q + 3], L[q + 4]); }
+          else { const A = k.far.instanceMatrix.array, st = 5 * (k.def.farThin || 1); for (let q = 0; q < L.length && cf[k.ki] < k.fcap; q += st) put(A, (cf[k.ki]++) * 16, L[q], L[q + 1], L[q + 2], L[q + 3], L[q + 4]); }
         }
       }
       for (const k of K) {
@@ -3345,7 +3361,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         const sampleH = ctx.sampleH;
         const rock = new Builder(), glow = new Builder(), plain = new Builder();
         const cR = lin(0x6a655d), cIn = lin(0x2b2926), cTop = lin(0x34401c);
-        const F = [];
+        const F = [], caveWater = [];
         for (const T of TUN) {
           const W = (s, t) => [T.ox + T.ux * s + T.vx * t, T.on + T.uy * s + T.vy * t];
           const P3 = (s, t, y) => { const w = W(s, t); return [w[0], y, -w[1]]; };
@@ -3390,6 +3406,13 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
             const p = P3(s, t, y);
             geoTmp(new THREE.IcosahedronGeometry(1.2 + R() * 1.6, 0), mat4(p[0], p[1], p[2]), glow, [0.4, 1.0, 0.9]);
           }
+          // dark cave water: overlays the sea inside the tunnel, fading to normal water at the portals
+          { const nsw = Math.max(4, Math.ceil(L / 10));
+            const wg = gridGeo(2, nsw, (i, j) => { const ss = T.s0 - 6 + (L + 12) * j / nsw, t = (i - 1) * (tW(T, ss) + 4); const p = P3(ss, t, 0.18); return [p[0], p[1], p[2], 0, 0]; });
+            const C = new Float32Array(wg.attributes.position.count * 3);
+            for (let j = 0; j <= nsw; j++) for (let i = 0; i <= 2; i++) { const ss = (L + 12) * j / nsw - 6, k = Math.min(ss, L - ss) / Math.max(Math.min(L * 0.5, 60), 1), v = 1 - 0.85 * sstep(0, 1, k), q = (j * 3 + i) * 3; C[q] = 0.012 + 0.05 * v; C[q + 1] = 0.03 + 0.12 * v; C[q + 2] = 0.04 + 0.16 * v; }
+            wg.setAttribute('color', new THREE.BufferAttribute(C, 3));
+            caveWater.push(wg); }
           // solid feature
           const cs = [W(T.s0, -T.E), W(T.s0, T.E), W(T.s1, -T.E), W(T.s1, T.E)];
           let ymax = 0; for (let q = 0; q < T.roof.length; q++) ymax = Math.max(ymax, T.roof[q]);
@@ -3447,6 +3470,10 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         const rockMat = new THREE.MeshStandardMaterial({ vertexColors: true, color: new THREE.Color(1.8, 1.8, 1.8), map: ctx.track(rockTex(ctx.renderer)), roughness: 0.95, metalness: 0, side: THREE.DoubleSide });
         const rm = new THREE.Mesh(rock.build(), rockMat); rm.castShadow = true; rm.receiveShadow = true; rm.name = 'caves'; ctx.add(rm);
         const gm = new THREE.Mesh(glow.build(), new THREE.MeshBasicMaterial({ vertexColors: true })); gm.name = 'caveGlow'; ctx.add(gm);
+        { const cwMat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
+          cwMat.onBeforeCompile = function (sh) { sh.vertexShader = sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n  mvPosition.xyz *= 0.999; gl_Position = projectionMatrix * mvPosition;'); };
+          cwMat.customProgramCacheKey = function () { return 'fl-cavewater'; };
+          for (const wg of caveWater) { const cw = new THREE.Mesh(wg, cwMat); cw.name = 'caveWater'; cw.renderOrder = 1; ctx.add(cw); } }
         const pm = new THREE.Mesh(plain.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6 })); pm.castShadow = true; pm.name = 'lighthouse'; ctx.add(pm);
         // sea lanes
         const lane1 = [], lane2 = [];
@@ -3646,7 +3673,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       ground: { rockOn: 1, rock1: 0x2b2826, rock2: 0x4f4a46, rockA: 0.35, rockB: 0.55, sandH: 6, sand: 0x2c2a28, faceN: 1 },
       water: { color: 0x061d27, shallow: 0x1f4a4a, foam: 0.9, shallowK: 0.5 },
       bases: [BASE, EBASE], raw: raw,
-      levels: [{ tile: 1920, cell: 64, max: 150, score: (e0, n0, e1, n1) => { const e = (e0 + e1) / 2, n = (n0 + n1) / 2, dv = Math.hypot(e - V.e, n - V.n); if (dv < 4000) return 5000; const h = raw(e, n); return h > 150 ? h : 0; } }],
+      levels: [{ tile: 1920, cell: 64, max: 110, score: (e0, n0, e1, n1) => { const e = (e0 + e1) / 2, n = (n0 + n1) / 2, dv = Math.hypot(e - V.e, n - V.n); if (dv < 4000) return 5000; const h = raw(e, n); return h > 150 ? h : 0; } }],
       color: function (e, n, h, il, curv, o) {
         if (h < 0) { mix3(o, cSeabed, cWet, sstep(-25, -2, h)); return 0; }
         mix3(o, cJungle, cJungle2, fbm(e / 700, n / 700, 3, 721));
@@ -3678,8 +3705,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       },
       traffic: 70,
       veg: [
-        { kind: 'jungle', per: 520, scale: [0.7, 1.3], cap: 11000, test: (e, n, h, sl) => h > 6 && h < 700 && sl < 0.9 && Math.hypot(e - V.e, n - V.n) > 6500 ? 0.9 : 0 },
-        { kind: 'palm', per: 140, scale: [0.8, 1.2], cap: 4000, test: (e, n, h, sl) => h > 2 && h < 60 && sl < 0.4 ? 0.8 : 0 },
+        { kind: 'jungle', per: 420, farThin: 3, scale: [0.7, 1.3], cap: 11000, test: (e, n, h, sl) => h > 6 && h < 700 && sl < 0.9 && Math.hypot(e - V.e, n - V.n) > 6500 ? 0.9 : 0 },
+        { kind: 'palm', per: 100, farThin: 2, scale: [0.8, 1.2], cap: 4000, test: (e, n, h, sl) => h > 2 && h < 60 && sl < 0.4 ? 0.8 : 0 },
         { kind: 'lavarock', per: 70, scale: [0.6, 2.2], cap: 2500, shadow: false, test: (e, n, h, sl) => Math.hypot(e - V.e, n - V.n) < 9000 && h > 4 ? 0.7 : 0 }],
       clouds: { seed: 1401, cumulus: 60, cuBase: [1300, 2200], cuSize: 1.1, lit: [1.25, 0.6, 0.45], shadow: [0.28, 0.2, 0.32], opacity: 0.9,
         banks: [[-30000, 26000, 6000, 4000, 500, 1100], [33000, 28000, 5000, 4000, 500, 1300], [-20000, -30000, 8000, 5000, 600, 1500]] },
@@ -3754,17 +3781,22 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     function strandK(e, n) { return sstep(-39000, -37000, e) * (1 - sstep(-30500, -28800, e)) * sstep(-27000, -24500, n) * (1 - sstep(-12000, -9500, n)); }
     function raw(e, n) {
       const dx = e - coastE(n), inland = Math.max(dx, 0);
-      const r = ridged(e / 4200 + 3.3, n / 4200 - 1.7, 5, 201), f = fbm(e / 15000 + 1, n / 15000 + 5, 3, 203);
-      let m = 320 + 1500 * Math.pow(r, 1.25) * (0.55 + 0.7 * f) + 60 * (fbm(e / 1300, n / 1300, 2, 207) - 0.5);
+      // broad glacially rounded massifs + finer ridge detail
+      const r = ridged(e / 6200 + 3.3, n / 6200 - 1.7, 4, 201), f = fbm(e / 15000 + 1, n / 15000 + 5, 3, 203);
+      const r2 = ridged(e / 1800 + 1.1, n / 1800 + 2.3, 3, 205);
+      let m = 280 + 1350 * Math.pow(r, 1.45) * (0.55 + 0.7 * f);
+      m += 170 * (r2 - 0.42) * sstep(350, 1000, m) + 40 * (fbm(e / 650, n / 650, 2, 207) - 0.5);
       m *= sstep(-3000, 6000, dx) * 0.75 + 0.25;
       const sk = strandK(e, n);
       m = m * (1 - 0.985 * sk) + sk * (6 + 14 * fbm(e / 900, n / 900, 2, 209));
       const c1 = chan(e, n, 9000, 301), c2 = chan(e + 7000, n - 3000, 4200, 331);
       const fl1 = -180 + inland * 0.0065, fl2 = Math.max(-60 + inland * 0.0085, fl1 + 30);
       const w1 = 520 + 260 * fbm(e / 6000, n / 6000, 2, 341), w2 = 260 + 120 * fbm(e / 5000, n / 5000, 2, 343);
-      const p1 = sstep(w1 * 0.45, w1 * 1.25, c1), p2 = sstep(w2 * 0.45, w2 * 1.3, c2);
-      let h = fl1 + (m - fl1) * Math.pow(p1, 1.4);
-      const h2 = fl2 + (m - fl2) * Math.pow(p2, 1.4); if (h2 < h) h = h2;
+      // U-shaped glacial troughs: flat floor, steep smooth walls, rounded shoulders, rough rock on the walls
+      const p1 = sstep(w1 * 0.5, w1 * 1.0 + 220, c1), p2 = sstep(w2 * 0.5, w2 * 1.0 + 160, c2);
+      const rough = 30 * (fbm(e / 260, n / 260, 2, 345) - 0.5);
+      let h = fl1 + (m - fl1) * p1 + rough * 4 * p1 * (1 - p1);
+      const h2 = fl2 + (m - fl2) * p2 + rough * 4 * p2 * (1 - p2); if (h2 < h) h = h2;
       // frozen lakes on inland channel floors
       lastIce = 0;
       if (fl2 > 6 && c2 < w2 * 0.6) {
@@ -3805,11 +3837,11 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       name: 'Norway Winter Fjords', region: 'Nordland, Norway', N: 400,
       sky: { sunAz: 205, sunEl: 7, fog: 0xaab6c2, fogD: 0.0000125, hfogA: 0.00003, hfogB: 1 / 520, zenith: [0.10, 0.14, 0.22], glow: [0.9, 0.55, 0.35], glowW: 0.3, sunCol: [1.0, 0.8, 0.6], disk: 18,
         sunHex: 0xffd9b0, sunI: 1.6, hemiSky: 0xb9c8da, hemiGround: 0x5a6068, hemiI: 0.55, white: 0xdfe4ea, envGround: [0.18, 0.2, 0.23] },
-      ground: { rockOn: 1, rock1: 0x34373b, rock2: 0x63666a, rockA: 0.3, rockB: 0.5, snowH: 140, snowF: 45, snow: 0xeef3f8, snowSlope: 0.66, faceN: 1, ice: 0xa7bfcf },
+      ground: { rockOn: 1, rock1: 0x34373b, rock2: 0x63666a, rockA: 0.26, rockB: 0.46, snowH: 140, snowF: 45, snow: 0xeef3f8, snowSlope: 0.7, faceN: 0.25, ice: 0xa7bfcf },
       water: { color: 0x0a1a22, shallow: 0x1f3a40, foam: 0.35, shallowK: 0.35, roughness: 0.18 },
       bases: [BASE].concat(EB ? [EB] : []), flats: flats,
       raw: raw,
-      levels: [{ tile: 1920, cell: 96, max: 260, score: (e0, n0, e1, n1, g) => { const e = (e0 + e1) / 2, n = (n0 + n1) / 2; if (Math.abs(e - BASE.e) < 3500 && Math.abs(n - BASE.n) < 3500) return 1e6; let lo = 1e9, hi = -1e9; for (let i = 0; i <= 4; i++) for (let j = 0; j <= 4; j++) { const h = g ? triH(g.H, g.NV, (e0 + i * 500 + 48000) / g.cell, (48000 - (n0 + j * 500)) / g.cell) : 0; lo = Math.min(lo, h); hi = Math.max(hi, h); } return lo < 120 ? hi - lo : 0; } }],
+      levels: [{ tile: 1920, cell: 64, max: 420, score: (e0, n0, e1, n1, g) => { const e = (e0 + e1) / 2, n = (n0 + n1) / 2; if (Math.abs(e - BASE.e) < 3500 && Math.abs(n - BASE.n) < 3500) return 1e6; let lo = 1e9, hi = -1e9; for (let i = 0; i <= 4; i++) for (let j = 0; j <= 4; j++) { const h = g ? triH(g.H, g.NV, (e0 + i * 500 + 48000) / g.cell, (48000 - (n0 + j * 500)) / g.cell) : 0; lo = Math.min(lo, h); hi = Math.max(hi, h); } return lo < 120 ? hi - lo : 0; } }],
       aux: () => lastIce,
       color: function (e, n, h, il, curv, o, cell, k, aux) {
         if (h < 0) { mix3(o, cSea, cShore, sstep(-25, -1, h)); return 0; }
@@ -3832,7 +3864,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       },
       traffic: 120,
       veg: [
-        { kind: 'snowpine', per: 340, scale: [0.7, 1.25], cap: 9000, test: (e, n, h, sl) => h > 4 && h < 420 && sl < 0.75 ? 0.85 * (1 - sstep(250, 420, h)) + 0.1 : 0 },
+        { kind: 'snowpine', per: 340, farThin: 2, scale: [0.7, 1.25], cap: 9000, test: (e, n, h, sl) => h > 4 && h < 420 && sl < 0.75 ? 0.85 * (1 - sstep(250, 420, h)) + 0.1 : 0 },
         { kind: 'rock', per: 40, scale: [0.6, 2.2], cap: 2000, shadow: false, test: (e, n, h, sl) => h > 2 && sl < 1.2 ? 0.5 : 0 }],
       clouds: {
         seed: 811, cumulus: 40, cuBase: [2300, 2900], cuSize: 1.5, cling: true, lit: [0.92, 0.9, 0.9], shadow: [0.42, 0.45, 0.5], opacity: 0.94,
@@ -14471,7 +14503,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     var flownSinceHangar = false;
     function checkHangar(st, w) {
       var hg = w && w.hangar; if (!hg) return;
-      if (!st.onGround && st.agl > 15) flownSinceHangar = true;   // open by itself only after a landing, not at the spawn
+      if (st.crashed) flownSinceHangar = false;                 // a respawn on the runway must not pop the hangar open
+      else if (!st.onGround && st.agl > 15) flownSinceHangar = true;   // open by itself only after a landing, not at the spawn
       var inside = Math.hypot(st.pos.x - hg.e, -st.pos.z - hg.n) < (hg.r || 120);
       if (!inside || st.speed > 8 || !st.onGround) { hangarLatch = false; return; }
       if (!hangarLatch && !hangarOpen && flownSinceHangar && st.onGround && st.speed < 3 && !st.crashed) { hangarLatch = true; flownSinceHangar = false; openHangar(); }
@@ -15290,7 +15323,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   var C = {
     banditRange: 22000, samRange: 14000, closeRange: 2500, hideAGL: 150,
     lockAir: 9000, lockSam: 8000, lockGround: 7000, lockLose: 0.3, designLose: 0.5, trigGap: 0.35,
-    bombDrag: 1.0e-4,
+    bombDrag: 4.0e-5, guidedBombDrag: 2.0e-5,          // low drag: a released bomb stays roughly under / ahead of the jet
     boatRange: 12000, boatSamCd: 9,
     comboWindow: 8, maxBandits: 14, waveBreak: 6, waveMsgTime: 3,
     gunRate: 20, gunSpeed: 1000, gunHitBandit: 10, gunHitSam: 12, gunDmg: 12,
@@ -17537,7 +17570,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         if (!keep) { m.target = tgt = null; mEnd(m, 'sarhLost'); log('SARH lock lost, missile dumb'); }
       }
       var steer = true;
-      if (tgt && T.guid === 'laser') steer = m.owner === LP ? desig === tgt : !!(m.owner && m.owner.lockId === tgt.id);
+      if (tgt && T.guid === 'laser') steer = (T.bomb || T.rocket) ? true : (m.owner === LP ? desig === tgt : !!(m.owner && m.owner.lockId === tgt.id));   // pod keeps lasing after release (bombs / rockets) until the target dies
       if (tgt && !T.bomb) seekerCheck(m, tgt, h);
       else if (m.lost) seekerReacquire(m, h);
       tgt = m.target;
@@ -17827,7 +17860,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         var bl = s.blast || 60, dm = s.damage || 700;
         var cl = s.cluster || (/cluster/i.test(s.id) ? 12 : 0);
         T = { bomb: true, drop: 0, boost: 0, sustain: 0, vmax: 0, g: s.guidance === 'laser' ? (s.g || 4) : 0, life: 90, prox: 0, gimbal: Math.PI, guide: 0.4, N: 3,
-              cd: C.bombDrag, scale: 1, trail: 0, big: false, dmg: cl ? dm / cl * 2 : dm, blast: cl ? Math.max(14, bl * 0.35) : bl, guid: s.guidance || 'none', cluster: cl, spec: s };
+              cd: s.guidance === 'laser' ? C.guidedBombDrag : C.bombDrag, scale: 1, trail: 0, big: false, dmg: cl ? dm / cl * 2 : dm, blast: cl ? Math.max(14, bl * 0.35) : bl, guid: s.guidance || 'none', cluster: cl, spec: s };
         if (cl) { T.bomblet = Object.assign({}, T, { cluster: 0, scale: 0.35, guid: 'none', g: 0 }); T.bomblet.cosGimbal = -1; T.dmg = 0; }
       } else if (s.type === 'rocket') {
         T = { rocket: true, drop: 0.05, boost: 0.7, sustain: 0.6, vmax: s.speed || 700, g: 0, life: 6, prox: 0, gimbal: 0, guide: 99, N: 0, cd: 6e-5, scale: 0.55,
@@ -18077,6 +18110,20 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         var bt = bombPick();
         if (bt) { aaOn = true; aaK = 1; aaKind = 'bomb'; aaPos.copy(bt.aim); }
       }
+    }
+    // guided-bomb release window (toss): ballistic reach from height + speed (incl. climb), plus glide reach with small fins
+    var bombRng = { min: 0, max: 0, dist: 0 };
+    function bombCue() {
+      var w = selW(); if (!pAlive || !w || w.spec.type !== 'bomb' || w.spec.guidance !== 'laser' || w.ammo <= 0) return null;
+      var t = desig && desig.alive && desig.cat !== 'air' ? desig : null; if (!t) return null;
+      var h = Math.max(1, player.pos.y - t.aim.y), vx = player.vel.x, vz = player.vel.z, vh = Math.hypot(vx, vz), vy = player.vel.y;
+      var tf = (vy + Math.sqrt(Math.max(0, vy * vy + 2 * G * h))) / G;                // fall time (toss when climbing)
+      var R0 = vh * tf, dx = t.aim.x - player.pos.x, dz = t.aim.z - player.pos.z, D = Math.hypot(dx, dz);
+      var along = vh > 1 ? (dx * vx + dz * vz) / vh : D, cross = vh > 1 ? Math.abs(dx * vz - dz * vx) / vh : 0;
+      bombRng.max = R0 + h * 1.6 + 300; bombRng.min = Math.max(0, R0 * 0.35 - h * 0.4); bombRng.dist = along;
+      if (along > bombRng.max || cross > bombRng.max * 0.6) return 'TOO FAR';
+      if (along < bombRng.min) return 'TOO CLOSE';
+      return 'IN RANGE';
     }
     // bomb: tiny pull of the CCIP impact point onto a ground target within a few metres (scaled by aimAssist + bombAimAssist)
     function bombAA() { return clamp(aaVal() + (+LO.bombAimAssist || 0), 0, 2); }
@@ -19617,8 +19664,12 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         o.pos = m.pos; o.id = m.id; o._d = d;
         o.type = m.T.bomb ? 'bomb' : m.T.rocket ? 'rocket' : 'missile';
         o.targetPos = m.target && m.target.aim ? m.target.aim : null;
-        o.impact = null; o.t = -1;
-        if (m.T.bomb && m.target && m.target.aim && m.T.guid === 'laser') { o.impact = o._v.copy(m.target.aim); o.t = tt; }
+        o.impact = null; o.t = -1; o.guided = false;
+        if (m.T.guid === 'laser' && m.target && m.target.aim) {   // guided: time = distance / closing speed (+ gravity help when falling)
+          o.impact = o._v.copy(m.target.aim); o.guided = true;
+          ordSim.subVectors(m.target.aim, m.pos); var gd = ordSim.length(), vc = gd > 1 ? m.vel.dot(ordSim) / gd : 0;
+          o.t = gd / Math.max(40, vc);
+        }
         else if (tt >= 0) { o.impact = o._v.copy(m._ordI); o.t = tt; }
         else if (o.targetPos) o.t = m.pos.distanceTo(o.targetPos) / Math.max(100, m.vel.length());
         ordOut.push(o); n++;
@@ -19678,7 +19729,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         gunAmmo: gwH ? gwH.ammo : -1, gunAmmoMax: gwH ? gwH.cap : -1, gunOverheat: gunOver, gunFiring: gunOn,
         podAmmo: podA, podAmmoMax: podC, pods: podH,
         aimAssist: { active: aaOn, pos: aaOn ? aaPos : null, strength01: aaK, kind: aaKind, level: aaVal() },
-        ordnance: ordnance(),
+        ordnance: ordnance(), bombCue: bombCue(), bombRange: bombRng,
         lock: { target: desig ? desig.aim : null, designated: desig ? desig.aim : null, progress01: desig ? Math.min(1, lockT / lockNeed(s)) : 0, locked: !!desig && locked,
                 kind: desig ? desig.kind : null, label: desig ? desig.label : null, id: desig ? desig.id : null, dist: desig ? desig.aim.distanceTo(player.pos) : 0,
                 candidates: cands, multi: mlist, aspectOK: aspectOK,
@@ -19762,6 +19813,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       netOn: function () { return !!(net && net.connected); }, isClient: function () { return client; },
       drop: function (P) { var i = pts.indexOf(P); if (i > 0) pts.splice(i, 1); for (i = 0; i < tgts.length; i++) if (tgts[i].tp === P) { tgts[i].tp = LP; tgts[i].detect = false; } } };
     // per-jet gun muzzle: local Vector3 (nose -Z, right +X), e.g. model.gunMuzzle; pair = true -> guns on both sides (alternate)
+    combat._dbg.fireAt = function (t) { var w = selW(); return w ? fireOne(w, t, tagSeq++) : false; };
     combat._dbg.gunPick = function () { var g = firstOf('gun'); var A = gunPick(g ? g.spec : DEF_W.gun); return { id: A.t ? A.t.id : 0, f: A.f, zone: gunZone(), aa: aaVal(), sel: selW().spec.id, aaOn: aaOn }; };
     combat.setGunMuzzle = function (v, pair) {
       if (v && isFinite(v.x) && isFinite(v.y) && isFinite(v.z)) { gunMuzzleL = (gunMuzzleL || new THREE.Vector3()).set(v.x, v.y, v.z); gunMuzzleMirror = !!pair; }
@@ -22257,7 +22309,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
 /* Flanker over LAX — first-flight tutorial: one short context hint at a time, in a small card above the radio box.
  * FL.createTutorial({ storageKey }) -> { update(dt, ctx), reset(), seen(), current(), rect(), hide(), setEnabled(bool), enabled() }
  * ctx = { live, st, ch: combat.hud(), cm: campaign.hud() | null, device: 'pad'|'mouse'|'kb'|'touch', hangarOpen }
- * The card sits bottom-centre just above the radio box (#comms) and moves up when the radio box is taller.
+ * The card sits bottom-centre above the radio box (#comms); main.js layoutFlush() places it (CSS below is the fallback).
  * Each hint shows once per profile (localStorage), and goes away when its action is done or after 8 s. */
 (function () {
   'use strict';
@@ -22426,13 +22478,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       }
       if (el.hidden) { el.hidden = false; void el.offsetWidth; }
       el.classList.add('on');
-      // never overlap the radio box: lift the card when the radio box reaches above the card's bottom edge
-      var lift = 0, cm2 = document.getElementById('comms');
-      if (cm2 && !cm2.hidden) {
-        var rc = cm2.getBoundingClientRect(), rt = el.getBoundingClientRect();
-        if (rc.height) lift = Math.max(0, Math.ceil(lastBottom + rt.bottom - (rc.top - 8)));
-      }
-      if (lift !== lastBottom) { lastBottom = lift; el.style.marginBottom = lift ? lift + 'px' : ''; }
+      // position: the HUD layout (main.js layoutFlush) sets bottom / left / max-width every frame, above the radio box
     }
 
     return {
@@ -25419,6 +25465,169 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     return null;
   }
 
+  // ------------------------------------------------------------------ visual kit (module level)
+  var T = root.THREE;
+  function lin(hex) { var c = new T.Color(hex); c.convertSRGBToLinear(); return c; }
+  function Acc() { this.p = []; this.c = []; }
+  Acc.prototype.tri = function (a, b, c, col) { this.p.push(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]); for (var i = 0; i < 3; i++) this.c.push(col.r, col.g, col.b); };
+  Acc.prototype.geo = function (g, m, col) {
+    var gi = g.index ? g.toNonIndexed() : g, pa = gi.attributes.position, v = new T.Vector3();
+    for (var i = 0; i < pa.count; i++) { v.fromBufferAttribute(pa, i).applyMatrix4(m); this.p.push(v.x, v.y, v.z); this.c.push(col.r, col.g, col.b); }
+    if (gi !== g) gi.dispose(); g.dispose();
+  };
+  Acc.prototype.box = function (x0, x1, y0, y1, z0, z1, col) { this.geo(new T.BoxGeometry(x1 - x0, y1 - y0, z1 - z0), new T.Matrix4().makeTranslation((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2), col); };
+  Acc.prototype.build = function () {
+    var g = new T.BufferGeometry();
+    g.setAttribute('position', new T.Float32BufferAttribute(this.p, 3)); g.setAttribute('color', new T.Float32BufferAttribute(this.c, 3));
+    g.computeVertexNormals(); g.computeBoundingSphere(); return g;
+  };
+  function rng(seed) { var s = seed >>> 0; return function () { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
+  function deckTexture() {
+    var W = 256, H = 1024, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    var g = cv.getContext('2d'), XMIN = -40, XMAX = 32, R = rng(63);
+    function px(x) { return (x - XMIN) / (XMAX - XMIN) * W; }
+    function py(z) { return (z - K.BOW) / (K.STERN - K.BOW) * H; }
+    g.fillStyle = '#3a3e42'; g.fillRect(0, 0, W, H);
+    for (var i = 0; i < 2600; i++) { var c = 50 + (R() * 22 | 0); g.fillStyle = 'rgba(' + c + ',' + (c + 3) + ',' + (c + 6) + ',0.35)'; g.fillRect(R() * W, R() * H, 2 + R() * 10, 2 + R() * 6); }
+    // panel seams
+    g.strokeStyle = 'rgba(20,22,24,0.35)'; g.lineWidth = 1;
+    for (var zz = K.BOW; zz < K.STERN; zz += 6) { g.beginPath(); g.moveTo(0, py(zz)); g.lineTo(W, py(zz)); g.stroke(); }
+    function aline(a0, l0, a1, l1, col, w, dash) {
+      g.strokeStyle = col; g.lineWidth = w; g.setLineDash(dash || []);
+      g.beginPath(); g.moveTo(px(axisX(a0, l0)), py(axisZ(a0, l0))); g.lineTo(px(axisX(a1, l1)), py(axisZ(a1, l1))); g.stroke(); g.setLineDash([]);
+    }
+    // tyre marks in the landing area
+    for (i = 0; i < 40; i++) { var a = 30 + R() * 120, l = (R() - 0.5) * 12; aline(a, l, a + 10 + R() * 30, l + (R() - 0.5) * 2, 'rgba(15,15,15,0.28)', 1 + R() * 2); }
+    aline(0, -K.AHW, K.ALEN, -K.AHW, '#e8e8e0', 2.2); aline(0, K.AHW, K.ALEN, K.AHW, '#e8e8e0', 2.2);
+    aline(0, 0, K.ALEN, 0, '#f0f0e8', 1.6, [18, 18]);
+    aline(K.ALEN, -K.AHW, K.ALEN, K.AHW, '#c94a3a', 2.5);           // foul line (red)
+    for (i = 0; i < K.WIRES.length; i++) aline(K.WIRES[i], -K.AHW - 1, K.WIRES[i], K.AHW + 1, '#16181a', 2.5);
+    g.fillStyle = '#f2f2ea';
+    for (var s = -1; s <= 1; s += 2) { var x0 = axisX(K.AIM, s * 7), z0 = axisZ(K.AIM, s * 7); g.fillRect(px(x0) - 6, py(z0) - 14, 12, 28); }
+    // launch lanes (yellow) + spots
+    for (i = 0; i < K.SPOTS.length; i++) {
+      var sx = K.SPOTS[i][0], sz = K.SPOTS[i][1];
+      g.strokeStyle = '#d8b030'; g.lineWidth = 2; g.setLineDash([10, 8]);
+      g.beginPath(); g.moveTo(px(sx), py(sz)); g.lineTo(px(sx * 0.5), py(K.BOW + 2)); g.stroke(); g.setLineDash([]);
+      g.fillStyle = '#d8b030'; g.fillRect(px(sx) - 10, py(sz) - 2, 20, 4); g.fillRect(px(sx) - 2, py(sz) - 10, 4, 12);
+      g.fillStyle = 'rgba(25,27,30,0.85)'; g.fillRect(px(sx) - 22, py(sz + 10), 44, 14);   // blast deflector
+    }
+    // ramp stripes
+    g.fillStyle = 'rgba(230,230,220,0.55)';
+    for (var rz = K.RZ0; rz > K.BOW; rz -= 7) g.fillRect(px(-14), py(rz) - 1.5, px(14) - px(-14), 3);
+    // lifts (starboard, fore and aft of the island)
+    g.strokeStyle = 'rgba(15,16,18,0.9)'; g.lineWidth = 2;
+    g.strokeRect(px(17), py(-48), px(31) - px(17), py(-33) - py(-48)); g.strokeRect(px(17), py(36), px(31) - px(17), py(51) - py(36));
+    // deck edge safety line
+    g.strokeStyle = 'rgba(235,235,225,0.6)'; g.lineWidth = 1.5; g.beginPath();
+    for (i = 0; i < K.EDGE.length; i++) { var E = K.EDGE[i]; if (i) g.lineTo(px(-E[1] + 1.2), py(E[0])); else g.moveTo(px(-E[1] + 1.2), py(E[0])); }
+    g.stroke(); g.beginPath();
+    for (i = 0; i < K.EDGE.length; i++) { E = K.EDGE[i]; if (i) g.lineTo(px(E[2] - 1.2), py(E[0])); else g.moveTo(px(E[2] - 1.2), py(E[0])); }
+    g.stroke();
+    var tex = new T.CanvasTexture(cv); tex.encoding = T.sRGBEncoding; tex.anisotropy = 8;
+    return { tex: tex, XMIN: XMIN, XMAX: XMAX };
+  }
+  function dotTexture() {
+    var cv = document.createElement('canvas'); cv.width = cv.height = 64; var g = cv.getContext('2d');
+    var gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.25, 'rgba(255,255,255,0.85)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return new T.CanvasTexture(cv);
+  }
+  function foamTexture() {
+    var cv = document.createElement('canvas'); cv.width = 64; cv.height = 256; var g = cv.getContext('2d'), R = rng(7);
+    g.fillStyle = '#000'; g.fillRect(0, 0, 64, 256);
+    for (var i = 0; i < 900; i++) {
+      var x = R() * 64, w = Math.exp(-Math.pow((x - 32) / 20, 2)), c = (120 + R() * 135) * (0.35 + 0.65 * w) | 0;
+      g.fillStyle = 'rgba(' + c + ',' + c + ',' + c + ',' + (0.25 + R() * 0.4) + ')'; g.fillRect(x, R() * 256, 1 + R() * 4, 2 + R() * 12);
+    }
+    // soft edges
+    var gr = g.createLinearGradient(0, 0, 64, 0); gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(0.25, 'rgba(0,0,0,0)'); gr.addColorStop(0.75, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,1)');
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 256);
+    var t = new T.CanvasTexture(cv); t.wrapS = T.ClampToEdgeWrapping; t.wrapT = T.RepeatWrapping; return t;
+  }
+
+  // hull + deck + island for one palette (geometry built per call; the friendly ship and each enemy carrier)
+  var PAL = { friend: { hull: 0x6f767d, hull2: 0x5d646b, bottom: 0x6a2a24, isl: 0x7c838a, isl2: 0x6a7178, deck: 0xffffff, radar: 0x3a4046 },
+    enemy: { hull: 0x3b4044, hull2: 0x30353a, bottom: 0x4a1f1c, isl: 0x464b50, isl2: 0x383d42, deck: 0x9a9a9a, radar: 0x2a2e33 } };
+  function buildShipBody(pal) {
+    var grp = new T.Group();
+    var D = K.D, i, j;
+    // stations along z
+    var zs = [];
+    for (var z = K.BOW; z < K.RZ0; z += 4.5) zs.push(z);
+    for (z = K.RZ0; z < K.STERN; z += 12) zs.push(z);
+    zs.push(K.STERN);
+    // ---- hull loft (vertex colours: grey, black boot top, red below the waterline)
+    var cG = lin(pal.hull), cG2 = lin(pal.hull2), cB = lin(0x1d1f22), cRd = lin(pal.bottom), hull = new Acc();
+    var SEGC = [cG, cG2, cB, cRd, cRd, cRd, cRd, cB, cG2, cG];
+    function ring(zz, out) {
+      var k = eIdx(zz), pe = EPORT[k], se = ESTB[k], wl = EWL[k], top = D + rampH(zz) - 0.05;
+      var kp = wl + (pe - wl) * 0.4, ks = wl + (se - wl) * 0.4;
+      var pts = [[-pe, top], [-kp, 9], [-wl, 1.6], [-wl, 0], [-wl * 0.8, -6], [0, -9], [wl * 0.8, -6], [wl, 0], [wl, 1.6], [ks, 9], [se, top]];
+      for (var q = 0; q < pts.length; q++) { out[q] = [pts[q][0], pts[q][1], zz]; }
+      return out;
+    }
+    var r0 = [], r1 = [];
+    for (i = 0; i < zs.length - 1; i++) {
+      ring(zs[i], r0); ring(zs[i + 1], r1);
+      for (j = 0; j < 10; j++) { hull.tri(r0[j], r0[j + 1], r1[j], SEGC[j]); hull.tri(r0[j + 1], r1[j + 1], r1[j], SEGC[j]); }
+    }
+    // bow + stern caps
+    ring(zs[0], r0); var cb = [0, D * 0.55, zs[0]];
+    for (j = 0; j < 10; j++) hull.tri(cb, r0[j + 1], r0[j], cG2);
+    hull.tri(cb, r0[0], r0[10], cG2);
+    ring(K.STERN, r1); var cs = [0, D * 0.4, K.STERN];
+    for (j = 0; j < 10; j++) hull.tri(cs, r1[j], r1[j + 1], cG2);
+    hull.tri(cs, r1[10], r1[0], cG2);
+    var hullMat = new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.75, metalness: 0.25, flatShading: true });
+    var hm = new T.Mesh(hull.build(), hullMat); hm.castShadow = true; hm.receiveShadow = true; grp.add(hm);
+    // ---- flight deck (textured, ramp included)
+    var DT = deckTexture(), XW = DT.XMAX - DT.XMIN, NC = 8, pos = [], uv = [], idx = [];
+    for (i = 0; i < zs.length; i++) {
+      var k2 = eIdx(zs[i]), x0 = -EPORT[k2], x1 = ESTB[k2], yy = D + rampH(zs[i]);
+      for (j = 0; j <= NC; j++) { var xx = x0 + (x1 - x0) * j / NC; pos.push(xx, yy, zs[i]); uv.push((xx - DT.XMIN) / XW, 1 - (zs[i] - K.BOW) / (K.STERN - K.BOW)); }
+    }
+    for (i = 0; i < zs.length - 1; i++) for (j = 0; j < NC; j++) {
+      var a0 = i * (NC + 1) + j, a1 = a0 + 1, b0 = a0 + NC + 1, b1 = b0 + 1;
+      idx.push(a0, b0, a1, a1, b0, b1);
+    }
+    var dg = new T.BufferGeometry(); dg.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); dg.setAttribute('uv', new T.Float32BufferAttribute(uv, 2)); dg.setIndex(idx); dg.computeVertexNormals();
+    var deck = new T.Mesh(dg, new T.MeshStandardMaterial({ map: DT.tex, color: pal.deck, roughness: 0.88, metalness: 0.1 })); deck.receiveShadow = true; deck.castShadow = false; grp.add(deck);
+    // ---- island + details (one merged mesh)
+    var sup = new Acc(), cI = lin(pal.isl), cI2 = lin(pal.isl2), cW = lin(0x151b20), cP = lin(0x2c333a), cBl = lin(0x18191b), cWh = lin(0xd8dcdc), I = K.ISL, m4 = new T.Matrix4();
+    sup.box(I.x0, I.x1 - 1, D, D + 15, I.z0, I.z1, cI);
+    sup.box(22.5, 31, D + 15, D + 27, -18, 14, cI2);
+    sup.box(22.3, 31.2, D + 22.4, D + 24.2, -18.2, 14.2, cW);
+    sup.box(21.6, 23.2, D + 9, D + 10.2, -24, -14, cI2); // bridge wing
+    [[26.75, D + 21, -18.35, 'x'], [26.75, D + 21, 14.35, 'x'], [22.25, D + 21, -2, 'z'], [31.25, D + 21, -2, 'z']].forEach(function (pp) {
+      var g = new T.CylinderGeometry(3.4, 3.4, 0.4, 8);
+      var r = new T.Matrix4(); if (pp[3] === 'x') r.makeRotationX(Math.PI / 2); else r.makeRotationZ(Math.PI / 2);
+      m4.makeTranslation(pp[0], pp[1], pp[2]).multiply(r); sup.geo(g, m4, cP);
+    });
+    sup.box(26.2, 27.8, D + 27, D + 44, -2, 0.6, cI2);
+    sup.box(22, 32, D + 38, D + 38.6, -1.3, -0.4, cI2);
+    sup.geo(new T.SphereGeometry(2.3, 12, 8), m4.makeTranslation(27, D + 46.2, -0.7), cWh);
+    sup.box(23.5, 30.5, D + 15, D + 24, 16, 29, cI);
+    sup.box(23.9, 30.1, D + 24, D + 25, 16.4, 28.6, cBl);
+    sup.box(26.6, 27.4, D + 27, D + 29, 7.6, 8.4, cI2);   // radar pole
+    // arrestor wires (raised a little) + wire sheaves
+    for (i = 0; i < K.WIRES.length; i++) {
+      var wa = K.WIRES[i], wx = axisX(wa, 0), wz = axisZ(wa, 0);
+      var gw = new T.BoxGeometry(2 * K.AHW + 2, 0.12, 0.12); m4.makeRotationY(-K.ANG * DEG).setPosition(wx, D + 0.08, wz); sup.geo(gw, m4, cBl);
+    }
+    // CIWS sponsons
+    var TUR = [[26.5, D + 15, -22], [31, D + 15, 30], [-27.5, D - 1.5, -86], [-21.5, D - 1.5, 132], [27, D - 1.5, 128], [28, D - 1.5, -84]];
+    for (i = 2; i < TUR.length; i++) sup.box(TUR[i][0] - 2.6, TUR[i][0] + 2.6, D - 3.2, D - 1.5, TUR[i][2] - 3, TUR[i][2] + 3, cG2);
+    // Luna landing light housing (port side, abeam the aim point)
+    var olsX = axisX(K.AIM, -20), olsZ = axisZ(K.AIM, -20);
+    sup.box(olsX - 0.6, olsX + 0.6, D, D + 3.2, olsZ - 1.2, olsZ + 1.2, cBl);
+    var supMesh = new T.Mesh(sup.build(), new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.7, metalness: 0.3, flatShading: true }));
+    supMesh.castShadow = true; supMesh.receiveShadow = true; grp.add(supMesh);
+    // rotating radar
+    var radar = new T.Mesh(new T.BoxGeometry(9, 1.6, 0.5), new T.MeshStandardMaterial({ color: lin(pal.radar), roughness: 0.6, metalness: 0.4 }));
+    radar.position.set(27, D + 29.9, 8); grp.add(radar);
+    return { group: grp, radar: radar, olsX: olsX, olsZ: olsZ, TUR: TUR, cI: cI, cWh: cWh, cG2: cG2 };
+  }
+
   // ------------------------------------------------------------------ factory
   root.FL.createCarrier = function (opts) {
     opts = opts || {};
@@ -25618,162 +25827,11 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
 
     // ------------------------------------------------------------------ visuals
     var model = null;
-    function lin(hex) { var c = new T.Color(hex); c.convertSRGBToLinear(); return c; }
-    function Acc() { this.p = []; this.c = []; }
-    Acc.prototype.tri = function (a, b, c, col) { this.p.push(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]); for (var i = 0; i < 3; i++) this.c.push(col.r, col.g, col.b); };
-    Acc.prototype.geo = function (g, m, col) {
-      var gi = g.index ? g.toNonIndexed() : g, pa = gi.attributes.position, v = new T.Vector3();
-      for (var i = 0; i < pa.count; i++) { v.fromBufferAttribute(pa, i).applyMatrix4(m); this.p.push(v.x, v.y, v.z); this.c.push(col.r, col.g, col.b); }
-      if (gi !== g) gi.dispose(); g.dispose();
-    };
-    Acc.prototype.box = function (x0, x1, y0, y1, z0, z1, col) { this.geo(new T.BoxGeometry(x1 - x0, y1 - y0, z1 - z0), new T.Matrix4().makeTranslation((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2), col); };
-    Acc.prototype.build = function () {
-      var g = new T.BufferGeometry();
-      g.setAttribute('position', new T.Float32BufferAttribute(this.p, 3)); g.setAttribute('color', new T.Float32BufferAttribute(this.c, 3));
-      g.computeVertexNormals(); g.computeBoundingSphere(); return g;
-    };
-    function rng(seed) { var s = seed >>> 0; return function () { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
-    function deckTexture() {
-      var W = 256, H = 1024, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
-      var g = cv.getContext('2d'), XMIN = -40, XMAX = 32, R = rng(63);
-      function px(x) { return (x - XMIN) / (XMAX - XMIN) * W; }
-      function py(z) { return (z - K.BOW) / (K.STERN - K.BOW) * H; }
-      g.fillStyle = '#3a3e42'; g.fillRect(0, 0, W, H);
-      for (var i = 0; i < 2600; i++) { var c = 50 + (R() * 22 | 0); g.fillStyle = 'rgba(' + c + ',' + (c + 3) + ',' + (c + 6) + ',0.35)'; g.fillRect(R() * W, R() * H, 2 + R() * 10, 2 + R() * 6); }
-      // panel seams
-      g.strokeStyle = 'rgba(20,22,24,0.35)'; g.lineWidth = 1;
-      for (var zz = K.BOW; zz < K.STERN; zz += 6) { g.beginPath(); g.moveTo(0, py(zz)); g.lineTo(W, py(zz)); g.stroke(); }
-      function aline(a0, l0, a1, l1, col, w, dash) {
-        g.strokeStyle = col; g.lineWidth = w; g.setLineDash(dash || []);
-        g.beginPath(); g.moveTo(px(axisX(a0, l0)), py(axisZ(a0, l0))); g.lineTo(px(axisX(a1, l1)), py(axisZ(a1, l1))); g.stroke(); g.setLineDash([]);
-      }
-      // tyre marks in the landing area
-      for (i = 0; i < 40; i++) { var a = 30 + R() * 120, l = (R() - 0.5) * 12; aline(a, l, a + 10 + R() * 30, l + (R() - 0.5) * 2, 'rgba(15,15,15,0.28)', 1 + R() * 2); }
-      aline(0, -K.AHW, K.ALEN, -K.AHW, '#e8e8e0', 2.2); aline(0, K.AHW, K.ALEN, K.AHW, '#e8e8e0', 2.2);
-      aline(0, 0, K.ALEN, 0, '#f0f0e8', 1.6, [18, 18]);
-      aline(K.ALEN, -K.AHW, K.ALEN, K.AHW, '#c94a3a', 2.5);           // foul line (red)
-      for (i = 0; i < K.WIRES.length; i++) aline(K.WIRES[i], -K.AHW - 1, K.WIRES[i], K.AHW + 1, '#16181a', 2.5);
-      g.fillStyle = '#f2f2ea';
-      for (var s = -1; s <= 1; s += 2) { var x0 = axisX(K.AIM, s * 7), z0 = axisZ(K.AIM, s * 7); g.fillRect(px(x0) - 6, py(z0) - 14, 12, 28); }
-      // launch lanes (yellow) + spots
-      for (i = 0; i < K.SPOTS.length; i++) {
-        var sx = K.SPOTS[i][0], sz = K.SPOTS[i][1];
-        g.strokeStyle = '#d8b030'; g.lineWidth = 2; g.setLineDash([10, 8]);
-        g.beginPath(); g.moveTo(px(sx), py(sz)); g.lineTo(px(sx * 0.5), py(K.BOW + 2)); g.stroke(); g.setLineDash([]);
-        g.fillStyle = '#d8b030'; g.fillRect(px(sx) - 10, py(sz) - 2, 20, 4); g.fillRect(px(sx) - 2, py(sz) - 10, 4, 12);
-        g.fillStyle = 'rgba(25,27,30,0.85)'; g.fillRect(px(sx) - 22, py(sz + 10), 44, 14);   // blast deflector
-      }
-      // ramp stripes
-      g.fillStyle = 'rgba(230,230,220,0.55)';
-      for (var rz = K.RZ0; rz > K.BOW; rz -= 7) g.fillRect(px(-14), py(rz) - 1.5, px(14) - px(-14), 3);
-      // lifts (starboard, fore and aft of the island)
-      g.strokeStyle = 'rgba(15,16,18,0.9)'; g.lineWidth = 2;
-      g.strokeRect(px(17), py(-48), px(31) - px(17), py(-33) - py(-48)); g.strokeRect(px(17), py(36), px(31) - px(17), py(51) - py(36));
-      // deck edge safety line
-      g.strokeStyle = 'rgba(235,235,225,0.6)'; g.lineWidth = 1.5; g.beginPath();
-      for (i = 0; i < K.EDGE.length; i++) { var E = K.EDGE[i]; if (i) g.lineTo(px(-E[1] + 1.2), py(E[0])); else g.moveTo(px(-E[1] + 1.2), py(E[0])); }
-      g.stroke(); g.beginPath();
-      for (i = 0; i < K.EDGE.length; i++) { E = K.EDGE[i]; if (i) g.lineTo(px(E[2] - 1.2), py(E[0])); else g.moveTo(px(E[2] - 1.2), py(E[0])); }
-      g.stroke();
-      var tex = new T.CanvasTexture(cv); tex.encoding = T.sRGBEncoding; tex.anisotropy = 8;
-      return { tex: tex, XMIN: XMIN, XMAX: XMAX };
-    }
-    function dotTexture() {
-      var cv = document.createElement('canvas'); cv.width = cv.height = 64; var g = cv.getContext('2d');
-      var gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.25, 'rgba(255,255,255,0.85)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
-      g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return new T.CanvasTexture(cv);
-    }
-    function foamTexture() {
-      var cv = document.createElement('canvas'); cv.width = 64; cv.height = 256; var g = cv.getContext('2d'), R = rng(7);
-      g.fillStyle = '#000'; g.fillRect(0, 0, 64, 256);
-      for (var i = 0; i < 900; i++) {
-        var x = R() * 64, w = Math.exp(-Math.pow((x - 32) / 20, 2)), c = (120 + R() * 135) * (0.35 + 0.65 * w) | 0;
-        g.fillStyle = 'rgba(' + c + ',' + c + ',' + c + ',' + (0.25 + R() * 0.4) + ')'; g.fillRect(x, R() * 256, 1 + R() * 4, 2 + R() * 12);
-      }
-      // soft edges
-      var gr = g.createLinearGradient(0, 0, 64, 0); gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(0.25, 'rgba(0,0,0,0)'); gr.addColorStop(0.75, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,1)');
-      g.fillStyle = gr; g.fillRect(0, 0, 64, 256);
-      var t = new T.CanvasTexture(cv); t.wrapS = T.ClampToEdgeWrapping; t.wrapT = T.RepeatWrapping; return t;
-    }
-
     var NW = 44, WAKE_DT = 3.2;
     function buildModel() {
-      var grp = new T.Group(); grp.name = 'carrier';
-      var D = K.D, i, j;
-      // stations along z
-      var zs = [];
-      for (var z = K.BOW; z < K.RZ0; z += 4.5) zs.push(z);
-      for (z = K.RZ0; z < K.STERN; z += 12) zs.push(z);
-      zs.push(K.STERN);
-      // ---- hull loft (vertex colours: grey, black boot top, red below the waterline)
-      var cG = lin(0x6f767d), cG2 = lin(0x5d646b), cB = lin(0x1d1f22), cRd = lin(0x6a2a24), hull = new Acc();
-      var SEGC = [cG, cG2, cB, cRd, cRd, cRd, cRd, cB, cG2, cG];
-      function ring(zz, out) {
-        var k = eIdx(zz), pe = EPORT[k], se = ESTB[k], wl = EWL[k], top = D + rampH(zz) - 0.05;
-        var kp = wl + (pe - wl) * 0.4, ks = wl + (se - wl) * 0.4;
-        var pts = [[-pe, top], [-kp, 9], [-wl, 1.6], [-wl, 0], [-wl * 0.8, -6], [0, -9], [wl * 0.8, -6], [wl, 0], [wl, 1.6], [ks, 9], [se, top]];
-        for (var q = 0; q < pts.length; q++) { out[q] = [pts[q][0], pts[q][1], zz]; }
-        return out;
-      }
-      var r0 = [], r1 = [];
-      for (i = 0; i < zs.length - 1; i++) {
-        ring(zs[i], r0); ring(zs[i + 1], r1);
-        for (j = 0; j < 10; j++) { hull.tri(r0[j], r0[j + 1], r1[j], SEGC[j]); hull.tri(r0[j + 1], r1[j + 1], r1[j], SEGC[j]); }
-      }
-      // bow + stern caps
-      ring(zs[0], r0); var cb = [0, D * 0.55, zs[0]];
-      for (j = 0; j < 10; j++) hull.tri(cb, r0[j + 1], r0[j], cG2);
-      hull.tri(cb, r0[0], r0[10], cG2);
-      ring(K.STERN, r1); var cs = [0, D * 0.4, K.STERN];
-      for (j = 0; j < 10; j++) hull.tri(cs, r1[j], r1[j + 1], cG2);
-      hull.tri(cs, r1[10], r1[0], cG2);
-      var hullMat = new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.75, metalness: 0.25, flatShading: true });
-      var hm = new T.Mesh(hull.build(), hullMat); hm.castShadow = true; hm.receiveShadow = true; grp.add(hm);
-      // ---- flight deck (textured, ramp included)
-      var DT = deckTexture(), XW = DT.XMAX - DT.XMIN, NC = 8, pos = [], uv = [], idx = [];
-      for (i = 0; i < zs.length; i++) {
-        var k2 = eIdx(zs[i]), x0 = -EPORT[k2], x1 = ESTB[k2], yy = D + rampH(zs[i]);
-        for (j = 0; j <= NC; j++) { var xx = x0 + (x1 - x0) * j / NC; pos.push(xx, yy, zs[i]); uv.push((xx - DT.XMIN) / XW, 1 - (zs[i] - K.BOW) / (K.STERN - K.BOW)); }
-      }
-      for (i = 0; i < zs.length - 1; i++) for (j = 0; j < NC; j++) {
-        var a0 = i * (NC + 1) + j, a1 = a0 + 1, b0 = a0 + NC + 1, b1 = b0 + 1;
-        idx.push(a0, b0, a1, a1, b0, b1);
-      }
-      var dg = new T.BufferGeometry(); dg.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); dg.setAttribute('uv', new T.Float32BufferAttribute(uv, 2)); dg.setIndex(idx); dg.computeVertexNormals();
-      var deck = new T.Mesh(dg, new T.MeshStandardMaterial({ map: DT.tex, roughness: 0.88, metalness: 0.1 })); deck.receiveShadow = true; deck.castShadow = false; grp.add(deck);
-      // ---- island + details (one merged mesh)
-      var sup = new Acc(), cI = lin(0x7c838a), cI2 = lin(0x6a7178), cW = lin(0x151b20), cP = lin(0x2c333a), cBl = lin(0x18191b), cWh = lin(0xd8dcdc), I = K.ISL, m4 = new T.Matrix4();
-      sup.box(I.x0, I.x1 - 1, D, D + 15, I.z0, I.z1, cI);
-      sup.box(22.5, 31, D + 15, D + 27, -18, 14, cI2);
-      sup.box(22.3, 31.2, D + 22.4, D + 24.2, -18.2, 14.2, cW);
-      sup.box(21.6, 23.2, D + 9, D + 10.2, -24, -14, cI2); // bridge wing
-      [[26.75, D + 21, -18.35, 'x'], [26.75, D + 21, 14.35, 'x'], [22.25, D + 21, -2, 'z'], [31.25, D + 21, -2, 'z']].forEach(function (pp) {
-        var g = new T.CylinderGeometry(3.4, 3.4, 0.4, 8);
-        var r = new T.Matrix4(); if (pp[3] === 'x') r.makeRotationX(Math.PI / 2); else r.makeRotationZ(Math.PI / 2);
-        m4.makeTranslation(pp[0], pp[1], pp[2]).multiply(r); sup.geo(g, m4, cP);
-      });
-      sup.box(26.2, 27.8, D + 27, D + 44, -2, 0.6, cI2);
-      sup.box(22, 32, D + 38, D + 38.6, -1.3, -0.4, cI2);
-      sup.geo(new T.SphereGeometry(2.3, 12, 8), m4.makeTranslation(27, D + 46.2, -0.7), cWh);
-      sup.box(23.5, 30.5, D + 15, D + 24, 16, 29, cI);
-      sup.box(23.9, 30.1, D + 24, D + 25, 16.4, 28.6, cBl);
-      sup.box(26.6, 27.4, D + 27, D + 29, 7.6, 8.4, cI2);   // radar pole
-      // arrestor wires (raised a little) + wire sheaves
-      for (i = 0; i < K.WIRES.length; i++) {
-        var wa = K.WIRES[i], wx = axisX(wa, 0), wz = axisZ(wa, 0);
-        var gw = new T.BoxGeometry(2 * K.AHW + 2, 0.12, 0.12); m4.makeRotationY(-K.ANG * DEG).setPosition(wx, D + 0.08, wz); sup.geo(gw, m4, cBl);
-      }
-      // CIWS sponsons
-      var TUR = [[26.5, D + 15, -22], [31, D + 15, 30], [-27.5, D - 1.5, -86], [-21.5, D - 1.5, 132], [27, D - 1.5, 128], [28, D - 1.5, -84]];
-      for (i = 2; i < TUR.length; i++) sup.box(TUR[i][0] - 2.6, TUR[i][0] + 2.6, D - 3.2, D - 1.5, TUR[i][2] - 3, TUR[i][2] + 3, cG2);
-      // Luna landing light housing (port side, abeam the aim point)
-      var olsX = axisX(K.AIM, -20), olsZ = axisZ(K.AIM, -20);
-      sup.box(olsX - 0.6, olsX + 0.6, D, D + 3.2, olsZ - 1.2, olsZ + 1.2, cBl);
-      var supMesh = new T.Mesh(sup.build(), new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.7, metalness: 0.3, flatShading: true }));
-      supMesh.castShadow = true; supMesh.receiveShadow = true; grp.add(supMesh);
-      // rotating radar
-      var radar = new T.Mesh(new T.BoxGeometry(9, 1.6, 0.5), new T.MeshStandardMaterial({ color: lin(0x3a4046), roughness: 0.6, metalness: 0.4 }));
-      radar.position.set(27, D + 29.9, 8); grp.add(radar);
+      var B = buildShipBody(PAL.friend), grp = B.group, D = K.D, i, j, z;
+      grp.name = 'carrier';
+      var radar = B.radar, TUR = B.TUR, olsX = B.olsX, olsZ = B.olsZ, cI = B.cI, cWh = B.cWh;
       // ---- CIWS turrets (visual)
       var tb = new Acc(); tb.geo(new T.CylinderGeometry(1.3, 1.5, 1.2, 12), new T.Matrix4().makeTranslation(0, 0.6, 0), cI); tb.geo(new T.SphereGeometry(1.15, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), new T.Matrix4().makeTranslation(0, 1.2, 0), cWh);
       var tbG = tb.build(), barG = new T.BoxGeometry(0.32, 0.32, 3.2).translate(0, 0, -1.9), tMat = new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.3 }), bMat = new T.MeshStandardMaterial({ color: lin(0x2a2d30), roughness: 0.5, metalness: 0.6 });
@@ -26473,7 +26531,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       } else {
         if (combat.setTrigger) combat.setTrigger(false); else combat.setGun(false);
         inp.drift = false;
-        if (crashT > 1.2 && (E(0) || KP('Enter') || KP('KeyR'))) respawn();
+        if (crashT > 1.2 && (E(0) || KP('Enter'))) respawn();                       // back into the fight (air, near the mission / friends)
+        else if (crashT > 1.2 && (E(3) || KP('KeyR'))) spawn('runway');             // home base runway
       }
       // look
       if (gp) {
@@ -26575,10 +26634,11 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   document.addEventListener('pointerlockchange', function () { if (!document.pointerLockElement) { mouseBtn.l = mouseBtn.r = false; } });
   function resume() { if (!started) return; paused = false; $('menu').hidden = true; showTouch(); }
   function startGame(kind) {
+    var wasStarted = started;
     initAudio(); started = true; paused = false; $('menu').hidden = true;
-    // co-op: if friends are already flying, join them in the air instead of the runway
+    // co-op: on the FIRST take-off, if friends are already flying, join them in the air. "Restart on runway" always means the runway.
     var mateUp = false;
-    if (kind !== 'air' && net && net.connected && combat && combat.remotePlayers) {
+    if (!wasStarted && kind !== 'air' && net && net.connected && combat && combat.remotePlayers) {
       combat.remotePlayers().forEach(function (r) { if (r.alive && r.pos && r.pos.y - world.groundY(r.pos.x, -r.pos.z) > 120) mateUp = true; });
     }
     if (mateUp) { respawn(); glog('joined friends in the air'); } else spawn(kind);
@@ -27335,18 +27395,20 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
 
     // ---- corners
     var sb = drawScore(u, ch, L, TP);
-    if (narrow) drawPopups(u, ch, cx, yW + 76 * u, dt, 'center'); else drawPopups(u, ch, L, sb, dt, 'left');
+    if (narrow) { var npop = Math.min(5, (ch.popups || []).length); if (npop) want('up', 40, 30, npop * 24 * u + 8 * u, function (y) { drawPopups(u, ch, cx, y - 14 * u, dt, 'center'); }); }
+    else { HS.popMaxW = (cx - off - tw / 2 - 10 * u) - L; drawPopups(u, ch, L, sb, dt, 'left'); }
     drawMinimap(u, hdg, R, TP, ch, rm);
     hx.globalAlpha = dimA;
     drawLowerLeft(u, bl, bb);
     keyHintTick(dt, ch);
+    HS.wpL = W - ins.r;
     if (combat.active || ch.missiles < HS.mslMax) drawWeapons(u, ch, br, bb);
     hx.globalAlpha = 1;
 
     // text between the tapes must not run into them: inner gap width and the tapes' top edge
     HS.gapW = 2 * (off - tw / 2) - 24 * u; HS.tapeTop = my - th / 2 - 42 * u;
-    if (!crashed) drawBoss(u, ch, dt, bb); else HS.bossTop = H;
     drawMessages(u, dt, ch, crashed, bb, yW);
+    layoutFlush(u, ch, dt, bb, touchOn, crashed, hy);
     hx.shadowBlur = 0; hx.globalAlpha = 1;
     var ms = performance.now() - t0; HS.ms += (ms - HS.ms) * 0.05; window.__hudMs = HS.ms;
   }
@@ -27357,9 +27419,10 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   // ---- carrier: marker + distance; on final approach a glide-slope / line-up cross and the LSO call
   var CVP = {};
   function drawCarrier(u) {
+    if (HF('lso')) wantText('low', 75, 20 * u, 'LSO: ON GLIDE SLOPE · CHECK SPEED', 13 * u, '#7fc8ff');
     if (!carrier) return;
     var c = carrier.hudInfo && carrier.hudInfo(); if (!c || !c.available || !c.pos) return;
-    if (c.onDeck) { if (c.msg) text(c.msg, W / 2, H * 0.62, 13 * u, HC, 'center'); return; }
+    if (c.onDeck) { if (c.msg) wantText('low', 70, 20 * u, c.msg, 13 * u, HC); return; }
     if (c.dist > 30000) return;
     var p = projTo(c.aim || c.pos, CVP);
     if (!p.behind && p.x > 0 && p.x < W && p.y > 0 && p.y < H) {
@@ -27377,8 +27440,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       hx.fillStyle = '#ffb347'; hx.fillRect(cx - R0, cy + gy - 1.5 * u, R0 * 2, 3 * u);
       hx.fillStyle = '#7fc8ff'; hx.fillRect(cx + lx - 1.5 * u, cy - R0, 3 * u, R0 * 2);
       hx.globalAlpha = 1; hx.shadowBlur = sb;
-      if (c.call) text(c.call, cx, cy + R0 + 16 * u, 13 * u, '#7fc8ff', 'center');
-    } else if (c.msg) text(c.msg, W / 2, H * 0.62, 13 * u, '#7fc8ff', 'center');
+      if (c.call) wantText('low', 75, 20 * u, c.call, 13 * u, '#7fc8ff');
+    } else if (c.msg) wantText('low', 70, 20 * u, c.msg, 13 * u, '#7fc8ff');
   }
   // ---- SAM radar track warning (before launch): flashing TRACKED + bearing chevron + slow tone
   var TRK = { on: 0, beep: 0 }, trkP = {};
@@ -27387,12 +27450,15 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     TRK.on += ((t ? 1 : 0) - TRK.on) * Math.min(1, dt * 10);
     if (t) { TRK.beep -= dt; if (TRK.beep <= 0) { TRK.beep = 1.1 - 0.7 * (t.t01 || 0); try { audio.play('lock'); } catch (e) {} } } else TRK.beep = 0;
     if (TRK.on < 0.05 || !t) return;
-    var blink = Math.sin(simTime * 10) > -0.3 ? 1 : 0.4, y = H * 0.5 - Math.min(W, H) * 0.24;
+    var blink = Math.sin(simTime * 10) > -0.3 ? 1 : 0.4, on = TRK.on, t01 = Math.min(1, t.t01 || 0), lab = 'TRACKED' + (t.kind ? ' · ' + tagOf(t.kind) : '');
+    want('up', 90, 15, 30 * u, function (y, mw) {
+      hx.globalAlpha = on * blink; var yc = y + 10 * u;
+      spaced(lab, W / 2, yc, 16 * u, AMB, 4 * u, Math.min(W * 0.4, mw));
+      var w = 120 * u, x = W / 2 - w / 2, sb = hx.shadowBlur; hx.shadowBlur = 0;
+      hx.fillStyle = 'rgba(2,13,9,.6)'; hx.fillRect(x, yc + 12 * u, w, 4 * u);
+      hx.fillStyle = AMB; hx.fillRect(x, yc + 12 * u, w * t01, 4 * u); hx.shadowBlur = sb; hx.globalAlpha = 1;
+    });
     hx.globalAlpha = TRK.on * blink;
-    spaced('TRACKED' + (t.kind ? ' · ' + tagOf(t.kind) : ''), W / 2, y, 16 * u, AMB, 4 * u, W * 0.4);
-    var w = 120 * u, x = W / 2 - w / 2, sb = hx.shadowBlur; hx.shadowBlur = 0;
-    hx.fillStyle = 'rgba(2,13,9,.6)'; hx.fillRect(x, y + 12 * u, w, 4 * u);
-    hx.fillStyle = AMB; hx.fillRect(x, y + 12 * u, w * Math.min(1, t.t01 || 0), 4 * u); hx.shadowBlur = sb;
     if (t.pos) {
       var p = projTo(t.pos, trkP), dx = p.x - W / 2, dy = p.y - H / 2; if (p.behind) { dx = -dx; dy = -dy; }
       var a = Math.atan2(dy, dx), r = Math.min(W, H) * 0.31, cp = new Path2D();
@@ -27416,15 +27482,12 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         }
       }
     }
-    var warn = GP.tti < Math.max(1.6, Math.min(3.2, st.speed / 110));
+    var warn = GP.tti < Math.max(1.6, Math.min(3.2, st.speed / 110)) || HF('pullup');
     GP.on += ((warn ? 1 : 0) - GP.on) * Math.min(1, dt * 12);
     if (warn) { GP.beep -= dt; if (GP.beep <= 0) { GP.beep = 0.55; try { audio.play('warn'); } catch (e) {} } } else GP.beep = 0;
     if (GP.on < 0.05) return;
-    var blink = Math.sin(simTime * 18) > -0.2 ? 1 : 0.35;
-    hx.globalAlpha = GP.on * blink;
-    var y = H * 0.5 + Math.min(W, H) * 0.2;
-    spaced('PULL UP', W / 2, y, 30 * u, RED, 6 * u, W * 0.5);
-    hx.globalAlpha = 1;
+    var blink = Math.sin(simTime * 18) > -0.2 ? 1 : 0.35, on = GP.on;
+    want('low', 98, 5, 38 * u, function (y, mw) { hx.globalAlpha = on * blink; spaced('PULL UP', W / 2, y + 19 * u, 30 * u, RED, 6 * u, Math.min(W * 0.5, mw)); hx.globalAlpha = 1; });
   }
   // ---- own bombs / rockets / missiles in flight: small diamond on each, X + countdown at the predicted impact
   var ORP = {}, ORI = {};
@@ -27495,6 +27558,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     var cl = world.cameraCloud || 0;
     var svT = clamp((cl - 0.04) / 0.3, 0, 1);
     SVS.show = dt > 0 ? SVS.show + (svT - SVS.show) * Math.min(1, dt * 4) : svT;
+    if (HF('svs')) want('low', 10, 90, 16 * u, function (y) { text('TERRAIN VISION', W / 2, y + 8 * u, 11 * u, HCdim, 'center'); });
     if (!SVS.range || SVS.show < 0.02) return;
     var cp = camera.position, nr = SVS.nr, nc = SVS.nc, i, j, k;
     camera.getWorldDirection(svsV);
@@ -27540,9 +27604,9 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       hx.globalAlpha = al; ln(HC, 1.3 - k * 0.3); hx.stroke(P[k * 2]);
       hx.globalAlpha = Math.min(1, al * 1.2); ln(RED, 1.8 - k * 0.3); hx.stroke(P[k * 2 + 1]);
     }
-    hx.globalAlpha = SVS.show * 0.9;
-    text('SVS', W / 2, H * 0.5 + Math.min(W, H) * 0.3, 11 * u, HCdim, 'center');
     hx.globalAlpha = 1; hx.shadowBlur = sb;
+    var sa = SVS.show * 0.9;
+    want('low', 10, 90, 16 * u, function (y) { hx.globalAlpha = sa; text('TERRAIN VISION', W / 2, y + 8 * u, 11 * u, HCdim, 'center'); hx.globalAlpha = 1; });
   }
 
   function drawOverlays(u) {
@@ -27741,16 +27805,15 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
 
   // ---- boss bar: nearest big composite enemy, wide bar at bottom centre above the lower panels
   var BOSS = { a: 0, last: null };
-  function drawBoss(u, ch, dt, bb) {
+  // part of the bottom-centre stack: yb = top edge of what is below it; returns the new top edge
+  function drawBoss(u, ch, dt, yb, band) {
     var b = ch.bosses && ch.bosses.length ? ch.bosses[0] : null;
     if (b) BOSS.last = b;
     BOSS.a = clamp(BOSS.a + (b ? dt * 3 : -dt * 2), 0, 1);
-    HS.bossTop = H;
-    if (BOSS.a <= 0.01 || !BOSS.last) return;
+    if (BOSS.a <= 0.01 || !BOSS.last) return yb;
     b = BOSS.last;
-    var w = Math.min(420 * u, W - 2 * Math.max(16, 20 * u) - ins.l - ins.r), h = 8 * u;
-    var y = Math.min(bb - 112 * u, commsTop() - 16 * u, tutTop() - 16 * u), x = W / 2 - w / 2, k = clamp(b.hp01, 0, 1);
-    HS.bossTop = y - 20 * u;
+    var w = Math.min(420 * u, band ? band.w : W - 40 * u), h = 8 * u, bx = band ? band.cx : W / 2;
+    var y = yb - LAYG * u - 8 * u - h, x = bx - w / 2, k = clamp(b.hp01, 0, 1);
     var A = hx.globalAlpha; hx.globalAlpha = A * BOSS.a;
     var sb = hx.shadowBlur; hx.shadowBlur = 0;
     hx.fillStyle = 'rgba(2,10,8,.66)'; hx.fillRect(x - 10 * u, y - 22 * u, w + 20 * u, h + 30 * u);
@@ -27764,6 +27827,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     text(String(b.label || b.kind || 'TARGET').toUpperCase(), x, y - 10 * u, 12 * u, WHITE, 'left', DISP, '700');
     text(Math.round(k * 100) + '% · ' + ((b.dist || 0) / 1000).toFixed(1) + ' KM', x + w, y - 10 * u, 11.5 * u, c, 'right');
     hx.globalAlpha = A;
+    return y - 22 * u;
   }
 
   // ---- co-op teammates: blue diamond, callsign above, distance below; blue edge arrows when off screen
@@ -28014,8 +28078,10 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       var y = y0 + 18 * u + (i - i0) * slot + HS.popShift - a * 5 * u + ent * 16 * u;
       hx.globalAlpha = al;
       if (plate) blit(plate, L - 12 * u, y - 12 * u);
-      if (combo) text(pp.text, L, y, 21 * u * (1 + 0.3 * ent), AMB, al0, DISP, '800');
-      else text(pp.text, L, y, 15 * u, WHITE, al0, DISP, '700');
+      var fpx = combo ? 21 * u * (1 + 0.3 * ent) : 15 * u;
+      if (al0 === 'left' && HS.popMaxW > 0) { font(fpx, DISP, combo ? '800' : '700'); var pw = hx.measureText(pp.text).width; if (pw > HS.popMaxW) fpx *= HS.popMaxW / pw; }
+      if (combo) text(pp.text, L, y, fpx, AMB, al0, DISP, '800');
+      else text(pp.text, L, y, fpx, WHITE, al0, DISP, '700');
     }
     hx.globalAlpha = 1;
   }
@@ -28251,11 +28317,12 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   function drawMission(u, cx, hy, R, TP, rm) {
     if (!campaign || !campaign.active) return;
     var m = campaign.hud ? campaign.hud() : null; if (!m) return;
-    var y = hy + 30 * u;
-    if (m.title) text(m.title.toUpperCase(), cx, y, 13 * u, WHITE, 'center', DISP, '700');
-    if (m.objective) text(m.objective, cx, y + 17 * u, 11.5 * u, HC, 'center');
-    if (m.nextIn > 0 && !m.objective) text('NEXT MISSION ' + Math.ceil(m.nextIn) + ' S', cx, y + 17 * u, 11.5 * u, HCdim, 'center');
-    if (m.levelUp) { var lA = hx.globalAlpha; hx.globalAlpha = lA * (0.75 + 0.25 * Math.sin(simTime * 8)); text('LEVEL ' + (m.levelUp.level || '') + ' — SKILL POINT', cx, H * 0.2, 30 * u, AMB, 'center', DISP, '800'); hx.globalAlpha = lA; }
+    if (m.title || m.objective || m.nextIn > 0) want('up', 100, 0, 36 * u, function (y, mw) {
+      if (m.title) spaced(m.title.toUpperCase(), cx, y + 9 * u, 13 * u, WHITE, 0.5 * u, mw, DISP, '700');
+      if (m.objective) spaced(m.objective, cx, y + 26 * u, 11.5 * u, HC, 0, mw, MONO, '400');
+      else if (m.nextIn > 0) spaced('NEXT MISSION ' + Math.ceil(m.nextIn) + ' S', cx, y + 26 * u, 11.5 * u, HCdim, 0, mw, MONO, '400');
+    });
+    if (m.levelUp) want('up', 85, 10, 40 * u, function (y, mw) { hx.globalAlpha = 0.75 + 0.25 * Math.sin(simTime * 8); spaced('LEVEL ' + (m.levelUp.level || '') + ' — SKILL POINT', cx, y + 20 * u, 30 * u, AMB, 1 * u, mw); hx.globalAlpha = 1; });
     if (m.credits != null) text('CR ' + fmtCr(m.credits), R - rm, TP + 2 * rm + 44 * u, 12 * u, AMB, 'center');
     if (m.waypoint) {
       var p = projTo(m.waypoint, WPP), dist = m.waypointDist != null ? m.waypointDist : st.pos.distanceTo(m.waypoint);
@@ -28329,10 +28396,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     if (st.boosting) { var A2 = hx.globalAlpha; hx.globalAlpha = A2 * (0.75 + 0.25 * Math.sin(simTime * 20)); hx.fillRect(bbx, r3 - 3.5 * u, bw * bf, 7 * u); hx.globalAlpha = A2; }
     else hx.fillRect(bbx, r3 - 3.5 * u, bw * bf, 7 * u);
     if (st.boostLock) { hx.fillStyle = AMB; hx.fillRect(bbx + bw * 0.3 - 1 * u, r3 - 6 * u, 2 * u, 12 * u); }
-    if (st.drift) {
-      var A3 = hx.globalAlpha; hx.globalAlpha = A3 * (0.8 + 0.2 * Math.sin(simTime * 10));
-      text('DRIFT', W / 2, H * 0.7, 26 * u, AMB, 'center', DISP, '800'); hx.globalAlpha = A3;
-    }
+    if (st.drift || HF('drift')) want('low', 40, 40, 32 * u, function (y) { hx.globalAlpha = 0.8 + 0.2 * Math.sin(simTime * 10); text('DRIFT', W / 2, y + 16 * u, 26 * u, AMB, 'center', DISP, '800'); hx.globalAlpha = 1; });
+    HS.llR = col + 62 * u + 120 * u + 6 * u; HS.llTop = gy - 46 * u;
   }
   function flag(u, x, y, s, col, boxed) {
     font(11 * u, MONO); var w = hx.measureText(s).width + 10 * u;
@@ -28438,8 +28503,9 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     if (ga >= 0) text(String(ga), R, y3 + 0.5 * u, 16 * u, ga === 0 ? RED : gk < 0.2 ? AMB : HC, 'right', DISP, '700');
     else text(hot ? 'HOT' : 'RDY', R, y3 + 0.5 * u, 12 * u, hot ? RED : HCdim, 'right', DISP, '700');
     // button hints: full strip on wide screens, glyphs only on narrow ones
+    HS.wpL = R - 188 * u;
     if (dev !== 'touch') {
-      if (wide) drawKeyStrip(u, R - 196 * u, y3, dev);
+      if (wide) { drawKeyStrip(u, R - 196 * u, y3, dev); if (KH.a > 0.01) HS.wpL = R - 196 * u - 112 * u; }
       else {
         hintR(lx - 8 * u, y1, BIND[dev].fire, '', 10.5 * u);
         if (ch.flares > 0) hintR(lx - 8 * u, y2, BIND[dev].flares, '', 10.5 * u);
@@ -28456,73 +28522,160 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   }
 
   // ---- centre messages: wave title, flash messages, warnings, crash screen
+  // ---------------------------------------------------------------- layout slots
+  // Every centre text asks for room in a named slot instead of drawing at a fixed y:
+  //   'up'  = top-centre stack under the heading tape (mission line, DOM toasts, banner, TRACKED, flash, phone popups)
+  //   'low' = centre-lower warning stack (MISSILE + flare prompt, PULL UP, carrier calls, GEAR UP, COBRA, DRIFT, SVS)
+  //   bottom-centre stack (built in layoutFlush): radio box (DOM), training card (DOM), boss bar, START MISSIONS prompt.
+  // want(slot, prio, order, h, draw(yTop, maxW)): when a slot is full, the lowest prio items wait (not drawn this
+  // frame); the rest are drawn top-down by 'order' with a gap, so no two texts overlap.
+  var SLOT = { up: [], low: [] }, LAYG = 6;
+  // test hooks: window.__hudForce = { drift, cobra, gear, pullup, svs, lso } forces those messages on; __hudFlash(text)
+  function HF(k) { var f = window.__hudForce; return !!(f && f[k]); }
+  window.__hudFlash = function (t) { flash(t); };
+  function want(slot, prio, order, h, draw) { SLOT[slot].push({ p: prio, o: order, h: h, d: draw }); }
+  function wantText(slot, prio, h, s, px, col) {
+    want(slot, prio, 50, h, function (y, mw) { spaced(s, W / 2, y + h / 2, px, col, 0.5 * hu, mw, MONO, '400'); });
+  }
+  function pickFit(list, room, gap) {       // highest prio first while they fit; returns them in display order
+    list.sort(function (a, b) { return b.p - a.p; });
+    var out = [], used = 0;
+    for (var i = 0; i < list.length; i++) { var h = list[i].h + (out.length ? gap : 0); if (used + h <= room + 0.5) { out.push(list[i]); used += h; } }
+    out.sort(function (a, b) { return a.o - b.o; });
+    return { items: out, h: used };
+  }
+  function domVis(el) { return !!el && !el.hidden && el.offsetParent !== null; }
+  // the radio box, the training card and the boss bar share the bottom centre with the corner panels:
+  // find the free gap between the corner panels (or touch controls) and go above them only when it is too small
+  function bottomBand(u, bb, touchOn) {
+    var ib = Math.max(12, ins.b), llR = HS.llR || 0, wpL = HS.wpL || W, lo = { cb: ib, gapL: llR, gapR: wpL };
+    if (touchOn) {
+      var tl = Math.max(16, ins.l) + 158, tr = W - Math.max(16, ins.r) - 210;
+      if (H > W) { lo = { cb: ib, gapL: tl, gapR: tr }; if (lo.gapR - lo.gapL < 300) lo = { cb: H - (bb - 80 * u) + 8, gapL: llR, gapR: wpL }; }
+      else lo = { cb: ib, gapL: Math.max(tl, llR), gapR: Math.min(tr, wpL) };
+    }
+    if (lo.gapR - lo.gapL < 300) lo = { cb: H - (HS.llTop || bb - 80 * u) + 8, gapL: ins.l + 16, gapR: W - ins.r - 16 };
+    lo.w = Math.max(200, lo.gapR - lo.gapL - 16); lo.cx = (lo.gapL + lo.gapR) / 2;
+    return lo;
+  }
+  var LAYC = { commsB: -1, commsW: -1, commsL: -1, tutB: -1, tutW: -1 };
+  function layoutFlush(u, ch, dt, bb, touchOn, crashed, hy) {
+    var cx = W / 2, mn = Math.min(W, H), maxW = W - 2 * Math.max(12, 16 * u) - ins.l - ins.r, gap = LAYG * u;
+    // ---- bottom stack (bottom-up): radio box -> training card -> boss bar -> START MISSIONS
+    var band = bottomBand(u, bb, touchOn), cm = $('comms'), tc = $('tutCard');
+    var cb = Math.round(band.cb), cw = Math.round(Math.min(560, band.w)), cl = Math.round(band.cx);
+    if (cm) {
+      if (cb !== LAYC.commsB) { LAYC.commsB = cb; cm.style.bottom = cb + 'px'; }
+      if (cw !== LAYC.commsW) { LAYC.commsW = cw; cm.style.width = cw + 'px'; }
+      if (cl !== LAYC.commsL) { LAYC.commsL = cl; cm.style.left = cl + 'px'; }
+    }
+    var yb = H - cb;                                     // top edge of what is stacked so far
+    if (domVis(cm)) yb = Math.min(yb, cm.getBoundingClientRect().top);
+    if (tc) {
+      var tb = Math.round(H - yb + 8), tw2 = Math.round(Math.min(480, band.w));
+      if (tb !== LAYC.tutB) { LAYC.tutB = tb; tc.style.bottom = tb + 'px'; tc.style.marginBottom = '0px'; }
+      if (tw2 !== LAYC.tutW) { LAYC.tutW = tw2; tc.style.maxWidth = tw2 + 'px'; tc.style.left = cl + 'px'; }
+      if (domVis(tc) && tutorial && tutorial.current && tutorial.current()) yb = Math.min(yb, tc.getBoundingClientRect().top);
+    }
+    if (!crashed) yb = drawBoss(u, ch, dt, yb - gap, band);
+    HS.bossTop = yb;
+    if (!crashed && !(campaign ? campaign.active : combat.active) && !st.onGround && st.agl > 30) {
+      var sy = yb - gap - 12 * u, dev = inputDev();
+      hx.globalAlpha = 0.6 + 0.4 * Math.sin(simTime * 4);
+      if (dev === 'touch') spaced('TAP  MENU  —  START MISSIONS', cx, sy, 15 * u, WHITE, 1.5 * u, maxW, DISP, '700');
+      else {
+        var spx = 15 * u, sk = BIND[dev].missions; font(spx, DISP, '700');
+        var s1 = hx.measureText('PRESS').width, s3 = hx.measureText(' — START MISSIONS').width, sg = glyph(0, -999, sk, spx * 1.05), sx = cx - (s1 + 8 * u + sg + s3) / 2;
+        text('PRESS', sx, sy, spx, WHITE, 'left', DISP, '700'); glyph(sx + s1 + 4 * u, sy, sk, spx * 1.05);
+        text(' — START MISSIONS', sx + s1 + 8 * u + sg, sy, spx, WHITE, 'left', DISP, '700');
+      }
+      hx.globalAlpha = 1; yb = sy - 12 * u;
+    }
+    // ---- upper stack (top-down) from under the heading tape to above the seeker zone
+    var y0 = hy + 22 * u, yMaxUp = H / 2 - mn * 0.19;
+    // DOM toasts (campaign rank toast, extras medal toasts) take their place in the stack: the HUD moves them
+    var dom = [document.querySelector('.flc-toast'), document.querySelector('.flx-toasts')];
+    var upL = SLOT.up, i, it;
+    for (i = 0; i < dom.length; i++) {
+      var de = dom[i]; if (!de) continue;
+      var on = !de.classList.contains('off') && de.offsetHeight > 4 && (de.className.indexOf('flx-toasts') < 0 || de.children.length);
+      if (on) (function (el, h) { want('up', 99, 5, h, function (y) { var t = Math.round(y); if (el.__layT !== t) { el.__layT = t; el.style.top = t + 'px'; } }); })(de, de.offsetHeight);
+    }
+    var fu = pickFit(upL, yMaxUp - y0, gap), y = y0;
+    for (i = 0; i < fu.items.length; i++) {
+      it = fu.items[i];
+      var mw = y + it.h > HS.tapeTop ? Math.min(maxW, HS.gapW) : maxW;
+      it.d(y, mw); y += it.h + gap;
+    }
+    HS.upBottom = y;
+    // ---- lower warning stack: prefers to start a little under the centre, moves up when the bottom stack is high
+    var yMinLow = H / 2 + mn * 0.13, yPref = H / 2 + mn * 0.19, yMaxLow = yb - gap;
+    var fl = pickFit(SLOT.low, yMaxLow - yMinLow, gap);
+    y = clamp(yPref, yMinLow, Math.max(yMinLow, yMaxLow - fl.h));
+    for (i = 0; i < fl.items.length; i++) {
+      it = fl.items[i];
+      var mw2 = y < HS.tapeTop + 250 * u && y + it.h > HS.tapeTop ? Math.min(maxW, HS.gapW) : maxW;
+      it.d(y, mw2); y += it.h + gap;
+    }
+    SLOT.up.length = 0; SLOT.low.length = 0;
+    hx.globalAlpha = 1;
+  }
+  window.__hudLayout = function () { return { comms: LAYC, upBottom: HS.upBottom, bossTop: HS.bossTop }; };
+
+  // ---- centre messages: they register into the slots above; the crash screen draws directly
   function drawMessages(u, dt, ch, crashed, bb, yW) {
     var cx = W / 2, maxW = W - 2 * Math.max(12, 16 * u) - ins.l - ins.r;
     if (ch.waveMsg !== HS.wave) { HS.wave = ch.waveMsg; HS.waveT = simTime; }
     if (ch.waveMsg && !crashed) {
-      var wt = simTime - HS.waveT, wy = yW;
-      hx.globalAlpha = clamp(wt * 5, 0, 1);
-      var sp = (10 + 22 * Math.exp(-wt * 5)) * u, tw = spaced(ch.waveMsg, cx, wy, 44 * u, WHITE, sp, wy + 22 * u > HS.tapeTop ? Math.min(maxW * 0.86, HS.gapW) : maxW * 0.86);
-      var lx = tw / 2 + 18 * u, ll = Math.min(70 * u, (maxW - tw) / 2 - 20 * u);
-      if (ll > 8 * u) {
-        hx.beginPath(); hx.moveTo(cx - lx, wy); hx.lineTo(cx - lx - ll, wy); hx.moveTo(cx + lx, wy); hx.lineTo(cx + lx + ll, wy);
-        ln(WHITE, 1.4); hx.stroke();
-      }
-      hx.globalAlpha = 1;
+      var wt = simTime - HS.waveT, wm = ch.waveMsg;
+      want('up', 80, 10, 50 * u, function (y, mw) {
+        var wy = y + 25 * u;
+        hx.globalAlpha = clamp(wt * 5, 0, 1);
+        var sp = (10 + 22 * Math.exp(-wt * 5)) * u, tw = spaced(wm, cx, wy, 44 * u, WHITE, sp, mw * 0.86);
+        var lx = tw / 2 + 18 * u, ll = Math.min(70 * u, (mw - tw) / 2 - 20 * u);
+        if (ll > 8 * u) {
+          hx.beginPath(); hx.moveTo(cx - lx, wy); hx.lineTo(cx - lx - ll, wy); hx.moveTo(cx + lx, wy); hx.lineTo(cx + lx + ll, wy);
+          ln(WHITE, 1.4); hx.stroke();
+        }
+        hx.globalAlpha = 1;
+      });
     }
     if (msgT > 0) {
-      msgT -= dt; hx.globalAlpha = clamp(msgT, 0, 1);
-      var my2 = yW + 44 * u;
-      spaced(msgText, cx, my2, 17 * u, WHITE, 1.5 * u, my2 + 10 * u > HS.tapeTop ? Math.min(maxW, HS.gapW) : maxW, DISP, '700');
-      hx.globalAlpha = 1;
+      msgT -= dt;
+      var ma = clamp(msgT, 0, 1), mt = msgText;
+      var ct = document.querySelector('.flc-toast');
+      var dup = /^MISSION COMPLETE/.test(mt) && ct && !ct.classList.contains('off');   // the rank toast already says it
+      if (!crashed && !dup) want('up', 60, 20, 24 * u, function (y, mw) { hx.globalAlpha = ma; spaced(mt, cx, y + 12 * u, 17 * u, WHITE, 1.5 * u, mw, DISP, '700'); hx.globalAlpha = 1; });
     }
     if (!crashed) {
-      var wy2 = H * 0.7, blink = Math.sin(simTime * 14) > -0.2, inc = ch.incoming || [], dev = inputDev();
-      // keep the warning stack above the tutorial card and the boss bar
-      var lowLim = Math.min(HS.bossTop || H, tutTop()) - 10 * u;
-      var stackH = (inc.length ? 50 * u + (ch.flares > 0 ? 36 * u : 0) : 0) + 34 * u;
-      if (wy2 - 25 * u + stackH > lowLim) wy2 = Math.max(H * 0.56, lowLim - stackH + 25 * u);
+      var blink = Math.sin(simTime * 14) > -0.2, inc = ch.incoming || [], dev = inputDev();
       if (inc.length) {
         var dmin = 1e9; for (var i = 0; i < inc.length; i++) dmin = Math.min(dmin, inc[i].dist);
-        var bw = 196 * u, bh = 50 * u, by = wy2 - bh / 2;
-        hx.save(); hx.shadowBlur = 0; hx.fillStyle = blink ? 'rgba(110,0,0,.5)' : 'rgba(40,0,0,.45)'; hx.fillRect(cx - bw / 2, by, bw, bh); hx.restore();
-        ln(RED, 2); hx.strokeRect(cx - bw / 2, by, bw, bh);
-        hx.beginPath(); hx.moveTo(cx - bw / 2 - 8 * u, by + 8 * u); hx.lineTo(cx - bw / 2 - 8 * u, by + bh - 8 * u); hx.moveTo(cx + bw / 2 + 8 * u, by + 8 * u); hx.lineTo(cx + bw / 2 + 8 * u, by + bh - 8 * u); hx.stroke();
-        spaced('MISSILE', cx, by + 18 * u, 24 * u, blink ? '#ffe2dc' : RED, 8 * u, bw - 16 * u);
-        text((dmin / 1000).toFixed(1) + ' KM', cx, by + 38 * u, 12.5 * u, blink ? '#ffe2dc' : RED, 'center');
-        wy2 += bh / 2 + 24 * u;
-        if (ch.flares > 0) {      // big flare prompt with the real button
-          var fy = by + bh + 22 * u, fpx = 17 * u, A0p = hx.globalAlpha;
-          hx.globalAlpha = A0p * (blink ? 1 : 0.55);
-          if (dev === 'touch') spaced('TAP  FLARE', cx, fy, fpx, WHITE, 2 * u, maxW, DISP, '800');
+        var fl = ch.flares > 0;
+        want('low', 100, 0, (50 + (fl ? 38 : 0)) * u, function (y, mw) {
+          var bw = 196 * u, bh = 50 * u, by = y;
+          hx.save(); hx.shadowBlur = 0; hx.fillStyle = blink ? 'rgba(110,0,0,.5)' : 'rgba(40,0,0,.45)'; hx.fillRect(cx - bw / 2, by, bw, bh); hx.restore();
+          ln(RED, 2); hx.strokeRect(cx - bw / 2, by, bw, bh);
+          hx.beginPath(); hx.moveTo(cx - bw / 2 - 8 * u, by + 8 * u); hx.lineTo(cx - bw / 2 - 8 * u, by + bh - 8 * u); hx.moveTo(cx + bw / 2 + 8 * u, by + 8 * u); hx.lineTo(cx + bw / 2 + 8 * u, by + bh - 8 * u); hx.stroke();
+          spaced('MISSILE', cx, by + 18 * u, 24 * u, blink ? '#ffe2dc' : RED, 8 * u, bw - 16 * u);
+          text((dmin / 1000).toFixed(1) + ' KM', cx, by + 38 * u, 12.5 * u, blink ? '#ffe2dc' : RED, 'center');
+          if (!fl) return;
+          var fy = by + bh + 22 * u, fpx = 17 * u;      // big flare prompt with the real button
+          hx.globalAlpha = blink ? 1 : 0.55;
+          if (dev === 'touch') spaced('TAP  FLARE', cx, fy, fpx, WHITE, 2 * u, mw, DISP, '800');
           else {
             font(fpx, DISP, '800'); var w1 = hx.measureText('PRESS').width, w3 = hx.measureText('FLARES').width, gk = BIND[dev].flares;
-            var gw = glyph(0, -999, gk, fpx * 1.1), dash = hx.measureText(' \u2014 ').width, tot = w1 + 10 * u + gw + dash + w3, x1 = cx - tot / 2;
+            var gw = glyph(0, -999, gk, fpx * 1.1), dash = hx.measureText(' — ').width, tot = w1 + 10 * u + gw + dash + w3, x1 = cx - tot / 2;
             hx.save(); hx.shadowBlur = 0; hx.fillStyle = 'rgba(40,0,0,.5)'; hx.fillRect(x1 - 10 * u, fy - 15 * u, tot + 20 * u, 30 * u); hx.restore();
             text('PRESS', x1, fy, fpx, WHITE, 'left', DISP, '800');
             glyph(x1 + w1 + 5 * u, fy, gk, fpx * 1.1);
-            text(' \u2014 FLARES', x1 + w1 + 10 * u + gw, fy, fpx, WHITE, 'left', DISP, '800');
+            text(' — FLARES', x1 + w1 + 10 * u + gw, fy, fpx, WHITE, 'left', DISP, '800');
           }
-          hx.globalAlpha = A0p;
-          wy2 += 36 * u;
-        }
+          hx.globalAlpha = 1;
+        });
       }
-      var tti = st.vel.y < -1 ? st.agl / -st.vel.y : 99;
-      if (!st.onGround && st.agl < 900 && tti < 5 && st.gearT < 0.5) { if (blink) spaced('PULL UP', cx, wy2, 28 * u, RED, 6 * u, maxW); wy2 += 32 * u; }
-      if (!st.onGround && st.agl < 120 && st.vel.y < -1 && st.gearT < 0.02 && !combat.active) { spaced('GEAR UP', cx, wy2, 15 * u, AMB, 3 * u, maxW, MONO, '400'); wy2 += 22 * u; }
-      if (st.cobra) { spaced('COBRA', cx, wy2, 24 * u, AMB, 6 * u, maxW); wy2 += 26 * u; }
-      if (!(campaign ? campaign.active : combat.active) && !st.onGround && st.agl > 30) {
-        hx.globalAlpha = 0.6 + 0.4 * Math.sin(simTime * 4);
-        var sy = Math.min(bb - 96 * u, lowLim - 8 * u);
-        if (dev === 'touch') spaced('TAP  MENU  —  START MISSIONS', cx, sy, 15 * u, WHITE, 1.5 * u, maxW, DISP, '700');
-        else {
-          var spx = 15 * u, sk = BIND[dev].missions; font(spx, DISP, '700');
-          var s1 = hx.measureText('PRESS').width, s3 = hx.measureText(' — START MISSIONS').width, sg = glyph(0, -999, sk, spx * 1.05), sx = cx - (s1 + 8 * u + sg + s3) / 2;
-          text('PRESS', sx, sy, spx, WHITE, 'left', DISP, '700'); glyph(sx + s1 + 4 * u, sy, sk, spx * 1.05);
-          text(' — START MISSIONS', sx + s1 + 8 * u + sg, sy, spx, WHITE, 'left', DISP, '700');
-        }
-        hx.globalAlpha = 1;
-      }
+      if (HF('gear') || !st.onGround && st.agl < 120 && st.vel.y < -1 && st.gearT < 0.02 && !combat.active) want('low', 60, 20, 22 * u, function (y, mw) { spaced('GEAR UP', cx, y + 11 * u, 15 * u, AMB, 3 * u, mw, MONO, '400'); });
+      if (st.cobra || HF('cobra')) want('low', 45, 30, 28 * u, function (y, mw) { spaced('COBRA', cx, y + 14 * u, 24 * u, AMB, 6 * u, mw); });
     } else {
       window.__hudCrashT = crashT;
       var k = clamp(crashT / 0.5, 0, 1), cy = H * 0.42;
@@ -28911,7 +29064,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793150592', updShown = false;
+  var BUILD = '1793150934', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
