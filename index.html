@@ -19346,8 +19346,9 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         }
       }
     }
+    var lastRPU = -1e9;
     function updateRemotePlayers(dt) {
-      var now = nowMs();
+      var now = nowMs(); lastRPU = now;
       for (var i = 1; i < pts.length; i++) {
         var P = pts[i];
         if (P.ai) continue;                      // friendly AI: wingman.js owns its pose
@@ -19731,6 +19732,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     combat.setLocalInfo = function (o) { if (o) { if (o.name) localInfo.name = String(o.name).slice(0, 24); if (o.aircraftId) { localInfo.aircraftId = o.aircraftId; LP.aircraftId = o.aircraftId; } } };
     combat.setLocalVisual = function (o) { if (o) { if (o.thr != null) localVis.thr = +o.thr || 0; if (o.ab != null) localVis.ab = +o.ab || 0; if (o.gearT != null) localVis.gearT = +o.gearT || 0; } };
     combat.remotePlayers = function () {
+      // not flying (menu / lobby): update() does not run, so refresh the teammate poses here (startGame needs them to air-start)
+      if (net && nowMs() - lastRPU > 300) updateRemotePlayers(1 / 60);
       var out = [];
       for (var i = 1; i < pts.length; i++) {
         var P = pts[i];
@@ -25389,7 +25392,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         for (var cn = -40000; cn <= 40000; cn += 2000) for (var ce = -40000; ce <= 40000; ce += 2000) {
           if (dAt(ce, cn) < M) continue;
           var Hh = (H0 + OFFS[oi]) * DEG, me = ce + sg * R * Math.cos(Hh), mn = cn - sg * R * Math.sin(Hh), dh = Math.hypot(me - home.e, mn - home.n);
-          if (-Math.abs(OFFS[oi]) * 60 - dh * 0.12 + 1800 <= bestS) continue;   // cannot beat the best: skip the path test
+          if (-Math.abs(OFFS[oi]) * 60 - dh * 0.25 + 1050 <= bestS) continue;   // cannot beat the best: skip the path test
           var c = makeCourse(ce, cn, H0 + OFFS[oi], LENS[li], R, sg), per = 4 * LENS[li] + 2 * Math.PI * R, ns = Math.ceil(per / 350), mind = 1e9, fail = false;
           for (k = 0; k < ns; k++) {
             // sample by arc length: map to time per segment
@@ -25401,8 +25404,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
           }
           if (fail) continue;
           var lp = 0;
-          for (var L = 0; L < lanes.length; L++) for (var p = 0; p < lanes[L].length; p++) { var dl = Math.hypot(lanes[L][p][0] - me, lanes[L][p][1] - mn); if (dl < 3500) lp = Math.max(lp, 3500 - dl); }
-          var sc = -Math.abs(OFFS[oi]) * 60 - dh * 0.12 + Math.min(mind, 6000) * 0.3 - lp * 1.5;
+          for (var L = 0; L < lanes.length; L++) for (var p = 0; p < lanes[L].length; p++) { var dl = Math.hypot(lanes[L][p][0] - me, lanes[L][p][1] - mn); if (dl < 2500) lp = Math.max(lp, 2500 - dl); }
+          var sc = -Math.abs(OFFS[oi]) * 60 - dh * 0.25 + Math.min(mind, 3500) * 0.3 - lp * 0.6;
           if (sc > bestS) { bestS = sc; best = c; }
         }
       }
@@ -26065,6 +26068,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     phys.setSpec(spec, upgradeMods);
     if (combat && combat.setLocalInfo) combat.setLocalInfo({ name: playerName(), aircraftId: id });
     if (combat && combat.setPlayerModel) { try { combat.setPlayerModel(plane); } catch (e) {} }
+    storesSig = ''; syncPaint();
     if (!quiet) flash((spec ? spec.name : 'Su-27') + ' READY');
   }
   var CALLSIGNS = ['Viper', 'Ghost', 'Falcon', 'Raven', 'Hammer', 'Blaze', 'Cobra', 'Mako', 'Talon', 'Nomad', 'Frost', 'Wolf', 'Saber', 'Jester', 'Reaper', 'Spark', 'Bandit', 'Echo', 'Kestrel', 'Odin'];
@@ -26990,7 +26994,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       return;
     }
     if (mode === 'COCKPIT') {
-      camera.position.set(0, 0.98, -6.35).applyQuaternion(st.q).add(p);
+      if (plane.cockpit && plane.cockpit.eye) camera.position.copy(plane.cockpit.eye).applyQuaternion(st.q).add(p);
+      else camera.position.set(0, 0.98, -6.35).applyQuaternion(st.q).add(p);
       camera.quaternion.copy(st.q);
       spring(lookS, 'y', 'vy', look.yaw, look.idle < 0.12 ? 14 : 5, dt); spring(lookS, 'p', 'vp', look.pitch, look.idle < 0.12 ? 14 : 5, dt);
       eul.set(lookS.p, lookS.y, 0, 'YXZ'); lookQ.setFromEuler(eul); camera.quaternion.multiply(lookQ);
@@ -27094,6 +27099,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     }
     plane.group.visible = !st.crashed && VIEWS[view] !== 'COCKPIT' || (!started);
     if (started && VIEWS[view] === 'COCKPIT' && !st.crashed) plane.group.visible = true; // nose visible from cockpit
+    if (plane.setCockpitView) plane.setCockpitView(started && VIEWS[view] === 'COCKPIT' && !st.crashed);
+    storesT2 += dt; if (storesT2 > 0.3) { storesT2 = 0; storesCheck(); }
     wl.copy(plane.wingtips[0]).applyQuaternion(st.q).add(st.pos);
     wr.copy(plane.wingtips[1]).applyQuaternion(st.q).add(st.pos);
     var vap = 0;
@@ -27118,6 +27125,35 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     if (fx.damageSmoke) fx.damageSmoke(plane.group, st.crashed ? 0 : clamp((60 - st.health) / 50, 0, 1));
   }
   var fxT = new V3(), fxL = new V3(), fxR = new V3();
+  // visible stores on the pylons: campaign loadout minus what was fired (alternating left / right)
+  var storesT2 = 0, storesSig = '';
+  function storesCheck() {
+    if (!combat || !combat.hud) return;
+    var ws = combat.hud().weapons || [], sig = '';
+    for (var i = 0; i < ws.length; i++) if (ws[i].type !== 'gun') sig += ws[i].id + ':' + ws[i].ammo + ',';
+    if (sig !== storesSig) { storesSig = sig; syncStores(); }
+  }
+  function syncStores() {
+    if (!plane || !plane.setStores) return;
+    if (!campaign || !campaign.pylonStores) { plane.setStores(null); return; }
+    var base = null; try { base = campaign.pylonStores(); } catch (e) {}
+    if (!base) { plane.setStores(null); return; }
+    var ammo = {}, tot = {}, list = [], i;
+    var ws = combat && combat.hud ? combat.hud().weapons || [] : [];
+    for (i = 0; i < ws.length; i++) ammo[ws[i].id] = (ammo[ws[i].id] || 0) + ws[i].ammo;
+    for (i = 0; i < base.length; i++) {
+      var b = base[i], c = {}; for (var k in b) c[k] = b[k]; c.count = b.count || 1; list.push(c);
+      tot[b.weaponId] = (tot[b.weaponId] || 0) + c.count;
+    }
+    for (var id in tot) {
+      if (ammo[id] == null || (list.filter(function (e) { return e.weaponId === id; })[0] || {}).type === 'gunpod') continue;
+      var fired = Math.max(0, tot[id] - ammo[id]), es = list.filter(function (e) { return e.weaponId === id; }), n = 0;
+      es.sort(function (a, b2) { return Math.abs(b2.side || 0) * 10 + (b2.index || 0) - (Math.abs(a.side || 0) * 10 + (a.index || 0)); });
+      while (fired > 0 && n < 500) { var e2 = es[n % es.length]; if (e2.count > 0) { e2.count--; fired--; } n++; }
+    }
+    plane.setStores(list.filter(function (e) { return e.count > 0; }));
+  }
+  function syncPaint() { try { if (plane && plane.setPaint && campaign && campaign.paint) plane.setPaint(campaign.paint(aircraftId)); } catch (e) {} }
 
   // ---------------------------------------------------------------- HUD
   // Fighter HUD on the 2D canvas #hud. Colour system: green = flight data, amber = caution, red = threat / lock,
@@ -28914,6 +28950,11 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         leaderboard = FL.createLeaderboard({ url: TELE.url, key: TELE.key, version: TELE.version, canSend: function () { return teleOn; },
           getStats: function () { var p = campaign.profile(); return { name: playerName(), total_points: p.earned, credits_earned: p.earned, level: p.level, missions: p.missions, kills: p.kills, jet: aircraftId }; } });
       }
+      if (campaign && campaign.on) {
+        campaign.on('loadout', function () { storesSig = ''; });
+        campaign.on('paint', function () { syncPaint(); });
+      }
+      syncPaint(); storesSig = '';
       if (campaign && campaign.on) campaign.on('missionComplete', function (d) {
         flash('MISSION COMPLETE · RANK ' + d.rank); glog('mission ' + d.no + ' rank ' + d.rank + ' +' + d.credits);
         if (leaderboard) leaderboard.submit();
