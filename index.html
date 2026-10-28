@@ -1179,7 +1179,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     { id: 'fjords', name: 'Norway Winter Fjords', region: 'Nordland, Norway', blurb: 'Snowbound peaks and a maze of narrow, dark fjords: hug the walls and stay below the ridgelines.', timeOfDay: 'overcast' },
     { id: 'cliffs', name: 'Highland Cliffs', region: 'Scotland & Antrim coast', blurb: 'Sheer Atlantic cliffs, sea stacks, Fingal\'s Cave and the Giant\'s Causeway, the jagged Cuillin and long sea lochs.', timeOfDay: 'evening' },
     { id: 'canyon', name: 'Desert Canyon', region: 'Colorado Plateau, USA', blurb: 'A 40 km winding red-rock canyon at sunset: pop up, shoot, drop back in.', timeOfDay: 'sunset' },
-    { id: 'volcano', name: 'Virgin Islands', region: 'British Virgin Islands, Caribbean', blurb: 'Dozens of steep jungle islands, turquoise reefs, sea arches to fly through, a pirate cove and an erupting volcano.', timeOfDay: 'afternoon' }];
+    { id: 'volcano', name: 'Virgin Islands', region: 'British Virgin Islands, Caribbean', blurb: 'Dozens of steep jungle islands, turquoise reefs, sea arches to fly through, a pirate cove and an erupting volcano.', timeOfDay: 'afternoon' },
+    { id: 'halong', name: 'Ha Long Bay', region: 'Quang Ninh, Vietnam', blurb: 'Over 1500 sheer jungle-capped karst towers in a jade bay: slalom between them, find the hidden lagoons, raid Cat Ba.', timeOfDay: 'afternoon' }];
 
   // ================================================================ grid helpers
   // Height on a regular grid exactly as THREE.PlaneGeometry triangulates it: cell (ix,iy) = triangles (a,b,d) + (b,c,d),
@@ -2813,7 +2814,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   // near-camera vegetation: full models within ~0.9 km, 5-10 triangle far models to ~4.2 km, nothing beyond. No shadows.
   function buildVeg(ctx, kinds) {
     if (!kinds || !kinds.length) return { update: function () {}, count: 0 };
-    const sampleH = ctx.sampleH, TS = 300, RN = 3, RF = 14;
+    const sampleH = ctx.sampleH, TS = 300, RN = 3, RF = ctx.def.vegFar || 14;
     const mat = patchFog(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0 }), ctx.fogU);
     const K = kinds.map((k, ki) => {
       const cap = k.cap || 9000, mk = (geo, c, nm) => { const im = new THREE.InstancedMesh(geo, mat, c); im.count = 0; im.frustumCulled = false; im.castShadow = false; im.receiveShadow = true; im.name = nm; ctx.add(im); return im; };
@@ -4075,7 +4076,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
             views: (function () { const T5 = TUN[5], hy = HOY, cu = coastC(4000) + 12000, fl = falls[0], fc = falls[3];
               return { overview: [-30000, -30000, 1800, coastC(0), 0, 200], causeway: causeway ? [causeway[0] - 700, causeway[1] - 500, 120, causeway[0], causeway[1], 0] : null,
                 oldman: [hy.e - 1300, hy.n - 500, 120, hy.e, hy.n, 90], kilda: [-44000, 30000, 300, -35500, 37000, 150], fingal: [T5.ox - T5.ux * 600, T5.on - T5.uy * 600, 20, T5.ox, T5.on, 15],
-                cuillin: [coastC(8500) + 7000, 7300, 350, coastC(8500) + 12600, 8500, 750], cuillin2: [coastC(8500) + 14500, 2500, 900, coastC(8500) + 12600, 8800, 700], kiltrock: [fl.e - 900, fl.n - 600, 120, fl.e, fl.n, 60], coruisk: [fc.e - 2500, fc.n - 1500, 300, fc.e, fc.n, 100], donan: donan ? [donan[0] - 500, donan[1] - 600, 90, donan[0], donan[1], 10] : null,
+                cuillin: [-7600, 9150, 260, coastC(8500) + 12600, 8500, 800], cuillin2: [coastC(8500) + 14500, 2500, 900, coastC(8500) + 12600, 8800, 700], kiltrock: [fl.e - 900, fl.n - 600, 120, fl.e, fl.n, 60], coruisk: [fc.e - 2500, fc.n - 1500, 300, fc.e, fc.n, 100], donan: donan ? [donan[0] - 500, donan[1] - 600, 90, donan[0], donan[1], 10] : null,
                 cave_in: i1.concat(i2), arch: a1.concat(a2) }; })() }
         };
       }
@@ -4692,7 +4693,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       { e: -9000, n: 17400, r: 520, count: 50, style: 'tropical', harbor: true, seed: 932, name: 'Bai Chay' },
       { e: 10500, n: 18600, r: 450, count: 40, style: 'tropical', harbor: true, seed: 933, name: 'Cai Rong' },
       { e: -14200, n: -12300, r: 420, count: 36, style: 'tropical', harbor: true, seed: 934, name: 'Cat Ba Town' }];
-    const cJ1 = lin(0x2a4d20), cJ2 = lin(0x426a2a), cPaddy = lin(0x7f9a3e), cSand = lin(0xcfc3a0), cSea = lin(0x6a7a62), cLime = lin(0x9f9886);
+    const cJ1 = lin(0x1c3a16), cJ2 = lin(0x2e5220), cPaddy = lin(0x5d7030), cSand = lin(0xcfc3a0), cSea = lin(0x6a7a62), cLime = lin(0x9f9886);
     const def = {
       name: 'Ha Long Bay', region: 'Quang Ninh, Vietnam', N: 400,
       sky: { sunAz: 215, sunEl: 26, fog: 0xc5d0cc, fogD: 0.0000112, hfogA: 0.00002, hfogB: 1 / 380, zenith: [0.07, 0.13, 0.3], glow: [1.0, 0.85, 0.6], glowW: 0.3, sunCol: [1.0, 0.92, 0.78], disk: 24,
@@ -4701,11 +4702,11 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       water: { color: 0x0c3530, shallow: 0x23705c, foam: 0.3, shallowK: 0.45, roughness: 0.14, normalScale: 0.3 },
       bases: [BASE, EBASE], raw: raw,
       flats: TOWNS.map((t) => ({ e: t.e, n: t.n, hdg: 0, x0: -t.r * 0.8, x1: t.r * 0.8, z0: -t.r * 0.8, z1: t.r * 0.8, blend: 260, minH: 3, q: 0.3 })),
-      levels: [{ tile: 1920, cell: 48, max: 150, dilate: 30, score: (e0, n0, e1, n1, g) => {
+      levels: [{ tile: 1920, cell: 64, max: 100, dilate: 20, score: (e0, n0, e1, n1, g) => {
         let lo = 1e9, hi = -1e9;
         for (let i = 0; i <= 4; i++) for (let j = 0; j <= 4; j++) { const h = triH(g.H, g.NV, (e0 + i * 480 + 48000) / g.cell, (48000 - (n0 + j * 480)) / g.cell); lo = Math.min(lo, h); hi = Math.max(hi, h); }
         const e = (e0 + e1) / 2, n = (n0 + n1) / 2; if (Math.hypot(e - BASE.e, n - BASE.n) < 2500) return 2e5;
-        return hi > 2 ? hi - Math.max(lo, -10) : 0; } }],
+        return hi > 2 ? (hi - Math.max(lo, -10)) * (n < coastN(e) - 400 ? 3 : 1) : 0; } }],
       color: function (e, n, h, il, curv, o) {
         if (h < 0) { mix3(o, cSea, cSand, sstep(-5, 0, h)); return 0; }
         mix3(o, cJ1, cJ2, sstep(0.35, 0.7, fbm(e / 500, n / 500, 3, 941)));
@@ -4725,12 +4726,12 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         { kind: 'palm', per: 90, farThin: 2, scale: [0.8, 1.2], cap: 2500, test: (e, n, h, sl) => h > 1 && h < 25 && sl < 0.4 ? 0.7 : 0 },
         { kind: 'bush', per: 200, scale: [0.6, 1.3], cap: 3000, shadow: false, test: (e, n, h, sl) => h > 3 && sl > 0.5 && sl < 1.6 ? 0.6 : 0 }],
       clouds: { seed: 951, cumulus: 45, cuBase: [900, 1400], cuSize: 1.0, lit: [1.1, 1.08, 1.02], shadow: [0.5, 0.55, 0.58], opacity: 0.85,
-        banks: [[5000, 0, 9000, 6000, 160, 420], [-17000, -8000, 6000, 5000, 200, 520], [20000, -8000, 7000, 5000, 180, 480]], cling: true },
+        banks: [[5000, 0, 9000, 6000, 320, 420], [-17000, -8000, 6000, 5000, 360, 520], [20000, -8000, 7000, 5000, 340, 480]], cling: true },
       extras: null
     };
     def._tw = TW;
     def.extras = function (ctx) {
-      const sampleH = ctx.sampleH, F = [], CELL = 4000, cells = new Map();
+      const sampleH = ctx.sampleH, F = [], CELL = 2000, cells = new Map();
       const cellOf = (e, n) => { const k = Math.floor(e / CELL) + ',' + Math.floor(n / CELL); let c = cells.get(k); if (!c) cells.set(k, c = { hi: new Builder(), lo: new Builder(), e: (Math.floor(e / CELL) + 0.5) * CELL, n: (Math.floor(n / CELL) + 0.5) * CELL }); return c; };
       for (const T of TW) { const c = cellOf(T[0], T[1]); buildKarst(c.hi, c.lo, F, T[0], T[1], T[2], T[3], T[4] % 997 + 1, null, { angNoise: 0.4, crown: 1.6, K: T[2] > 120 ? 14 : 10, maxRings: 10 }); }
       // rock bridges over the lagoon entrances
@@ -4898,31 +4899,31 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     };
     const mur = ptOn(iLB, LB, 0.42, 560), wen = ptOn(iLB, LB, 0.6, -620), lbv = ptOn(iLB, LB, 0.72, 0), stb = ptOn(iLB, LB, 0.08, 0);
     const TOWNS = [
-      { e: lbv[0], n: lbv[1], r: 260, count: 34, style: 'alpine', church: true, seed: 1021, name: 'Lauterbrunnen', yaw: 0.05 },
-      { e: mur[0], n: mur[1], r: 280, count: 30, style: 'alpine', church: true, seed: 1022, name: 'Mürren' },
-      { e: wen[0], n: wen[1], r: 320, count: 40, style: 'alpine', church: true, seed: 1023, name: 'Wengen' },
-      { e: stb[0], n: stb[1], r: 200, count: 14, style: 'alpine', seed: 1024, name: 'Stechelberg', yaw: 0.05 },
-      { e: 6500, n: 8400, r: 600, count: 70, style: 'alpine', church: true, seed: 1025, name: 'Grindelwald' },
-      { e: 500, n: 15700, r: 900, count: 110, style: 'alpine', church: true, seed: 1026, name: 'Interlaken' },
-      { e: -16000, n: 14000, r: 500, count: 50, style: 'alpine', church: true, harbor: true, seed: 1027, name: 'Spiez' },
-      { e: 13000, n: 15200, r: 420, count: 40, style: 'alpine', church: true, harbor: true, seed: 1028, name: 'Brienz' },
-      { e: 8000, n: -30900, r: 650, count: 70, style: 'alpine', church: true, seed: 1029, name: 'Sierre' },
-      { e: -14000, n: -29400, r: 600, count: 60, style: 'alpine', church: true, seed: 1030, name: 'Martigny' }];
+      { e: lbv[0], n: lbv[1], r: 182, count: 20, style: 'alpine', church: true, seed: 1021, name: 'Lauterbrunnen', yaw: 0.05 },
+      { e: mur[0], n: mur[1], r: 196, count: 18, style: 'alpine', church: true, seed: 1022, name: 'Mürren' },
+      { e: wen[0], n: wen[1], r: 224, count: 24, style: 'alpine', church: true, seed: 1023, name: 'Wengen' },
+      { e: stb[0], n: stb[1], r: 140, count: 10, style: 'alpine', seed: 1024, name: 'Stechelberg', yaw: 0.05 },
+      { e: 6500, n: 8400, r: 420, count: 42, style: 'alpine', church: true, seed: 1025, name: 'Grindelwald' },
+      { e: 500, n: 15700, r: 630, count: 66, style: 'alpine', church: true, seed: 1026, name: 'Interlaken' },
+      { e: -16000, n: 14000, r: 350, count: 30, style: 'alpine', church: true, harbor: true, seed: 1027, name: 'Spiez' },
+      { e: 13000, n: 15200, r: 294, count: 24, style: 'alpine', church: true, harbor: true, seed: 1028, name: 'Brienz' },
+      { e: 8000, n: -30900, r: 455, count: 42, style: 'alpine', church: true, seed: 1029, name: 'Sierre' },
+      { e: -14000, n: -29400, r: 420, count: 36, style: 'alpine', church: true, seed: 1030, name: 'Martigny' }];
     const cMeadow = lin(0x3f5a22), cMeadow2 = lin(0x5a6a2e), cForest = lin(0x1f3320), cAlp = lin(0x6e6e4c), cScree = lin(0x77736b), cLakeBed = lin(0x6a6a5a), cIceU = lin(0xc8d4dc);
     const def = {
-      name: 'Swiss Alps', region: 'Bernese Oberland, Switzerland', N: 400, noWater: true, lodK: 0.07,
+      name: 'Swiss Alps', region: 'Bernese Oberland, Switzerland', N: 400, noWater: true, lodK: 0.045,
       sky: { sunAz: 200, sunEl: 34, fog: 0xbcd0e2, fogD: 0.0000072, hfogA: 0.000008, hfogB: 1 / 1500, zenith: [0.02, 0.09, 0.36], glow: [0.95, 0.85, 0.7], glowW: 0.18, sunCol: [1.0, 0.95, 0.88], disk: 32,
         sunHex: 0xfff4e6, sunI: 2.8, hemiSky: 0xadc8e8, hemiGround: 0x5a6a48, hemiI: 0.5, white: 0xeef2f6, envGround: [0.1, 0.12, 0.09] },
       ground: { rockOn: 1, rock1: 0x403d39, rock2: 0x86827a, rockA: 0.3, rockB: 0.48, snowH: 2750, snowF: 160, snow: 0xf4f7fa, snowSlope: 0.6, faceN: 0.7, ice: 0xb6cad8 },
       bases: [BASE, EBASE], raw: raw, aux: () => lastIce,
-      levels: [{ tile: 1920, cell: 48, max: 120, dilate: 40, score: (e0, n0, e1, n1, g) => {
+      levels: [{ tile: 1920, cell: 64, max: 150, dilate: 40, score: (e0, n0, e1, n1, g) => {
         let lo = 1e9, hi = -1e9;
         for (let i = 0; i <= 4; i++) for (let j = 0; j <= 4; j++) { const h = triH(g.H, g.NV, (e0 + i * 480 + 48000) / g.cell, (48000 - (n0 + j * 480)) / g.cell); lo = Math.min(lo, h); hi = Math.max(hi, h); }
         const e = (e0 + e1) / 2, n = (n0 + n1) / 2;
         if (iLB.query(e, n) < 2400) return 1e6;
         if (Math.hypot(e - BASE.e, n - BASE.n) < 2500) return 2e5;
         return (hi - lo) * (Math.hypot(e - 4000, n + 4000) < 16000 ? 2 : 1); } },
-      { tile: 480, cell: 16, select: (e0, n0, e1, n1) => { const d = iLB.query((e0 + e1) / 2, (n0 + n1) / 2); return d > 0 && d < 520; } }],
+      { tile: 480, cell: 16, select: (e0, n0, e1, n1) => { const d = iLB.query((e0 + e1) / 2, (n0 + n1) / 2); return d < 420; } }],
       color: function (e, n, h, il, curv, o, cell, k, aux) {
         mix3(o, cMeadow, cMeadow2, sstep(0.4, 0.7, fbm(e / 700, n / 700, 3, 1041)));
         const forest = sstep(0.45, 0.6, fbm(e / 1100 + 3, n / 1100, 3, 1043)) * sstep(650, 900, h) * (1 - sstep(1700, 1950, h)) * sstep(0.55, 0.8, il);
@@ -4942,7 +4943,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       },
       traffic: 120,
       veg: [
-        { kind: 'spruce', per: 450, farThin: 3, scale: [0.8, 1.4], cap: 9000, test: (e, n, h, sl) => h > 620 && h < 1950 && sl < 1.1 ? (0.1 + 0.9 * forestK(e, n, 3, 0.65)) * (1 - sstep(1750, 1950, h)) : 0 },
+        { kind: 'spruce', per: 300, farThin: 3, scale: [0.8, 1.4], cap: 9000, test: (e, n, h, sl) => h > 620 && h < 1950 && sl < 1.1 ? (0.1 + 0.9 * forestK(e, n, 3, 0.65)) * (1 - sstep(1750, 1950, h)) : 0 },
         { kind: 'broad', per: 60, scale: [0.6, 1.0], cap: 1500, test: (e, n, h, sl) => h > 500 && h < 1100 && sl < 0.35 ? 0.4 : 0 },
         { kind: 'boulder', per: 50, scale: [0.6, 2.4], cap: 2000, shadow: false, test: (e, n, h, sl) => h > 1800 && sl < 1.0 ? 0.6 : 0 }],
       clouds: { seed: 1051, cumulus: 40, cuBase: [3300, 3900], cuSize: 1.2, lit: [1.18, 1.15, 1.12], shadow: [0.46, 0.52, 0.62], opacity: 0.92, cling: true,
@@ -5107,7 +5108,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     const flats = TOWNS.map((t) => ({ e: t.e, n: t.n, hdg: 0, x0: -t.r * 0.6, x1: t.r * 0.6, z0: -t.r * 0.6, z1: t.r * 0.6, blend: t.r * 0.6, minH: 4, q: 0.3 }));
     const cHeath = lin(0x3b3a2c), cGrass = lin(0x55573a), cField = lin(0x6b6a45), cLow = lin(0x4a4a3c), cLowSnow = lin(0xd3d9df), cMid = lin(0x6a6a62), cSea = lin(0x2a3a3a), cShore = lin(0x5a564c), cSnowUnder = lin(0xa9b2ba);
     const def = {
-      name: 'Norway Winter Fjords', region: 'Møre og Romsdal / Sogn, Norway', N: 400, lodK: 0.05,
+      name: 'Norway Winter Fjords', region: 'Møre og Romsdal / Sogn, Norway', N: 400, lodK: 0.055, vegFar: 10,
       sky: { sunAz: 205, sunEl: 7, fog: 0xaab6c2, fogD: 0.0000115, hfogA: 0.00003, hfogB: 1 / 520, zenith: [0.10, 0.14, 0.22], glow: [0.9, 0.55, 0.35], glowW: 0.3, sunCol: [1.0, 0.8, 0.6], disk: 18,
         sunHex: 0xffd9b0, sunI: 1.6, hemiSky: 0xb9c8da, hemiGround: 0x5a6068, hemiI: 0.55, white: 0xdfe4ea, envGround: [0.18, 0.2, 0.23] },
       ground: { rockOn: 1, rock1: 0x27292c, rock2: 0x55585b, rockA: 0.2, rockB: 0.4, snowH: 1000, snowF: 160, snow: 0xeef3f8, snowSlope: 0.62, faceN: 0.1, bump: 1.0, ice: 0xa7bfcf },
@@ -5156,11 +5157,11 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       },
       traffic: 140,
       veg: [
-        { kind: 'snowpine', per: 300, farThin: 2, scale: [0.7, 1.25], cap: 7000, test: (e, n, h, sl) => h > 250 && h < 650 && sl < 0.9 ? forestK(e, n, 3, 0.7) * (1 - sstep(500, 650, h)) : 0 },
-        { kind: 'pine', per: 300, farThin: 2, scale: [0.7, 1.2], cap: 7000, test: (e, n, h, sl) => h > 4 && h < 320 && sl < 0.9 ? forestK(e + 2000, n, 7, 0.7) : 0 },
-        { kind: 'spruce', per: 300, farThin: 2, scale: [0.7, 1.1], cap: 7000, test: (e, n, h, sl) => h > 4 && h < 450 && sl < 0.8 ? forestK(e + 900, n, 5, 0.6) : 0 },
+        { kind: 'snowpine', per: 300, farThin: 3, scale: [0.7, 1.25], cap: 7000, test: (e, n, h, sl) => h > 250 && h < 650 && sl < 0.9 ? forestK(e, n, 3, 0.7) * (1 - sstep(500, 650, h)) : 0 },
+        { kind: 'pine', per: 300, farThin: 3, scale: [0.7, 1.2], cap: 7000, test: (e, n, h, sl) => h > 4 && h < 320 && sl < 0.9 ? forestK(e + 2000, n, 7, 0.7) : 0 },
+        { kind: 'spruce', per: 300, farThin: 3, scale: [0.7, 1.1], cap: 7000, test: (e, n, h, sl) => h > 4 && h < 450 && sl < 0.8 ? forestK(e + 900, n, 5, 0.6) : 0 },
         { kind: 'birch', per: 160, farThin: 3, scale: [0.7, 1.1], cap: 4000, test: (e, n, h, sl) => h > 3 && h < 400 && sl < 0.7 ? 0.6 * forestK(e - 700, n + 300, 9, 0.45) : 0 },
-        { kind: 'boulder', per: 160, scale: [0.6, 2.6], cap: 5000, shadow: false, test: (e, n, h, sl) => h > 2 && sl > 0.25 && sl < 0.8 ? 0.7 : 0.05 }],
+        { kind: 'boulder', per: 90, scale: [0.6, 2.6], cap: 5000, shadow: false, test: (e, n, h, sl) => h > 2 && sl > 0.25 && sl < 0.8 ? 0.7 : 0.05 }],
       clouds: {
         seed: 811, cumulus: 40, cuBase: [2400, 3000], cuSize: 1.5, cling: true, lit: [0.92, 0.9, 0.9], shadow: [0.42, 0.45, 0.5], opacity: 0.94,
         banks: [[-12000, 1000, 9000, 5000, 600, 1150], [12000, -20000, 9000, 5000, 600, 1500], [26000, 10000, 10000, 6000, 700, 1400], [-2000, 30000, 9000, 5000, 600, 1250],
@@ -5183,7 +5184,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
             const px = x - nx * k * 8, py = y - ny * k * 8, h = sampleH(px, py);
             if (k > 3 && h < sampleH(c[0], c[1]) + 15) break;
             if (h > lastH + 2) break; lastH = h;
-            const w = 4 + 6 * Math.min(1, k / 20), sx = -ny * w, sy = nx * w, wl = 0.85 + 0.15 * Math.sin(k);
+            const w = 2.5 + 4 * Math.min(1, k / 20), sx = -ny * w, sy = nx * w, wl = 0.85 + 0.15 * Math.sin(k);
             const i0 = wb.vert(px + sx - nx * 2, h + 2, -(py + sy - ny * 2), 0, 1, 0, 0, 0, wl, wl, 1);
             wb.vert(px - sx - nx * 2, h + 2, -(py - sy - ny * 2), 0, 1, 0, 1, 0, wl, wl, 1);
             if (prevL >= 0) wb.ix.push(prevL, i0, prevL + 1, prevL + 1, i0, i0 + 1);
@@ -5191,7 +5192,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
           }
           falls.push([Math.round(c[0]), Math.round(c[1])]);
         }
-        if (wb.nv) { const wm = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, transparent: true, opacity: 0.85, depthWrite: false }); const m = new THREE.Mesh(wb.build(), wm); m.name = 'waterfalls'; m.renderOrder = 2; ctx.add(m); }
+        if (wb.nv) { const wm = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, transparent: true, opacity: 0.55, depthWrite: false }); const m = new THREE.Mesh(wb.build(), wm); m.name = 'waterfalls'; m.renderOrder = 2; ctx.add(m); }
         // ---- sea lanes: coast + the two big fjords
         const cl = []; for (let n = -44000; n <= 44000; n += 3000) cl.push([Math.round(coastE(n) - 2400), n]);
         const lanes = [cl, FJ[0].P.slice(0, 6), FJ[5].P.slice(0, 6), FJ[1].P.slice(0, 4)];
@@ -5263,7 +5264,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       { e: 1300, n: -8500, r: 200, count: 10, style: 'nordic', seed: 1133, name: 'Pudeto' }, { e: 14000, n: -6000, r: 260, count: 14, style: 'desert', seed: 1134, name: 'Estancia Cerro Guido' }];
     const cSteppe = lin(0x9a8550), cSteppe2 = lin(0x7a7a44), cLenga = lin(0x3c5426), cRockG = lin(0x6a665e), cIceU = lin(0xc4d6e0), cBed = lin(0x7a7a6a), cCap = lin(0x2e2824);
     const def = {
-      name: 'Patagonia', region: 'Torres del Paine & Fitz Roy, Chile/Argentina', N: 400, noWater: true, lodK: 0.068,
+      name: 'Patagonia', region: 'Torres del Paine & Fitz Roy, Chile/Argentina', N: 400, noWater: true, lodK: 0.05,
       sky: { sunAz: 115, sunEl: 21, fog: 0xc0cfdc, fogD: 0.0000068, hfogA: 0.000007, hfogB: 1 / 1200, zenith: [0.03, 0.1, 0.34], glow: [1.0, 0.82, 0.6], glowW: 0.24, sunCol: [1.0, 0.92, 0.8], disk: 30,
         sunHex: 0xfff0dc, sunI: 2.7, hemiSky: 0xb0c8e2, hemiGround: 0x6a6040, hemiI: 0.5, white: 0xeef2f6, envGround: [0.13, 0.12, 0.08] },
       ground: { rockOn: 1, rock1: 0x4e4a46, rock2: 0x9b948a, rockA: 0.35, rockB: 0.55, snowH: 1550, snowF: 140, snow: 0xf3f6fa, snowSlope: 0.58, faceN: 0.7, ice: 0xa9c4d4 },
@@ -5303,7 +5304,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         const keep = (e, n) => { const k = e + ',' + n; if (done.has(k)) return false; done.add(k); return true; }; buildLake(ctx, sampleH, lb, L[5], L[6], S, keep); } }
       // granite spires (meshes + solids): the Torres, Fitz Roy, Cerro Torre group
       const hi = new Builder();
-      const GR = { lime: lin(0xb0a28e), dark: lin(0x52483e), wet: lin(0x4a4440), green: lin(0xf2f5f8), green2: lin(0xdfe6ec) };
+      const GR = { lime: lin(0x988a78), dark: lin(0x463c34), wet: lin(0x4a4440), green: lin(0xf2f5f8), green2: lin(0xdfe6ec) };
       const SP = [[4050, 2550, 210, 2850, 0.42, GR, 'Torre Sur'], [4420, 2880, 190, 2800, 0.45, GR, 'Torre Central'], [4760, 3230, 170, 2700, 0.5, GR, 'Torre Norte'],
         [1500, 30000, 560, 3405, 0.55, GR, 'Fitz Roy'], [-3400, 29400, 190, 3128, 0.72, GR, 'Cerro Torre'], [-3000, 30100, 140, 2850, 0.7, GR, 'Torre Egger'], [-2650, 30700, 130, 2720, 0.68, GR, 'Standhardt'],
         [3100, 29500, 200, 3000, 0.6, GR, 'Aguja Poincenot'], [-200, 30700, 180, 2850, 0.62, GR, 'Aguja Mermoz'], [5800, 1900, 160, 2350, 0.55, GR, 'Fortaleza']];
@@ -5311,7 +5312,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       for (const [e, n, R0, top, tp, cols, nm] of SP) {
         let base = 1e9; for (let a = 0; a < 8; a++) base = Math.min(base, sampleH(e + Math.cos(a * 0.785) * R0, n + Math.sin(a * 0.785) * R0));
         const H = top - base; if (H < 150) continue;
-        buildKarst(hi, null, F, e, n, R0, H, Math.round(e + n) % 997, cols, { y0: base, taper: tp, notch: 0, dome: 0.35, bury: 60 });
+        buildKarst(hi, null, F, e, n, R0 * 1.25, H, Math.abs(Math.round(e + n)) % 997 + 1, cols, { y0: base, taper: Math.min(0.85, tp + 0.15), notch: 0, dome: 0.3, bury: 80, angNoise: 0.34, crown: 0.6, K: 16 });
         spires.push({ name: nm, e: e, n: n, base: Math.round(base), top: top });
       }
       const sm = new THREE.Mesh(hi.build(), m2RockMat(ctx, 1.5)); sm.castShadow = true; sm.receiveShadow = true; sm.name = 'spires'; ctx.add(sm);
@@ -5328,7 +5329,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       return {
         solids: makeSolids(F),
         debug: { spires: spires,
-          views: { torres: [8500, -3500, 1300, 4400, 2900, 2200], lakes: [6000, -12000, 400, -1000, -1000, 1200], paine: [6000, -12000, 900, -1000, 0, 1800], frances: [-2500, -7500, 500, -2200, 0, 1100], grey: [-6000, -9000, 600, -11000, 6000, 600],
+          views: { torres: [8500, -3500, 1300, 4400, 2900, 2200], lakes: [4300, -6500, 300, -2500, 0, 1300], paine: [6000, -12000, 900, -1000, 0, 1800], frances: [-2500, -7500, 500, -2200, 0, 1100], grey: [-6000, -9000, 600, -11000, 6000, 600],
             cerrotorre: [3000, 21000, 1600, -3400, 29400, 2500], fitzroy: [12000, 24000, 1200, 1500, 30000, 2500], overview: [26000, -26000, 4000, 0, 2000, 1200] } }
       };
     };
@@ -5380,15 +5381,15 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     const BASE = { name: 'Askole Air Station', e: -40500, n: -10300, hdg: 75, len: 2600, w: 45, seed: 121, blend: 650, minH: 300, q: 0.4 };
     const EBASE = { name: 'Shaksgam forward strip', e: 30000, n: 25400, hdg: 100, len: 1800, w: 40, seed: 122, blend: 500, mini: true, enemy: true, minH: 1000, q: 0.4 };
     const TOWNS = [{ e: -36500, n: -8700, r: 300, count: 26, style: 'desert', seed: 1231, name: 'Askole' }, { e: -45000, n: -12600, r: 260, count: 18, style: 'desert', seed: 1232, name: 'Hoto' }];
-    const cGrav = lin(0x8a7c6a), cBrown = lin(0x6e5a48), cIceU = lin(0xd2dde4), cMor = lin(0x4a443e), cOasis = lin(0x5a6a34);
+    const cGrav = lin(0x5e5246), cBrown = lin(0x4a3c32), cIceU = lin(0xd2dde4), cMor = lin(0x4a443e), cOasis = lin(0x5a6a34);
     const def = {
-      name: 'Karakoram', region: 'Baltoro glacier, Pakistan (heights scaled)', N: 400, noWater: true, lodK: 0.07,
+      name: 'Karakoram', region: 'Baltoro glacier, Pakistan (heights scaled)', N: 400, noWater: true, lodK: 0.03, farHeight: (e, n) => 1800 + 900 * fbm(e / 30000, n / 30000, 2, 1261),
       sky: { sunAz: 160, sunEl: 32, fog: 0xb8c8de, fogD: 0.0000055, hfogA: 0.000004, hfogB: 1 / 2000, zenith: [0.01, 0.05, 0.3], glow: [0.95, 0.88, 0.75], glowW: 0.16, sunCol: [1.0, 0.96, 0.9], disk: 34,
         sunHex: 0xfff6ea, sunI: 3.0, hemiSky: 0xa8c0e8, hemiGround: 0x6a5e50, hemiI: 0.45, white: 0xf0f4f8, envGround: [0.14, 0.12, 0.1] },
-      ground: { rockOn: 1, rock1: 0x4e4238, rock2: 0x9a8670, rockA: 0.33, rockB: 0.52, snowH: 2700, snowF: 180, snow: 0xf6f8fb, snowSlope: 0.56, faceN: 0.7, ice: 0xc6d6e2 },
+      ground: { rockOn: 1, rock1: 0x3a3029, rock2: 0x6e6052, rockA: 0.33, rockB: 0.52, snowH: 3150, snowF: 200, snow: 0xf6f8fb, snowSlope: 0.56, faceN: 0.7, ice: 0xc6d6e2 },
       bases: [BASE, EBASE], raw: raw, aux: () => lastIce,
       flats: TOWNS.map((t) => ({ e: t.e, n: t.n, hdg: 0, x0: -t.r * 0.8, x1: t.r * 0.8, z0: -t.r * 0.8, z1: t.r * 0.8, blend: 220, minH: 200, q: 0.4 })),
-      levels: [{ tile: 1920, cell: 48, max: 130, dilate: 40, score: (e0, n0, e1, n1, g) => {
+      levels: [{ tile: 1920, cell: 64, max: 200, dilate: 40, score: (e0, n0, e1, n1, g) => {
         let lo = 1e9, hi = -1e9;
         for (let i = 0; i <= 4; i++) for (let j = 0; j <= 4; j++) { const h = triH(g.H, g.NV, (e0 + i * 480 + 48000) / g.cell, (48000 - (n0 + j * 480)) / g.cell); lo = Math.min(lo, h); hi = Math.max(hi, h); }
         const e = (e0 + e1) / 2, n = (n0 + n1) / 2; if (Math.hypot(e - BASE.e, n - BASE.n) < 2500) return 2e5;
@@ -5432,8 +5433,10 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         ['cathedrals', 'Cathedral spires', -6000, 2000, 2500, 'mountain'], ['askole', 'Askole', -36500, -8700, 2000, 'town'], ['braldu', 'Braldu gorge', -44000, -12000, 3000, 'valley'], ['shaksgam', 'Shaksgam valley', 20000, 24500, 4000, 'valley'],
         ['shakbase', 'Shaksgam forward strip (enemy)', EBASE.e, EBASE.n, 2500, 'airbase', true]];
       for (const z of Z) def.zones.push({ id: z[0], name: z[1], e: z[2], n: z[3], r: z[4], type: z[5], enemy: z[6] || undefined });
+      const VV = { baltoro: [-26000, -9000, 1500, 0, 0, 1500], trango: [-12000, -4500, 1900, -14000, 1800, 2700], k2: [5000, -6000, 2600, 7500, 13500, 4300], concordia: [-3000, -3000, 2200, 7000, 4000, 2500], overview: [-34000, -24000, 6500, 4000, 2000, 2500] };
+      for (const k in VV) { const v = VV[k]; let mx = 0; for (let t = 0; t <= 1; t += 0.1) mx = Math.max(mx, sampleH(v[0] + (v[3] - v[0]) * t * 0.3, v[1] + (v[4] - v[1]) * t * 0.3)); v[2] = Math.max(v[2], mx + 250); }
       return { solids: makeSolids(F),
-        debug: { spires: spires, views: { baltoro: [-26000, -9000, 1500, 0, 0, 1500], trango: [-12000, -4500, 1900, -14000, 1800, 2700], k2: [5000, -6000, 2600, 7500, 13500, 4300], concordia: [-3000, -3000, 2200, 7000, 4000, 2500], overview: [-34000, -24000, 6500, 4000, 2000, 2500] } } };
+        debug: { spires: spires, views: VV } };
     };
     return def;
   };
@@ -5452,9 +5455,10 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     // islands in the bay / sea: [e, n, rx, ry, ang, H]
     const ISL = [[-5300, 15600, 3200, 1500, 0.15, 30, 'Ilha do Governador'], [-1500, 13000, 900, 600, 0.3, 12, 'Ilha do Fundão'], [8200, 20000, 900, 600, 0.6, 60, 'Paquetá'], [1500, -8600, 400, 250, 0.4, 70, 'Cagarras'], [5200, -11500, 350, 250, 0, 40, 'Ilha Rasa']];
     // granite domes / monoliths: [e, n, r, H, profile p, name]
-    const DOMES = [[4420, 120, 420, 396, 0.3, 'Pão de Açúcar'], [3850, 300, 400, 220, 0.4, 'Morro da Urca'], [-1030, 220, 900, 710, 0.45, 'Corcovado'], [-4410, -4200, 520, 533, 0.35, 'Dois Irmãos'],
-      [-3700, -4000, 420, 470, 0.35, 'Dois Irmãos II'], [-8620, -5250, 1000, 844, 0.22, 'Pedra da Gávea'], [-9700, -4300, 650, 696, 0.4, 'Pedra Bonita'], [1600, -2400, 380, 240, 0.4, 'Morro do Cantagalo'],
-      [3300, -900, 360, 250, 0.4, 'Morro de São João'], [11000, -1600, 520, 270, 0.35, 'Morro do Costão'], [-2600, 1300, 600, 440, 0.45, 'Morro do Sumaré'], [9900, 2400, 500, 230, 0.4, 'Morro do Morcego']];
+    // [e, n, r, H, shape (0 bullet .. 1 table), name]
+    const DOMES = [[4420, 120, 270, 396, 0.1, 'Pão de Açúcar'], [3850, 300, 380, 220, 0.3, 'Morro da Urca'], [-1030, 220, 480, 710, -1, 'Corcovado'], [-4410, -4200, 330, 533, -0.5, 'Dois Irmãos'],
+      [-3800, -4000, 330, 470, 0, 'Dois Irmãos II'], [-8620, -5250, 750, 844, 1, 'Pedra da Gávea'], [-9700, -4300, 480, 696, 0.2, 'Pedra Bonita'], [1600, -2400, 330, 240, 0.3, 'Morro do Cantagalo'],
+      [3300, -900, 300, 250, 0.3, 'Morro de São João'], [11000, -1600, 420, 270, 0.2, 'Morro do Costão'], [-2600, 1300, 480, 440, 0.2, 'Morro do Sumaré'], [9900, 2400, 400, 230, 0.2, 'Morro do Morcego']];
     const LAGOA = [[-1000, -2250, 1100, 800], [-15000, -5200, 2600, 900], [-20000, -5600, 2000, 700]];
     let lastUrb = 0;
     function raw(e, n) {
@@ -5479,7 +5483,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       for (const Dm of DOMES) {
         const de = e - Dm[0], dn = n - Dm[1], d = Math.hypot(de, dn) / (Dm[2] * (0.9 + 0.2 * fbm(Math.cos(Math.atan2(dn, de)) * 1.3 + Dm[0] * 1e-3, Math.sin(Math.atan2(dn, de)) * 1.3, 2, 1325)));
         if (d >= 1.3) continue;
-        const v = d < 1 ? Dm[3] * Math.pow(1 - Math.pow(d, 1 / Dm[4] + 1), Dm[4] + 0.15) : -40 * (d - 1);
+        const v = d < 1 ? Dm[3] * (Dm[4] > 0.5 ? Math.pow(1 - Math.pow(d, 6), 0.35) : Dm[4] < 0 ? Math.pow(1 - d, 0.75 - 0.15 * Dm[4]) * (1 + 0.25 * (1 - d)) / 1.25 * 1.25 : Math.pow(1 - d * d, 0.55 - 0.2 * Dm[4]) * (1 - 0.15 * Dm[4] * d)) : -40 * (d - 1);
         if (v > h) h = kSmax(h, v, 25);
       }
       lastUrb = D > 60 && h < 45 ? sstep(60, 200, D) * (1 - sstep(25, 45, h)) * (1 - sstep(31000, 34000, n)) * (1 - tij * 1.4) * (pb > 0.05 ? 0 : 1) : 0;
@@ -5525,18 +5529,20 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       const sampleH = ctx.sampleH, F = [], towers = [];
       // ---- city: buildings by district (block grid), split in 3 km cells with a near/far LOD
       const CELL = 5000, cells = new Map(), R = makeRng(1361), farB = new Builder();
+      // a continuous high-rise wall along Copacabana / Ipanema / Leblon beaches
+      for (let e = -6500; e < 4800; e += 34) { const nb = coastAt(e) + 70 + R() * 40, h = sampleH(e, nb); if (h < 1.5 || h > 30) continue; const tall = 30 + R() * 45, w = 12 + R() * 8; farB.box(e, -nb, w / 2, 10 + R() * 6, h - 2, h + tall, lin([0xf0ece4, 0xe6dccb, 0xd8cfc0, 0xc8d4dc][Math.floor(R() * 4)]), 16, 12, 0, 0.02, 0.02, lin(0x6a6660)); }
       const cellOf = (e, n) => { const k = Math.floor(e / CELL) + ',' + Math.floor(n / CELL); let c = cells.get(k); if (!c) cells.set(k, c = { hi: new Builder(), lo: new Builder(), e: (Math.floor(e / CELL) + 0.5) * CELL, n: (Math.floor(n / CELL) + 0.5) * CELL }); return c; };
       const WALLS = [0xe8e2d6, 0xd8cfc0, 0xcfc8bc, 0xbfb8aa, 0xe6dccb, 0xa8b4bc, 0xd9c7a8, 0xf0ece4], GLASS = [0x4a5e70, 0x5a6e7e, 0x3e5262];
       let nb = 0, nf = 0;
       const district = (e, n) => { // [height min, max, density, glass]
-        if (Math.hypot(e - 2400, n - 5200) < 1800) return [40, 150, 0.85, 0.6];              // Centro
-        const db = n - coastAt(e); if (db > 0 && db < 700 && e > -7000 && e < 5200) return [28, 70, 0.9, 0.2];   // Zona Sul beachfront
+        if (Math.hypot(e - 2400, n - 5200) < 1800) return [40, 160, 0.95, 0.6];              // Centro
+        const db = n - coastAt(e); if (db > 0 && db < 700 && e > -7000 && e < 5200) return [35, 85, 1.0, 0.2];   // Zona Sul beachfront
         if (e > -7000 && e < 5200 && n < 3000) return [12, 40, 0.75, 0.1];                    // Zona Sul
         if (e > -24000 && e < -10000 && n < -4000) return [30, 95, 0.35, 0.5];                // Barra
         if (e > 8000 && e < 16000 && n < 12000) return [10, 45, 0.6, 0.1];                     // Niterói
-        return [6, 18, 0.22, 0];                                                                // Zona Norte / suburbs
+        return [6, 18, 0.16, 0];                                                                // Zona Norte / suburbs
       };
-      for (let n = -9000; n < 30000; n += 105) for (let e = -30000; e < 20000; e += 105) {
+      for (let n = -9000; n < 30000; n += 90) for (let e = -30000; e < 20000; e += 90) {
         const ee = e + (R() - 0.5) * 30, nn = n + (R() - 0.5) * 30, h = sampleH(ee, nn); if (h < 1.5 || h > 45) continue;
         raw(ee, nn); if (lastUrb < 0.5) continue;
         const D = district(ee, nn); if (R() > D[2]) continue;
@@ -5597,7 +5603,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       return {
         solids: makeSolidsGrid(F, 800), towers: towers, seaLanes: lanes,
         update: function (dt, cam) {
-          const ce = cam.position.x, cn = -cam.position.z, hiR = cam.position.y > 2500 ? 1500 : 4200;
+          const ce = cam.position.x, cn = -cam.position.z, hiR = cam.position.y > 2500 ? 1500 : 3200;
           for (const m of meshes) { const d = Math.max(Math.abs(m.e - ce), Math.abs(m.n - cn)) - CELL / 2; const near = d < (m.near ? hiR + 400 : hiR); if (near !== m.near) { m.near = near; m.hi.visible = near; if (m.lo) m.lo.visible = !near; } }
         },
         debug: { buildings: nb, favela: nf, towers: towers.length, cells: meshes.length,
@@ -9570,6 +9576,10 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   //  J 35F Draken: RM6C (Avon 300) 56.9 / 78.5 kN, wing 49.2 m2, empty 8.25 t, Mach 2.0, climb 199 m/s (hhogman.se, aerospaceweb.org).
   //  JA 37 Viggen: RM8B 72.1 / 125 kN, wing 46 m2, empty 10.7 t, Mach 2.1 (2231 km/h), climb ~203 m/s (hhogman.se).
   //  JAS 39C Gripen: RM12 54 / 80.5 kN, wing 25.54 m2, normal TO 8.5 t, Mach 2.0, ceiling 15.2 km, +9 g (aerospaceweb.org, Saab).
+  //  Vampire FB.5 / J 28B: Goblin 2 13.8 kN (no afterburner; boost = Goblin 3 rating 14.9 kN), length 9.37 m, span 11.58 m, wing 24.3 m2,
+  //   empty 3.3 t, max 5.6 t, 882 km/h, climb 24 m/s, ceiling 13 km, 4x Hispano Mk V 20 mm, 8 RP-3 / 2 x 500 lb (warhistory.org, War Thunder wiki).
+  //  Saab 105Oe (Sk 60 airframe): 2 x GE J85-17B 12.7 kN (no afterburner; MIL = max continuous), length 10.5 m, span 9.5 m, wing 16.3 m2,
+  //   empty 2.57 t, max 6.5 t, 970 km/h, ceiling 13.1 km, climb ~57 m/s, 6 wing pylons, no internal gun (flugzeuginfo.net, War Thunder wiki).
   // arcadeThrust = game-only multiplier on top of the real thrust (keeps AB thrust/weight >= ~0.9 for the old jets).
   // =====================================================================================================
   FL.AIRCRAFT = [
@@ -9579,19 +9589,33 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       rollRate: 170, pitchRate: 75, yawRate: 35, drift: 0.7, maxG: 8.5, missiles: 4, gunName: 'GSh-23L 23 mm',
       cd0: 0.019, machMax: 2.05, topSpeedKmh: 2175, ceiling: 17800, climbRate: 225,
       stats: { speed: 4, agility: 2, firepower: 1, toughness: 2 } },
-    { id: 'j29', tier: 2, price: 15000, roughness: 0.9, hardpoints: 2, name: 'Saab J 29 Tunnan', nation: 'SE', year: 1951, role: '1950s day fighter',
+    { id: 'vampire', tier: 0.8, price: 0, unlockLevel: 1, roughness: 0.95, hardpoints: 2, pylonLayout: 'w w', engineSound: 'old',
+      name: 'de Havilland Vampire FB.5', nation: 'UK', year: 1949, role: 'First-generation jet fighter-bomber',
+      blurb: 'Twin-boom pioneer with one Goblin engine and four 20 mm cannons in the nose: slow, but it turns tight at low speed. Swedish J 28B colours.',
+      mass: 4900, wingArea: 24.3, thrustMil: 13800, thrustAB: 14900, arcadeThrust: 2.5,
+      rollRate: 190, pitchRate: 125, yawRate: 55, drift: 0.6, maxG: 7, missiles: 2, gun: 'hispano', gunName: '4x Hispano Mk V 20 mm',
+      cd0: 0.024, machMax: 0.78, topSpeedKmh: 882, ceiling: 13045, climbRate: 24,
+      stats: { speed: 1, agility: 3, firepower: 1, toughness: 1 } },
+    { id: 'saab105', tier: 1.5, price: 12000, unlockLevel: 2, roughness: 0.55, hardpoints: 4, pylonLayout: 'w w w', engineSound: 'twin', noGun: true,
+      name: 'Saab 105 (Sk 60)', nation: 'SE', year: 1967, role: 'Trainer / light attack',
+      blurb: 'Side-by-side two-seat trainer with a T-tail and two small jets. No built-in gun: hang gun pods, rockets and bombs on six wing pylons.',
+      mass: 4500, wingArea: 16.3, thrustMil: 23000, thrustAB: 25400, arcadeThrust: 1.5,
+      rollRate: 200, pitchRate: 110, yawRate: 50, drift: 0.7, maxG: 7, missiles: 2, gun: 'gsh23', gunName: 'None (gun pods on the pylons)',
+      cd0: 0.022, machMax: 0.85, topSpeedKmh: 970, ceiling: 13100, climbRate: 57,
+      stats: { speed: 1, agility: 3, firepower: 2, toughness: 1 } },
+    { id: 'j29', tier: 2, price: 20000, roughness: 0.9, hardpoints: 2, name: 'Saab J 29 Tunnan', nation: 'SE', year: 1951, role: '1950s day fighter',
       blurb: 'The "flying barrel": a stubby subsonic veteran that turns on a krona but runs out of breath.',
       mass: 5600, wingArea: 24, thrustMil: 22300, thrustAB: 27500, arcadeThrust: 2.0,
       rollRate: 220, pitchRate: 120, yawRate: 55, drift: 0.6, maxG: 8, missiles: 2, gunName: '4x Hispano M/47 20 mm',
       cd0: 0.026, machMax: 0.86, topSpeedKmh: 1060, ceiling: 15500, climbRate: 32,
       stats: { speed: 1, agility: 3, firepower: 1, toughness: 2 } },
-    { id: 'f5e', tier: 2.5, price: 25000, unlockLevel: 3, roughness: 0.5, hardpoints: 4, pylonLayout: 't w w c', name: 'Northrop F-5E Tiger II', nation: 'US', year: 1974, role: 'Light fighter / aggressor',
+    { id: 'f5e', tier: 2.5, price: 30000, unlockLevel: 3, roughness: 0.5, hardpoints: 4, pylonLayout: 't w w c', name: 'Northrop F-5E Tiger II', nation: 'US', year: 1974, role: 'Light fighter / aggressor',
       blurb: 'Small, nimble and cheap: the classic aggressor jet with two tiny afterburning engines and twin nose cannons.',
       mass: 7150, wingArea: 17.28, thrustMil: 32000, thrustAB: 44400, arcadeThrust: 1.55,
       rollRate: 230, pitchRate: 110, yawRate: 50, drift: 0.8, maxG: 7.3, missiles: 2, gun: 'm61', gunName: '2x M39A2 20 mm',
       cd0: 0.02, machMax: 1.6, topSpeedKmh: 1700, ceiling: 15800, climbRate: 175,
       stats: { speed: 3, agility: 3, firepower: 2, toughness: 2 } },
-    { id: 'j35', tier: 3, price: 40000, roughness: 0.6, hardpoints: 3, name: 'Saab J 35 Draken', nation: 'SE', year: 1960, role: 'Mach 2 interceptor',
+    { id: 'j35', tier: 3, price: 45000, roughness: 0.6, hardpoints: 3, name: 'Saab J 35 Draken', nation: 'SE', year: 1960, role: 'Mach 2 interceptor',
       blurb: 'Double-delta dragon that climbs like a rocket and is famous for its "super stall".',
       mass: 10500, wingArea: 49.2, thrustMil: 56900, thrustAB: 78500, arcadeThrust: 1.4,
       rollRate: 230, pitchRate: 105, yawRate: 45, drift: 1.1, maxG: 8, missiles: 4, gunName: 'ADEN M/55 30 mm',
@@ -9603,13 +9627,13 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       rollRate: 210, pitchRate: 100, yawRate: 45, drift: 0.9, maxG: 7.5, missiles: 6, gunName: 'Oerlikon KCA 30 mm',
       cd0: 0.022, machMax: 2.1, topSpeedKmh: 2231, ceiling: 18000, climbRate: 203,
       stats: { speed: 4, agility: 2, firepower: 3, toughness: 4 } },
-    { id: 'jas39', tier: 5, price: 160000, roughness: 0.15, hardpoints: 5, name: 'Saab JAS 39 Gripen', nation: 'SE', year: 1996, role: 'Light multirole fighter',
+    { id: 'jas39', tier: 5, price: 180000, roughness: 0.15, hardpoints: 5, name: 'Saab JAS 39 Gripen', nation: 'SE', year: 1996, role: 'Light multirole fighter',
       blurb: 'Small, light canard delta with a lightning-fast roll rate.',
       mass: 8800, wingArea: 25.54, thrustMil: 54000, thrustAB: 80500, arcadeThrust: 1.45,
       rollRate: 380, pitchRate: 125, yawRate: 55, drift: 1.2, maxG: 9, missiles: 6, gunName: 'Mauser BK-27 27 mm',
       cd0: 0.019, machMax: 2.0, topSpeedKmh: 2204, ceiling: 15240, climbRate: 254,
       stats: { speed: 4, agility: 4, firepower: 3, toughness: 3 } },
-    { id: 'mig29', tier: 5.5, price: 200000, unlockLevel: 13, roughness: 0.2, hardpoints: 5, pylonLayout: 'w w w c', name: 'MiG-29 Fulcrum-A', nation: 'RU', year: 1983, role: 'Front-line fighter',
+    { id: 'mig29', tier: 5.5, price: 220000, unlockLevel: 13, roughness: 0.2, hardpoints: 5, pylonLayout: 'w w w c', name: 'MiG-29 Fulcrum-A', nation: 'RU', year: 1983, role: 'Front-line fighter',
       blurb: 'Twin-engined Soviet dogfighter with a helmet sight, a 9 g airframe and a famous low-speed tail-slide.',
       mass: 14900, wingArea: 38, thrustMil: 98800, thrustAB: 162600, arcadeThrust: 1.25,
       rollRate: 270, pitchRate: 120, yawRate: 55, drift: 1.1, maxG: 9, missiles: 6, gun: 'gsh30', gunName: 'GSh-30-1 30 mm',
@@ -9621,25 +9645,25 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       rollRate: 290, pitchRate: 115, yawRate: 50, drift: 1.0, maxG: 9, missiles: 10, gunName: 'GSh-30-1 30 mm',
       cd0: 0.021, machMax: 2.35, topSpeedKmh: 2500, ceiling: 19000, climbRate: 300,
       stats: { speed: 5, agility: 4, firepower: 4, toughness: 4 } },
-    { id: 'f16', tier: 6.5, price: 320000, unlockLevel: 18, roughness: 0.1, hardpoints: 6, pylonLayout: 't w w w c', name: 'F-16C Fighting Falcon', nation: 'US', year: 1991, role: 'Multirole fighter',
+    { id: 'f16', tier: 6.5, price: 330000, unlockLevel: 18, roughness: 0.1, hardpoints: 6, pylonLayout: 't w w w c', name: 'F-16C Fighting Falcon', nation: 'US', year: 1991, role: 'Multirole fighter',
       blurb: 'Fly-by-wire "Viper": bubble canopy, 9 g, and an M61 Vulcan that fires 100 rounds a second.',
       mass: 12000, wingArea: 27.87, thrustMil: 76300, thrustAB: 131000, arcadeThrust: 1.3,
       rollRate: 320, pitchRate: 125, yawRate: 55, drift: 1.0, maxG: 9, missiles: 6, gun: 'm61', gunName: 'M61A1 Vulcan 20 mm',
       cd0: 0.019, machMax: 2.05, topSpeedKmh: 2120, ceiling: 15240, climbRate: 254,
       stats: { speed: 4, agility: 5, firepower: 4, toughness: 3 } },
-    { id: 'su35', tier: 7, price: 400000, roughness: 0.12, hardpoints: 8, name: 'Su-35S Flanker-E', nation: 'RU', year: 2014, role: 'Super-maneuverable fighter',
+    { id: 'su35', tier: 7, price: 420000, roughness: 0.12, hardpoints: 8, name: 'Su-35S Flanker-E', nation: 'RU', year: 2014, role: 'Super-maneuverable fighter',
       blurb: 'Flanker on steroids: no canards, 3D thrust-vectoring nozzles and outrageous post-stall drifts.',
       mass: 25300, wingArea: 62, thrustMil: 172600, thrustAB: 284400, arcadeThrust: 1.3,
       rollRate: 280, pitchRate: 125, yawRate: 60, drift: 1.5, maxG: 9, missiles: 12, gunName: 'GSh-30-1 30 mm',
       cd0: 0.021, machMax: 2.25, topSpeedKmh: 2400, ceiling: 18000, climbRate: 280,
       stats: { speed: 5, agility: 5, firepower: 5, toughness: 5 } },
-    { id: 'su57', tier: 8, price: 650000, roughness: 0.06, hardpoints: 6, name: 'Su-57 Felon', nation: 'RU', year: 2020, role: 'Stealth fighter',
+    { id: 'su57', tier: 8, price: 700000, roughness: 0.06, hardpoints: 6, name: 'Su-57 Felon', nation: 'RU', year: 2020, role: 'Stealth fighter',
       blurb: 'Flat, faceted 5th-gen stealth jet with all-moving canted tails and vectored thrust.',
       mass: 25000, wingArea: 78.8, thrustMil: 186200, thrustAB: 294200, arcadeThrust: 1.35,
       rollRate: 300, pitchRate: 125, yawRate: 62, drift: 1.4, maxG: 9, missiles: 8, gunName: 'GSh-30-1 (9A1-4071K) 30 mm',
       cd0: 0.018, machMax: 2.0, topSpeedKmh: 2135, ceiling: 20000, climbRate: 330,
       stats: { speed: 5, agility: 5, firepower: 4, toughness: 4 } },
-    { id: 'su47', tier: 9, price: 900000, unlockLevel: 40, roughness: 0.08, hardpoints: 6, pylonLayout: 't c w w', name: 'Su-47 Berkut', nation: 'RU', year: 1997, role: 'Forward-swept-wing demonstrator',
+    { id: 'su47', tier: 9, price: 950000, unlockLevel: 40, roughness: 0.08, hardpoints: 6, pylonLayout: 't c w w', name: 'Su-47 Berkut', nation: 'RU', year: 1997, role: 'Forward-swept-wing demonstrator',
       blurb: 'The black "Golden Eagle": forward-swept wings, canards and wild high-alpha agility from a one-off prototype.',
       mass: 25670, wingArea: 56, thrustMil: 186200, thrustAB: 306000, arcadeThrust: 1.3,
       rollRate: 300, pitchRate: 132, yawRate: 65, drift: 1.6, maxG: 9, missiles: 10, gun: 'gsh30', gunName: 'GSh-30-1 30 mm',
@@ -10146,6 +10170,12 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       }
       for (let k = 0; k < area * 0.5; k++) { x.globalAlpha = 0.04 + R() * 0.04; x.fillStyle = R() < 0.5 ? '#ffffff' : '#000000'; blobPath(x, dom.z0 + R() * w, dom.s0 + R() * h, 0.4 + R() * 1.0, 1.6, R, 6, R() * 6); x.fill(); }
       x.globalAlpha = 1;
+    } else if (P === 'team60') { // display scheme: plain top, coloured underside with a cross (fuselage line + band across the wings)
+      if (under) {
+        x.fillStyle = L.stripe;
+        x.fillRect(dom.z0 - 1, -0.3, w + 2, 0.6);
+        x.fillRect((L.crossZ || 0) - 0.3, dom.s0 - 1, 0.6, h + 2);
+      }
     } else if (P === 'mottle') { // soft overlapping spots (paint-shop variants)
       for (let k = 0; k < area * 2.2; k++) {
         x.fillStyle = tones[(R() * tones.length) | 0]; x.globalAlpha = 0.25 + R() * 0.3;
@@ -11199,6 +11229,159 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     },
   };
 
+  // ---------------------------------------------------------------- de Havilland Vampire FB.5 / Swedish J 28B (9.37 m, span 11.58 m, height 2.69 m)
+  // Short pod (cockpit + Goblin centrifugal engine, jet pipe right behind the wing), straight tapered wing with the intakes in the
+  // wing roots, twin tail booms with rounded de Havilland fins joined by one tailplane + elevator, 4 Hispano cannons under the nose.
+  DEFS.vampire = {
+    surf: [{ a: 0.03, b: 0.19, c: 0.25, kind: 'flap' }, { a: 0.27, b: 0.52, c: 0.25, kind: 'flap' }, { a: 0.56, b: 0.94, c: 0.27, kind: 'aileron' }],
+    // gear: nose leg retracts forward into the nose; mains fold inward under the pod (wheels flat in the wing roots)
+    gearSpec: [
+      { x: 0, y: -0.46, z: -3.35, r: 0.22, w: 0.15, nose: true, fold: [1, 0, 0], ang: Math.PI / 2, lift: 0.1, sr: 0.055 },
+      { x: 1.25, y: -0.32, z: 0.3, r: 0.33, w: 0.18, fold: [0, 0, 1], ang: -Math.PI / 2, shrink: 0.5, sr: 0.07, legDoor: [0.34, 0.85, 0.15], doors: 'inner' },
+    ],
+    cockpitStyle: 'se_analog', canTop: 1.15,
+    fins: [[1.72, 0.75, 4.3], [-1.72, 0.75, 4.3]],
+    nation: 'SE', seed: 28, len: [-4.75, 5.0], hs: 5.9, radomeZ: -4.75, noAB: true,
+    frames: [-4.1, -3.0, -1.1, 0.2, 1.1],
+    // Flygvapnet J 28B: olive green upper surfaces, light blue-grey underside, white F 3 number on the nose, letter on the fins
+    liv: { pattern: 'blotch', base: '#4a5537', tones: ['#434d31', '#545f3f'], blot: [[1.0, 1.0, 2.4], [1.0, 1.0, 2.4]], aspect: 1.8, under: '#a2b1b8' },
+    marks: { badge: 'se', wing: 'F 3', badgeCol: '#0b4f8a', fin: 'num', num: 'C', numCol: '#f2f2ee', numStroke: '#1a1a1a' },
+    code: { text: '3', color: '#f2f2ee', stroke: '#1a1a1a' },
+    // RAF 1950s day-fighter camouflage: Dark Sea Grey / Dark Green disruptive pattern over PRU Blue (mastery paint)
+    paints: { raf: { pattern: 'blotch', base: '#5f676b', tones: ['#47533a'], blot: [[1.7, 1.1, 2.6]], aspect: 1.5, under: '#5d7a95' } },
+    engines: [{ x: 0, y: 0.02, z: 1.5, r: 0.33, len: 0.3, plain: true }],
+    gear: [{ x: 0, y: -0.46, z: -3.35, r: 0.22, nose: 1 }, { x: 1.25, y: -0.32, z: 0.3, r: 0.33 }, { x: -1.25, y: -0.32, z: 0.3, r: 0.33 }],
+    wingtips: [[-5.79, -0.13, 0.45], [5.79, -0.13, 0.45]], navs: [[-5.76, -0.1, 0.0], [5.76, -0.1, 0.0]],
+    build(P) {
+      // pod: rounded nose, cockpit forward, widest round the Goblin (1.27 m), short jet pipe just behind the wing
+      P.body.push(loft([
+        [-4.7, -0.12, 0.01, 0.01, 0.01, 2], [-4.56, -0.11, 0.17, 0.16, 0.15, 2], [-4.2, -0.08, 0.33, 0.33, 0.3, 2],
+        [-3.6, -0.04, 0.46, 0.47, 0.42, 2], [-2.8, -0.01, 0.55, 0.56, 0.5, 2], [-1.8, 0.01, 0.62, 0.62, 0.56, 2.1],
+        [-0.8, 0.02, 0.68, 0.66, 0.6, 2.2], [0.3, 0.02, 0.68, 0.64, 0.6, 2.2], [1.0, 0.02, 0.58, 0.55, 0.52, 2.1],
+        [1.45, 0.02, 0.44, 0.42, 0.42, 2], [1.62, 0.02, 0.38, 0.38, 0.38, 2],
+      ], 28, 3, 0));
+      P.body.push(loft([[-1.5, 0.4, 0.2, 0.14, 0.1], [-0.4, 0.42, 0.26, 0.16, 0.1], [0.8, 0.36, 0.18, 0.1, 0.1], [1.35, 0.28, 0.04, 0.03, 0.03]], 14, 3, 0));
+      // flat oval intakes in the wing-root leading edges, both sides of the pod
+      const IT = [[-1.5, -0.15, 0.34, 0.13, 0.12, 2.6], [-1.2, -0.16, 0.38, 0.16, 0.15, 2.4], [-0.4, -0.17, 0.32, 0.14, 0.13, 2.2], [0.5, -0.18, 0.06, 0.05, 0.05, 2]];
+      for (const sx of [-1, 1]) {
+        P.body.push(loft(IT, 16, 3, sx * 0.96));
+        intake(P, IT[0], sx * 0.96, { lip: 0.03, depth: 1.2, shrink: 0.75, face: false, lipCol: [0.5, 0.53, 0.48] });
+      }
+      // straight tapered wing, clipped FB.5 tips, thick at the root
+      P.body.push(...wingPair([[0.55, -1.47], [5.79, -0.13], [5.79, 1.02], [0.55, 1.42]], 0.24, 0.05, -0.18, (ax) => 1 - 0.5 * clamp01((ax - 0.6) / 5.2)));
+      // tail booms from the wing leading edge to the tail
+      const BOOM = [[-1.28, -0.16, 0.02, 0.02, 0.02, 2], [-1.1, -0.15, 0.15, 0.15, 0.14, 2], [-0.6, -0.14, 0.21, 0.21, 0.2, 2], [0.8, -0.1, 0.22, 0.22, 0.21, 2],
+        [2.1, -0.03, 0.18, 0.18, 0.17, 2], [3.5, 0.04, 0.145, 0.145, 0.14, 2], [4.6, 0.07, 0.12, 0.12, 0.115, 2], [4.9, 0.07, 0.05, 0.05, 0.05, 2], [4.98, 0.07, 0.01, 0.01, 0.01, 2]];
+      for (const sx of [-1, 1]) P.body.push(loft(BOOM, 14, 3, sx * 1.72));
+      // rounded de Havilland fins (with rudders) + small ventral fins with tail skids
+      for (const sx of [-1, 1]) {
+        P.body.push(fin([[3.3, 0.0], [4.88, 0.0], [4.84, 0.9], [4.66, 1.3], [4.34, 1.46], [4.02, 1.4], [3.8, 0.98]], 0.1, 0.035, sx * 1.72, 0.45));
+        P.body.push(fin([[4.0, -0.02], [4.82, -0.02], [4.78, -0.44], [4.3, -0.4]], 0.06, 0.02, sx * 1.72, 0));
+      }
+      // one tailplane between the fins + one-piece elevator
+      P.body.push(planform([[-1.72, 3.74], [1.72, 3.74], [1.72, 4.36], [-1.72, 4.36]], 0.06, 0.025, 0.3));
+      P.movers.push({ geo: planform([[-1.69, 4.36], [1.69, 4.36], [1.69, 4.78], [-1.69, 4.78]], 0.045, 0.02, 0.3), pivot: [0, 0.3, 4.36], kind: 'elevon', side: 0, axis: [1, 0, 0] });
+      // small framed canopy (FB.5 / J 28B)
+      canopy(P, [[-3.35, 0.38, 0.05, 0.05, 0.05], [-3.05, 0.4, 0.3, 0.26, 0.1], [-2.55, 0.43, 0.38, 0.38, 0.1], [-1.95, 0.45, 0.36, 0.36, 0.1],
+        [-1.45, 0.46, 0.24, 0.2, 0.1], [-1.15, 0.46, 0.05, 0.05, 0.05]]);
+      const M = P.metal;
+      M.push(paint(cylZ(0.39, 0.37, 0.3, 18, true).translate(0, 0.02, 1.3), ...TIT)); // jet pipe shroud
+      // four Hispano Mk V cannons in the lower nose: blast tubes + barrel tips
+      for (const gx of [-0.26, -0.1, 0.1, 0.26]) {
+        const gy = -0.03 - 0.45 * Math.sqrt(1 - Math.pow(gx / 0.5, 2)) - 0.005; // on the pod's under surface
+        M.push(paint(cylZ(0.036, 0.036, 0.18, 8).translate(gx, gy, -3.2), 0.1, 0.1, 0.11), paint(cylZ(0.017, 0.017, 0.22, 6).translate(gx, gy, -3.4), 0.05, 0.05, 0.05));
+      }
+      M.push(paint(box(0.42, 0.02, 0.6, 0, -0.47, -2.75), 0.22, 0.24, 0.2)); // gun-bay access door
+      M.push(paint(cylZ(0.022, 0.01, 0.55, 6, false).translate(5.55, -0.14, -0.78), 0.7, 0.7, 0.72)); // pitot on the right wing tip
+      for (const sx of [-1, 1]) {
+        M.push(paint(box(0.05, 0.06, 0.32, sx * 1.72, -0.46, 4.55), 0.3, 0.3, 0.3)); // tail skid
+        M.push(paint(cylZ(0.06, 0.05, 0.25, 8).translate(sx * 1.72, 1.36, 4.15), 0.2, 0.2, 0.21)); // fin-tip light fairing
+        for (const rx of [2.95, 3.3, 3.65, 4.0]) M.push(paint(box(0.035, 0.06, 0.85, sx * rx, -0.35 + (rx - 2.95) * 0.02, 0.15), 0.32, 0.34, 0.33)); // RP-3 zero-length rails
+      }
+      // markings: roundels on the outer wings, F 3 number on the nose, letter on the fins, wing badge under the cockpit
+      for (const sx of [-1, 1]) P.decals.push(decal(0, 1.0, 1.0, 'top', sx * 4.9, -0.05, 0.36), decal(0, 1.0, 1.0, 'bottom', sx * 4.9, -0.3, 0.36));
+      for (const o of [-1, 1]) P.decals.push(decal(1, 0.75, 0.38, o > 0 ? 'right' : 'left', o * 0.47, 0.02, -3.75));
+      for (const o of [-1, 1]) P.decals.push(decal(3, 0.6, 0.6, o > 0 ? 'right' : 'left', o * 1.78, 0.75, 4.3));
+      for (const o of [-1, 1]) P.decals.push(decal(2, 0.36, 0.36, o > 0 ? 'right' : 'left', o * 0.6, 0.12, -2.45));
+    },
+  };
+
+  // ---------------------------------------------------------------- Saab 105 / Sk 60 (10.5 m, span 9.5 m, height 2.7 m)
+  // Side-by-side two-seat trainer: wide forebody with a big one-piece canopy, shoulder wing (12.8 deg sweep, 6 deg anhedral),
+  // two small jets in nacelles on the lower fuselage sides, T-tail with a bullet fairing, 6 wing pylons, no internal gun.
+  DEFS.saab105 = {
+    surf: [{ a: 0.04, b: 0.5, c: 0.25, kind: 'flap' }, { a: 0.55, b: 0.93, c: 0.25, kind: 'aileron' }],
+    wingWarp: (x, y) => y - 0.105 * Math.max(0, Math.abs(x) - 0.75), // 6 deg anhedral outboard of the fuselage
+    // gear: nose leg retracts forward; short mains fold inward into the fuselage belly
+    gearSpec: [
+      { x: 0, y: -0.5, z: -3.9, r: 0.2, w: 0.13, nose: true, fold: [1, 0, 0], ang: Math.PI / 2, lift: 0.1, sr: 0.055 },
+      { x: 1.0, y: -0.45, z: 0.75, r: 0.28, w: 0.16, fold: [0, 0, 1], ang: -Math.PI / 2, shrink: 0.45, sr: 0.065, legDoor: [0.3, 0.8, 0.15], doors: 'inner' },
+    ],
+    cockpitStyle: 'se_analog', canTop: 1.08, sideBySide: 0.34,
+    fins: [[0, 1.0, 3.9]],
+    nation: 'SE', seed: 105, len: [-5.3, 5.4], hs: 4.9, radomeZ: -4.75, noAB: true,
+    frames: [-4.7, -3.6, -0.9, 0.6, 2.0, 3.3, 4.4],
+    // Flygvapnet Sk 60: overall light grey, black code number on the nose, F 5 flying-school badge
+    liv: { pattern: 'blotch', base: '#959ca0', tones: ['#8c9397', '#9ea5a9'], blot: [[1.0, 1.0, 2.4], [1.0, 1.0, 2.4]], aspect: 1.8, under: '#acb2b5', radome: '#81888c' },
+    marks: { badge: 'se', wing: 'F 5', badgeCol: '#0b4f8a', fin: 'num', num: '5', numCol: '#1a1c1e', numStroke: null },
+    code: { text: '62', color: '#1a1c1e', stroke: null },
+    paints: {
+      // Sk 60B/C attack camouflage: dark olive green, dark blue and blue-grey splinter (FS 34064 / 35042 / 35237)
+      splinter: { pattern: 'splinter', base: '#4b5440', cols: ['#4b5440', '#2e3b4c', '#6f7f8b'], weights: [1.1, 1, 0.9], cell: 1.6, squash: 1.15, under: '#9aa3a8' },
+      // Team 60 display scheme (1998-): grey on top, Swedish blue underside with a yellow cross
+      team60: { pattern: 'team60', base: '#a7aeb2', under: '#1f5aa6', underTones: [], stripe: '#f2c814', crossZ: 0.9, radome: '#a7aeb2' },
+    },
+    engines: [{ x: -0.62, y: -0.15, z: 2.72, r: 0.2, len: 0.3, plain: true }, { x: 0.62, y: -0.15, z: 2.72, r: 0.2, len: 0.3, plain: true }],
+    gear: [{ x: 0, y: -0.5, z: -3.9, r: 0.2, nose: 1 }, { x: 1.0, y: -0.45, z: 0.75, r: 0.28 }, { x: -1.0, y: -0.45, z: 0.75, r: 0.28 }],
+    wingtips: [[-4.75, 0.0, 1.25], [4.75, 0.0, 1.25]], navs: [[-4.72, 0.03, 0.85], [4.72, 0.03, 0.85]],
+    build(P) {
+      // wide side-by-side forebody, blunt nose, slim tail cone under the fin
+      P.body.push(loft([
+        [-5.25, -0.12, 0.01, 0.01, 0.01, 2], [-5.1, -0.11, 0.22, 0.2, 0.2, 2], [-4.7, -0.08, 0.45, 0.42, 0.38, 2], [-4.0, -0.04, 0.64, 0.58, 0.52, 2.2],
+        [-3.1, 0.0, 0.76, 0.66, 0.6, 2.8], [-2.0, 0.02, 0.8, 0.68, 0.62, 3.1], [-0.8, 0.02, 0.79, 0.64, 0.62, 2.9], [0.6, 0.03, 0.72, 0.6, 0.6, 2.6],
+        [2.0, 0.06, 0.56, 0.52, 0.5, 2.3], [3.3, 0.12, 0.4, 0.42, 0.36, 2.1], [4.4, 0.18, 0.27, 0.32, 0.22, 2], [5.0, 0.22, 0.14, 0.18, 0.12, 2], [5.2, 0.22, 0.01, 0.01, 0.01, 2],
+      ], 28, 3, 0));
+      // engine nacelles on the lower fuselage sides: round intakes under the wing roots, jet pipes behind the wing
+      const NAC = [[-0.9, -0.22, 0.24, 0.26, 0.26, 2.1, 0.05], [-0.5, -0.22, 0.28, 0.29, 0.29, 2.2], [0.8, -0.2, 0.3, 0.3, 0.3, 2.2], [2.0, -0.17, 0.27, 0.27, 0.27, 2.1], [2.78, -0.15, 0.22, 0.22, 0.22, 2]];
+      for (const sx of [-1, 1]) {
+        P.body.push(loft(NAC, 18, 3, sx * 0.62));
+        intake(P, NAC[0], sx * 0.62, { lip: 0.03, depth: 1.4, shrink: 0.8, lipCol: [0.6, 0.62, 0.63] });
+      }
+      // shoulder wing (anhedral: def.wingWarp)
+      P.body.push(...wingPair([[0.7, -0.65], [4.75, 0.6], [4.75, 1.72], [0.7, 1.76]], 0.16, 0.04, 0.42, (ax) => 1 - 0.5 * clamp01((ax - 0.7) / 4.0)));
+      // dorsal fillet + swept fin with rudder
+      P.body.push(loft([[1.2, 0.5, 0.02, 0.02, 0.02], [2.2, 0.5, 0.12, 0.1, 0.06], [3.2, 0.52, 0.1, 0.08, 0.04], [3.6, 0.52, 0.03, 0.03, 0.03]], 10, 2, 0));
+      P.body.push(fin([[2.7, 0.3], [4.75, 0.3], [5.0, 1.9], [4.3, 1.9]], 0.12, 0.04, 0, 0.4));
+      // T-tail: tailplane on the fin tip + elevators, bullet fairing at the junction
+      P.body.push(...wingPair([[0.08, 4.25], [1.95, 4.78], [1.95, 5.0], [0.08, 4.98]], 0.07, 0.03, 1.93));
+      for (const s of [1, -1]) {
+        let g = planform([[0.08, 4.98], [1.93, 5.0], [1.93, 5.2], [0.08, 5.26]], 0.04, 0.02, 1.93);
+        if (s < 0) g = mirrorX(g);
+        P.movers.push({ geo: g, pivot: [0, 1.93, 4.99], kind: 'elevon', side: 0, axis: [1, 0, 0] });
+      }
+      P.body.push(loft([[3.95, 1.93, 0.01, 0.01, 0.01, 2], [4.2, 1.93, 0.1, 0.1, 0.1, 2], [5.0, 1.93, 0.1, 0.1, 0.1, 2], [5.35, 1.93, 0.01, 0.01, 0.01, 2]], 12, 2, 0));
+      // ventral airbrakes under the wing roots
+      for (const s of [1, -1]) P.movers.push({ geo: box(0.36, 0.04, 0.7, s * 0.3, -0.6, 0.1), pivot: [s * 0.3, -0.6, -0.25], kind: 'brakeBot', side: s });
+      // big one-piece canopy over the two side-by-side seats
+      canopy(P, [[-3.8, 0.42, 0.05, 0.05, 0.05], [-3.45, 0.44, 0.6, 0.3, 0.1], [-2.9, 0.48, 0.74, 0.44, 0.1], [-2.1, 0.5, 0.76, 0.48, 0.1],
+        [-1.3, 0.5, 0.7, 0.4, 0.1], [-0.82, 0.5, 0.05, 0.05, 0.05]]);
+      const M = P.metal;
+      M.push(paint(cylZ(0.025, 0.01, 0.75, 6, false).translate(0, -0.1, -6.0), 0.7, 0.7, 0.72)); // nose pitot
+      for (const sx of [-1, 1]) {
+        M.push(paint(cylZ(0.235, 0.225, 0.22, 14, true).translate(sx * 0.62, -0.15, 2.58), ...TIT)); // jet pipe shroud
+        M.push(paint(cylZ(0.016, 0.008, 0.3, 5, false).translate(sx * 0.5, 0.05, -4.6), 0.7, 0.7, 0.72)); // AoA / side probes
+      }
+      M.push(paint(box(0.012, 0.18, 0.3, 0, 0.72, -0.4), 0.15, 0.15, 0.16)); // VHF blade behind the canopy
+      for (const sx of [-1, 1]) store(P.stores, 'rb24', sx * 3.7, 0.0, 1.0, 0.22);
+      // markings: roundels on the wings and rear fuselage, black code on the nose, F 5 badge, school number on the fin
+      for (const sx of [-1, 1]) P.decals.push(decal(0, 0.9, 0.9, 'top', sx * 3.4, 0.2, 0.95), decal(0, 0.9, 0.9, 'bottom', sx * 3.4, 0.05, 0.95));
+      for (const o of [-1, 1]) P.decals.push(decal(0, 0.6, 0.6, o > 0 ? 'right' : 'left', o * 0.46, 0.12, 3.0));
+      for (const o of [-1, 1]) P.decals.push(decal(1, 0.9, 0.45, o > 0 ? 'right' : 'left', o * 0.62, -0.06, -4.1));
+      for (const o of [-1, 1]) P.decals.push(decal(2, 0.36, 0.36, o > 0 ? 'right' : 'left', o * 0.74, -0.22, -3.2));
+      for (const o of [-1, 1]) P.decals.push(decal(3, 0.6, 0.6, o > 0 ? 'right' : 'left', o * 0.07, 1.2, 4.2));
+    },
+  };
+
   // ------------------------------------------------------------------ per-type shared cache
   const TC = {};
   // non-uniform scale z *= k of a geometry (normals use the inverse transpose)
@@ -11244,7 +11427,10 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       p.push(cylZ(e.r, e.r * 0.9, e.len, sg, true));
       p.push(cylZ(e.r * 0.91, e.r * 0.88, 0.06, sg, true).translate(0, 0, e.len - 0.06));
       if (e.tvc) p.push(cylZ(e.r * 1.02, e.r * 1.0, 0.12, sg, true).translate(0, 0, 0.0));
-      if (!low) {
+      if (!low && e.plain) { // plain jet pipe (no afterburner): rolled lip + turbine exhaust cone deep inside
+        p.push(nonIdx(new T.TorusGeometry(e.r * 0.92, e.r * 0.06, 6, 28)).translate(0, 0, e.len - 0.01));
+        p.push(cylZ(e.r * 0.42, 0.004, e.r * 0.9, 14, false).translate(0, 0, e.len * 0.1));
+      } else if (!low) {
         const np = e.r > 0.4 ? 16 : 12;
         for (let k = 0; k < np; k++) {
           const a = (k / np) * Math.PI * 2, pet = box(e.r * 0.36, 0.018, e.len * 0.55, 0, e.r * 0.92, e.len * 0.72);
@@ -11318,9 +11504,22 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       C.cockpit = merge([K.canopyFrame(cs, arches), K.pilotGeo(hy, hz, CK.s, 'seat')], false, true);
       C.pilot = K.pilotGeo(hy, hz, CK.s, 'body');
       C.canopyIn = K.canopyInner(C.canopy, CK);
+      const sb = def.sideBySide || 0;
+      if (sb) { // side-by-side two-seater: my seat on the left (eye at -sb), the instructor with his own seat and panel on the right
+        CK.hw = Math.min(CK.hw, sb - 0.05); CK.eye = [-sb, CK.eye[1], CK.eye[2]]; CK.sill = Math.min(CK.sill, CK.rail - 0.04); // low walls: you see your instructor
+        C.cockpit = merge([K.canopyFrame(cs, arches), K.pilotGeo(hy, hz, CK.s, 'seat').translate(-sb, 0, 0), K.pilotGeo(hy, hz, CK.s).translate(sb, 0, 0)], false, true);
+        C.pilot.translate(-sb, 0, 0);
+      }
       C.cg = K.cockpitGeo(CK);
+      if (sb) {
+        const tub2 = C.cg.tub.clone().translate(2 * sb, 0, 0), face2 = C.cg.face.clone().translate(2 * sb, 0, 0);
+        for (const k of ['tub', 'inner', 'face', 'hud']) C.cg[k].translate(-sb, 0, 0);
+        C.cg.tub = merge([C.cg.tub, tub2.translate(-sb, 0, 0)], true, false);
+        C.cg.face = merge([C.cg.face, face2.translate(-sb, 0, 0)], true, false);
+        C.cg.stickPivot = [C.cg.stickPivot[0] - sb, C.cg.stickPivot[1], C.cg.stickPivot[2]];
+      }
       C.cg.tub = merge([C.cg.tub, K.mirrorsGeo(cs, arches[0])], true, false);
-      C.body = K.cutCockpit(C.body, CK);
+      C.body = K.cutCockpit(C.body, sb ? Object.assign({}, CK, { hw: Math.min(sb + CK.hw, CK.hwAt(CK.zp) * 0.92) }) : CK);
       C.gearSys = K.gearSystem(def.gearSpec, hit);
       C.doorMat = new T.MeshStandardMaterial({ color: new T.Color(def.liv.under).convertSRGBToLinear(), metalness: def.metalBody ? 0.6 : 0.3, roughness: def.metalBody ? 0.35 : 0.55, side: T.DoubleSide });
     }
@@ -11376,11 +11575,14 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     mig29: [['R1', 4.4, 2.6, 'wing'], ['R2', 3.45, 2.0, 'wing'], ['R3', 2.55, 1.4, 'wing'], ['C', 0, 0.8, 'belly']],
     f16: [['R1', 4.98, 2.35, 'tip'], ['R2', 3.95, 2.2, 'wing'], ['R3', 2.95, 1.7, 'wing'], ['R4', 2.0, 1.2, 'wing'], ['C', 0, 0.3, 'belly']],
     su47: [['R1', 8.3, -0.55, 'tip'], ['C', 0, -0.6, 'belly'], ['R2', 5.2, 1.5, 'wing'], ['R3', 3.6, 2.5, 'wing']],
+    vampire: [['R1', 4.55, 0.35, 'wing'], ['R2', 2.4, 0.3, 'wing']],
+    saab105: [['R1', 3.7, 1.0, 'wing'], ['R2', 2.8, 0.78, 'wing'], ['R3', 1.85, 0.55, 'wing']],
   };
   // gun muzzle (local, right side for paired guns) -> [x, y, z, pair]
   const MUZZLES = {
     mig21: [0, -0.84, -1.95], j29: [0.25, -0.62, -4.05, 1], j35: [1.0, -0.12, -3.3], ja37: [-0.35, -0.95, -1.4], jas39: [-0.62, -0.32, -2.8],
     su27: [1.15, 0.12, -5.0], su35: [1.15, 0.12, -5.0], su57: [1.0, 0.18, -5.0], f5e: [0.3, 0.12, -6.0, 1], mig29: [-1.3, 0.1, -3.4], f16: [-0.62, 0.28, -3.6], su47: [-1.45, 0.12, -3.0],
+    vampire: [0.26, -0.42, -3.5, 1], saab105: [0, -0.62, -3.0], // Vampire: 4 Hispanos under the nose (alternating sides); Sk 60: no internal gun
   };
   function latheZ(prof, seg) { // prof [[z, r], ...] -> surface of revolution along Z
     const g = new T.LatheGeometry(prof.map((q) => new T.Vector2(Math.max(0.0005, q[1]), q[0])), seg || 12);
@@ -11693,6 +11895,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   const PAINT_TINT = { grey: [0.88, 0.9, 0.93], splinter: [0.68, 0.84, 0.52], desert: [1.18, 0.96, 0.68], ace: [0.3, 0.28, 0.32], gold: [1.35, 1.05, 0.45] }; // Su-27 (fx.js livery) tints
   // a paint variant keeps the jet's own camouflage pattern and swaps its colours (bare-metal jets take the variant's own pattern)
   function recolour(def, name) {
+    if (def.paints && def.paints[name]) return def.paints[name]; // jet-specific scheme (Sk 60 camo, Team 60, RAF Vampire)
     const V = PAINT_LIV[name], L0 = def.liv;
     if (!L0.pattern || L0.pattern === 'metal' || V.pattern === 'splinter') return V; // 'splinter' paint = the full Swedish four-colour scheme
     const t = V.tones, pick = (i) => t[Math.max(0, Math.min(i, t.length - 1))];
@@ -11704,7 +11907,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     return L;
   }
   function paintMat(C, name) {
-    if (!PAINT_LIV[name]) return C.bodyMat;
+    if (!PAINT_LIV[name] && !(C.def.paints && C.def.paints[name])) return C.bodyMat;
     C.paints = C.paints || {};
     if (C.paints[name]) return C.paints[name];
     const b = C.bodyMat;
@@ -11712,12 +11915,12 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       roughnessMap: b.roughnessMap, metalnessMap: b.metalnessMap, metalness: C.def.metalBody ? 0.35 : 1, roughness: 1 }));
   }
   const TINTED = {};
-  function attachPaint(api, bodyMat, getMat) {
+  function attachPaint(api, bodyMat, getMat, own) {
     const meshes = [];
     api.group.traverse((o) => { if (o.isMesh && o.material === bodyMat) meshes.push(o); });
     api.paint = 'factory';
     api.setPaint = function (name) {
-      name = PAINT_LIV[name] ? name : 'factory';
+      name = PAINT_LIV[name] || (own && own[name]) ? name : 'factory';
       api.paint = name;
       const m = getMat(name);
       for (const o of meshes) o.material = m;
@@ -11822,6 +12025,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       setGear(t) { setGearFn(t); const f = clamp01(t); if (Math.abs(f - ctl.flap) > 1e-3) { ctl.flap = f; api.setControls(ctl.p, ctl.r, ctl.y); } },
       setEngine(thr, ab, time) {
         thr = clamp01(thr || 0); ab = clamp01(ab || 0); time = time || 0;
+        if (def.noAB) { if (ab > 0) thr = 1; ab = 0; } // no afterburner: boost = full dry power, no reheat flame
         const fl = 1 + 0.07 * Math.sin(time * 37.0) + 0.05 * Math.sin(time * 71.3 + 1.3);
         const dry = thr * (1 - ab);
         const lenO = (0.7 + 1.8 * dry + 7.5 * ab) * fl;
@@ -11888,7 +12092,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     api.setEngine(0.2, 0, 0);
     api.setControls(0, 0, 0);
     api.setAirbrake(0);
-    attachPaint(api, C.bodyMat, (n) => paintMat(C, n));
+    attachPaint(api, C.bodyMat, (n) => paintMat(C, n), def.paints);
     return attachStores(api, type, C.hit, defStores);
   };
   // Real overall lengths (with pitot): Su-27 / Su-35S 21.9 m, Su-47 22.6 m, Su-57 20.1 m, JA 37 16.4 m, JAS 39C 14.1 m, J 29F 10.2 m.
@@ -13474,7 +13678,6 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
   function disc(r, seg) { return new T.CircleGeometry(r, seg || 16); }   // faces +Z
   function starX(s) { var g = new T.PlaneGeometry(s, s); g.rotateY(Math.PI / 2); return g; }   // faces +X
   function starY(s) { var g = new T.PlaneGeometry(s, s); g.rotateX(-Math.PI / 2); return g; }  // faces +Y
-  function starZ(s) { var g = new T.PlaneGeometry(s, s); g.rotateY(Math.PI); return g; }      // faces -Z
 
   // loft through cross-sections: st = [[z, [[x, y], ...]], ...] (same point count). o.open: no edge from the last point
   // back to the first (deck added separately). o.smooth: shared normals. Faces are oriented outward per triangle.
@@ -14962,7 +15165,6 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
   var REG = [];
   function reg(ent) { if (REG.indexOf(ent) < 0) REG.push(ent); }
   function regPrune() { for (var i = REG.length - 1; i >= 0; i--) if (!entAlive(REG[i])) REG.splice(i, 1); }
-  function countKind(kind, pred) { var n = 0; for (var i = 0; i < REG.length; i++) if (REG[i].kind === kind && entAlive(REG[i]) && (!pred || pred(REG[i]))) n++; return n; }
 
   // ======================================================================= entity basics
   var _q = new T.Quaternion(), _m4 = new T.Matrix4();
@@ -14993,7 +15195,6 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
     q.setFromRotationMatrix(_m4);
     return q;
   }
-  function placeAt(ent, x, y, z) { ent.pos.set(x, y, z); }
   function spawnPos(ent, opts, ctx, alt, agl) {
     var w = ctx.world, p;
     if (opts.pos) p = V(opts.pos.x, opts.pos.y, opts.pos.z);
@@ -17278,8 +17479,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
     return d;
   }
   var WEAPON_LIST = [
-    W({ id: 'gsh23', weight: 0.33, name: 'GSh-23 23 mm', type: 'gun', range: 1000, speed: 715, damage: 6, rate: 50, ammo: 900, price: 0, unlockLevel: 1, desc: 'MiG-21 twin-barrel gun. Fast fire, light hits.' }),
-    W({ id: 'aden', weight: 0.37, name: 'ADEN 30 mm', type: 'gun', range: 1100, speed: 790, damage: 9, rate: 20, ammo: 900, price: 2500, unlockLevel: 2, desc: 'Saab cannon. Good hits. Medium rate of fire.' }),
+    W({ id: 'gsh23', weight: 0.33, name: 'GSh-23 23 mm', type: 'gun', range: 1000, speed: 715, damage: 6, rate: 40, ammo: 900, price: 0, unlockLevel: 1, desc: 'MiG-21 twin-barrel gun. Fast fire, light hits.' }),
+    W({ id: 'aden', weight: 0.37, name: 'ADEN 30 mm', type: 'gun', range: 1100, speed: 790, damage: 13, rate: 20, ammo: 900, price: 2500, unlockLevel: 2, desc: 'Saab cannon. Good hits. Medium rate of fire.' }),
     W({ id: 'gsh30', weight: 0.39, name: 'GSh-30-1 30 mm', type: 'gun', range: 1300, speed: 870, damage: 14, rate: 25, ammo: 700, blast: 2, price: 6000, unlockLevel: 6, desc: 'Flanker cannon. Slow fire. Heavy hits.' }),
     W({ id: 'm61', weight: 0.26, name: 'M61 Vulcan 20 mm', type: 'gun', range: 1000, speed: 1030, damage: 4, rate: 100, ammo: 2400, price: 8000, unlockLevel: 8, desc: 'Six barrels. Very fast fire.' }),
     // gun pods (combat.js): pylon store, fires together with the internal gun on the GUN trigger, own ammo, no barrel heat
@@ -17288,8 +17489,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
     W({ id: 'gpu5', type: 'gunpod', weight: 2.4, podMass: 860, name: 'GPU-5/A 30 mm pod', targets: ['air', 'ground', 'sea'], range: 1200, speed: 1000, damage: 12, rate: 30, ammo: 350, blast: 2, groundMul: 1.2, price: 9000, unlockLevel: 9, desc: 'Four-barrel 30 mm. Heavy hits. Heavy pod.' }),
     W({ id: 'r60', weight: 44, name: 'R-60 Aphid', type: 'missile', guidance: 'ir', targets: ['air'], aspect: 'rear', range: 5000, minRange: 300, speed: 750, g: 30, lockTimeMul: 1.1, damage: 100, blast: 10, ammo: 1, price: 0, unlockLevel: 1, desc: 'Old heat-seeker. Locks from behind the target only.' }),
     W({ id: 'r73', weight: 105, name: 'R-73 Archer', type: 'missile', guidance: 'ir', targets: ['air'], aspect: 'all', range: 8000, minRange: 300, speed: 850, g: 45, lockTimeMul: 1, damage: 100, blast: 15, ammo: 1, multi: true, price: 5000, unlockLevel: 3, desc: 'Dogfight heat-seeker. Locks from all angles. Very agile.' }),
-    W({ id: 'r77', weight: 175, name: 'R-77 Adder', type: 'missile', guidance: 'radar', targets: ['air'], range: 20000, minRange: 800, speed: 1100, g: 35, lockTimeMul: 1.3, damage: 100, blast: 18, ammo: 1, multi: true, price: 14000, unlockLevel: 10, desc: 'Active radar missile. Range 20 km. Fire and turn away.' }),
-    W({ id: 'r27er', weight: 350, name: 'R-27ER Alamo', type: 'missile', guidance: 'sarh', targets: ['air'], range: 30000, minRange: 1000, speed: 1200, g: 25, lockTimeMul: 1.5, damage: 110, blast: 20, ammo: 1, multi: true, price: 18000, unlockLevel: 14, desc: 'Long range. Keep the lock until it hits. Too heavy for twin rails.' }),
+    W({ id: 'r77', weight: 175, name: 'R-77 Adder', type: 'missile', guidance: 'radar', targets: ['air'], range: 20000, minRange: 800, speed: 1100, g: 40, lockTimeMul: 1.1, damage: 100, blast: 18, ammo: 1, multi: true, price: 14000, unlockLevel: 10, desc: 'Active radar missile. Range 20 km. Quick lock, agile. Fire and turn away.' }),
+    W({ id: 'r27er', weight: 350, name: 'R-27ER Alamo', type: 'missile', guidance: 'sarh', targets: ['air'], range: 35000, minRange: 1000, speed: 1200, g: 25, lockTimeMul: 1.5, damage: 130, blast: 22, ammo: 1, multi: true, price: 18000, unlockLevel: 14, desc: 'Longest reach before Meteor. Big warhead. Keep the lock until it hits. Too heavy for twin rails.' }),
     W({ id: 'kh31p', weight: 600, name: 'Kh-31P Krypton', type: 'missile', guidance: 'arm', targets: ['ground', 'sea'], range: 25000, minRange: 1500, speed: 1000, g: 15, lockTimeMul: 0.8, damage: 160, blast: 22, ammo: 1, price: 12000, unlockLevel: 8, desc: 'Anti-radar missile. Locks only on SAM sites and radars.' }),
     W({ id: 'kh35', weight: 520, name: 'Kh-35 Uran', type: 'missile', guidance: 'antiship', targets: ['sea'], range: 22000, minRange: 1500, speed: 270, g: 10, lockTimeMul: 1, damage: 400, blast: 25, ammo: 1, needsBombsOK: true, price: 13000, unlockLevel: 9, desc: 'Anti-ship missile. Flies low over the sea. One hit sinks a frigate.' }),
     W({ id: 'kh29', weight: 660, name: 'Kh-29 Kedge', type: 'missile', guidance: 'laser', targets: ['ground', 'sea'], range: 10000, minRange: 800, speed: 600, g: 12, lockTimeMul: 1.2, damage: 350, blast: 30, ammo: 1, needsBombsOK: true, price: 9000, unlockLevel: 5, desc: 'Heavy ground missile. Destroys bunkers and bases.' }),
@@ -17303,7 +17504,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
     W({ id: 'aim9x', weight: 85, name: 'AIM-9X Sidewinder', type: 'missile', guidance: 'ir', targets: ['air'], range: 10000, minRange: 300, speed: 900, g: 60, gimbal: 90, lockTimeMul: 0.8, damage: 100, blast: 12, price: 9000, unlockLevel: 6, desc: 'Modern heat seeker. It locks 90° off the nose. Very agile.' }),
     W({ id: 'iris_t', weight: 87, name: 'IRIS-T', type: 'missile', guidance: 'ir', targets: ['air'], range: 12000, minRange: 300, speed: 950, g: 60, gimbal: 90, lockTimeMul: 0.85, damage: 105, blast: 12, price: 11000, unlockLevel: 9, desc: 'Agile heat seeker. Long reach for a dogfight missile.' }),
     W({ id: 'r27et', weight: 345, name: 'R-27ET Alamo-D', type: 'missile', guidance: 'ir', targets: ['air'], range: 25000, minRange: 800, speed: 1150, g: 25, seekMul: 1.6, lockTimeMul: 1.3, damage: 110, blast: 20, price: 15000, unlockLevel: 12, desc: 'Long-range heat seeker. The target gets no radar warning.' }),
-    W({ id: 'aim120', weight: 152, name: 'AIM-120 AMRAAM', type: 'missile', guidance: 'radar', targets: ['air'], range: 30000, minRange: 800, speed: 1200, g: 35, seekMul: 2, lockTimeMul: 1.2, damage: 100, blast: 18, multi: true, price: 20000, unlockLevel: 16, desc: 'Active radar. Fire and forget. Salvo at many targets.' }),
+    W({ id: 'aim120', weight: 152, name: 'AIM-120 AMRAAM', type: 'missile', guidance: 'radar', targets: ['air'], range: 30000, minRange: 800, speed: 1200, g: 35, seekMul: 2, lockTimeMul: 1.35, damage: 100, blast: 18, multi: true, price: 24000, unlockLevel: 16, desc: 'Active radar. Fire and forget. Salvo at many targets.' }),
     W({ id: 'meteor', weight: 190, name: 'MBDA Meteor', type: 'missile', guidance: 'radar', targets: ['air'], range: 45000, minRange: 1000, speed: 1300, g: 35, sustain: 10, seekMul: 2.6, lockTimeMul: 1.3, damage: 110, blast: 20, multi: true, price: 32000, unlockLevel: 24, desc: 'Ramjet. It keeps its speed to the end. Hard to escape.' }),
     W({ id: 'aim54', weight: 450, name: 'AIM-54 Phoenix', type: 'missile', guidance: 'radar', targets: ['air'], range: 60000, minRange: 2000, speed: 1400, g: 18, sustain: 8, seekMul: 3.5, lockTimeMul: 1.6, damage: 140, blast: 30, station: 'wing belly', price: 38000, unlockLevel: 28, desc: 'Very long range. Slow to turn. Heavy. Use it on bombers.' }),
     W({ id: 'agm65', weight: 210, name: 'AGM-65 Maverick', type: 'missile', guidance: 'tv', targets: ['ground', 'sea'], range: 12000, minRange: 500, speed: 600, g: 15, lockTimeMul: 1, damage: 260, blast: 12, needsBombsOK: true, price: 8000, unlockLevel: 6, desc: 'TV seeker. Lock a tank or a ship, then fire and forget.' }),
@@ -17354,12 +17555,19 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
     { id: 'repair', grp: 'survival', name: 'Damage control', tag: 'DCS', base: 2200, desc: 'Repairs the jet in flight.', feel: 'Health comes back slowly between fights.', v: { repairPerSec: [0, 0.4, 0.8, 1.2, 1.6, 2] } },
     { id: 'cm', grp: 'survival', name: 'Flares', tag: 'CMS', base: 900, desc: 'More flares. Each flare pulls missiles away better.', feel: 'More missiles miss you.', v: { flares: [20, 28, 36, 44, 52, 60], flareEff: [1, 1.1, 1.2, 1.3, 1.4, 1.5] } },
     { id: 'stealth', grp: 'survival', name: 'Stealth', tag: 'STL', base: 2600, desc: 'Enemy radars find you at a shorter range.', feel: 'You get closer before enemies see you and fire.', v: { detectMul: [1, 0.92, 0.84, 0.76, 0.68, 0.6] } },
-    { id: 'svs', grp: 'systems', name: 'Terrain vision', tag: 'SVS', base: 1300, desc: 'See terrain lines through clouds. Red = terrain above you.', feel: 'You see mountains in cloud and at night.', v: { svsRange: [0, 2500, 4000, 5500, 7500, 10000], svsWarn: [0, 0, 1, 1, 1, 1] } },
+    // acct: 1 = pilot system for ALL jets (P.upg). Every other upgrade is a jet part: P.jetUpg[acId][id] (stealth = airframe -> per jet)
+    { id: 'svs', grp: 'systems', acct: 1, name: 'Terrain vision', tag: 'SVS', base: 1300, desc: 'See terrain lines through clouds. Red = terrain above you.', feel: 'You see mountains in cloud and at night.', v: { svsRange: [0, 2500, 4000, 5500, 7500, 10000], svsWarn: [0, 0, 1, 1, 1, 1] } },
     // wingman.js reads P.upg.wingman. minLevel: player level needed for the first level (mid game)
-    { id: 'wingman', grp: 'systems', name: 'Wingman', tag: 'WGM', base: 25000, minLevel: 8, desc: 'A friendly jet flies on your right wing. When you attack, he fights alone, then he comes back. Better jet and pilot each level. Keys: Y = attack my target, U = cover me.', feel: 'One more gun in each fight.', v: { wingTier: [0, 3, 4, 5, 6, 7], wingSkill: [0, 0.55, 0.65, 0.75, 0.88, 1] } }
+    { id: 'wingman', grp: 'systems', acct: 1, name: 'Wingman', tag: 'WGM', base: 25000, minLevel: 8, desc: 'A friendly jet flies on your right wing. When you attack, he fights alone, then he comes back. Better jet and pilot each level. Keys: Y = attack my target, U = cover me.', feel: 'One more gun in each fight.', v: { wingTier: [0, 3, 4, 5, 6, 7], wingSkill: [0, 0.55, 0.65, 0.75, 0.88, 1] } }
   ];
   var UPG = {}; UPGRADES.forEach(function (u) { UPG[u.id] = u; });
-  function upgPrice(u, lvl) { return lvl >= 5 ? 0 : Math.round(u.base * LV[lvl] / 50) * 50; }
+  // jet parts cost more on better jets: price x (0.6 + 0.25 x jet tier). Tier 1 MiG-21 x0.85 · tier 6 Su-27 x2.1 · tier 9 Su-47 x2.85.
+  // No acId (or acct upgrade) = x1 = the old account-wide price (save migration refunds with it).
+  var JET_PF = [0.6, 0.25];
+  function acTier(acId) { var sp = acSpec(acId); return sp && sp.tier != null ? +sp.tier : clamp(acIdx(acId) + 1, 1, 9); }
+  function upgMul(u, acId) { return u.acct || !acId ? 1 : JET_PF[0] + JET_PF[1] * acTier(acId); }
+  function upgPrice(u, lvl, acId) { return lvl >= 5 ? 0 : Math.round(u.base * LV[lvl] * upgMul(u, acId) / 50) * 50; }
+  FL.UPG_PRICE = { LV: LV, LV_REQ: LV_REQ, JET_PF: JET_PF, price: function (id, lvl, acId) { return UPG[id] ? upgPrice(UPG[id], lvl, acId) : 0; } };
 
   var STAT_FMT = {
     thrustMul: ['Thrust', 'pct'], boostMul: ['Boost thrust', 'pct'], boostDuration: ['Burn time', 's'], boostRecharge: ['Refill time', 's'],
@@ -17412,31 +17620,31 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
   var TIER_COST = [1, 2, 3], TIER_NEED = [0, 3, 6];
   var BRANCHES = [
     { id: 'flight', name: 'Flight', s: [
-      ['f_hands', 'Quick hands', 'Roll and pitch rate +4%.', 3, 0, 'rateMul*0.04'],
-      ['f_clean', 'Clean skin', 'Top speed +3%.', 3, 0, 'topSpeedMul*0.03'],
+      ['f_hands', 'Quick hands', 'Roll and pitch rate +7%.', 3, 0, 'rateMul*0.07'],
+      ['f_clean', 'Clean skin', 'Top speed +4%. Thrust +3%.', 3, 0, 'topSpeedMul*0.04 thrustMul*0.03'],
       ['f_drift', 'Drift control', 'In a drift you keep 35% of the speed that you lose.', 2, 1, 'driftKeep+0.35'],
       ['f_cobra', 'Cobra master', 'Choose this for stunts. After a Cobra you get back 40% of the lost speed and +50% afterburner.', 1, 2, 'cobraFuel+0.5 cobraKeep+0.4'],
       ['f_light', 'Light frame', 'Choose this for turn fights. Weight -8%, roll and pitch +5%. But you take 10% more damage.', 1, 2, 'massMul*-0.08 rateMul*0.05 armorMul*0.1']] },
     { id: 'gun', name: 'Gun', s: [
-      ['g_hot', 'Hot rounds', 'Gun damage +8%.', 3, 0, 'gunDamageMul*0.08'],
+      ['g_hot', 'Hot rounds', 'Gun damage +12%.', 3, 0, 'gunDamageMul*0.12'],
       ['g_cool', 'Barrel cooling', 'Fire 1 s longer before the gun overheats.', 3, 0, 'gunBurstAdd+1'],
       ['g_aim', 'Gun computer', 'Gun aim assist +15%.', 2, 1, 'aimAssist+0.15'],
       ['g_feed', 'Fast feed', 'Choose this for short, deadly bursts. Fire rate +25%. But the gun overheats 1 s sooner.', 1, 2, 'gunRateMul*0.25 gunBurstAdd+-1'],
-      ['g_knife', 'Knife fight', 'Choose this for money and health. Each gun kill: +250 credits and +10 HP.', 1, 2, 'gunKillCash+250 gunKillHeal+10']] },
+      ['g_knife', 'Gunslinger', 'Choose this for close fights. Gun damage +40% while you drift or do a Cobra. Each gun kill: +10 HP.', 1, 2, 'gunSlinger+0.4 gunKillHeal+10']] },
     { id: 'msl', name: 'Missiles', s: [
-      ['m_tone', 'Fast lock', 'Lock time -8%.', 3, 0, 'lockTime*-0.08'],
-      ['m_head', 'Big warhead', 'Missile damage +10%. Fuse radius +10%.', 3, 0, 'missileDamageMul*0.1 missileFuseMul*0.1'],
+      ['m_tone', 'Fast lock', 'Lock time -12%.', 3, 0, 'lockTime*-0.12'],
+      ['m_head', 'Big warhead', 'Missile damage +15%. Fuse radius +10%.', 3, 0, 'missileDamageMul*0.15 missileFuseMul*0.1'],
       ['m_motor', 'Hot motor', 'Missile speed +6%. Missile range +10%.', 2, 1, 'missileSpeedMul*0.06 missileRangeMul*0.1'],
       ['m_second', 'Second lock', 'Choose this for quality. +1 lock: each salvo fires 1 more missile (missiles with SALVO).', 1, 2, 'multiLock+1'],
       ['m_reserve', 'Reserve rack', 'Choose this for quantity. +4 air-to-air missiles in reserve. They reload in flight.', 1, 2, 'reserveAAM+4']] },
     { id: 'strike', name: 'Strike', s: [
-      ['o_iron', 'Heavy iron', 'Bomb damage +10%. Bomb blast +8%.', 3, 0, 'bombDamageMul*0.1 bombBlastMul*0.08'],
-      ['o_pods', 'Rocket pods', 'Rocket damage +10%. +2 rockets in each pod.', 3, 0, 'rocketDamageMul*0.1 podAmmoAdd+2'],
+      ['o_iron', 'Heavy iron', 'Bomb damage +15%. Bomb blast +10%.', 3, 0, 'bombDamageMul*0.15 bombBlastMul*0.1'],
+      ['o_pods', 'Rocket pods', 'Rocket damage +15%. +2 rockets in each pod.', 3, 0, 'rocketDamageMul*0.15 podAmmoAdd+2'],
       ['o_salvo', 'Rocket salvo', '+2 rockets in each salvo.', 2, 1, 'rocketSalvoAdd+2'],
       ['o_rack', 'Extra rack', 'Choose this for carpet bombing. +1 bomb on each bomb pylon. More weight.', 1, 2, 'bombRackAdd+1'],
       ['o_eye', 'Long eye', 'Choose this for precision. Ground missiles and guided bombs: range +25%, lock time -25%.', 1, 2, 'agmRangeMul*0.25 agmLockMul*-0.25']] },
     { id: 'def', name: 'Defense', s: [
-      ['d_plate', 'Armor plates', 'Damage taken -5%.', 3, 0, 'armorMul*-0.05'],
+      ['d_plate', 'Armor plates', 'Damage taken -7%.', 3, 0, 'armorMul*-0.07'],
       ['d_flare', 'Flare racks', '+6 flares. Decoy chance +5%.', 3, 0, 'flares+6 flareEff*0.05'],
       ['d_fix', 'Field repair', 'Repair +0.5 HP each second in flight.', 2, 1, 'repairPerSec+0.5'],
       ['d_auto', 'Auto flares', 'Choose this to dodge. A missile comes closer than 2.5 km: flares fire by themselves (1 pair each 1.5 s). They use your flares.', 1, 2, 'autoFlare+1'],
@@ -17446,7 +17654,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
       ['a_learn', 'Fast learner', 'XP +8%.', 3, 0, 'xpMul*0.08'],
       ['a_chain', 'Kill chain', 'Chain time +3 s (combo too). +80 credits for each chain kill after the first.', 2, 1, 'comboWindow+3 chainCash+80'],
       ['a_burn', 'Adrenaline', 'Choose this to fight on. Each kill fills the afterburner +35%.', 1, 2, 'killFuel+0.35'],
-      ['a_show', 'Showman', 'Choose this for credits. +150 credits for a kill when you fly inverted or below 120 m.', 1, 2, 'stuntCash+150']] }
+      ['a_show', 'Ghost', 'Choose this to sneak in. Below 400 m over the ground, enemy radars see you at 55% of their range. Low or inverted kills: +150 credits.', 1, 2, 'ghost+0.45 stuntCash+150']] }
   ];
   var SKILLS = [], SK = {};
   BRANCHES.forEach(function (b) {
@@ -17467,7 +17675,9 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
 
   // =====================================================================================  LEVELS
   var MAX_LEVEL = 60;
-  function xpNeed(L) { return Math.round(300 + 120 * Math.pow(L, 1.3)); }   // xp to go from L to L+1 (~630k xp to level 60)
+  // xp to go from L to L+1 (~7.6M xp to level 60). Balance pass: x12 (was 300 + 120 L^1.3, level 60 in ~8 h): level 15 ~5 h,
+  // level 32 ~20 h, level 40 ~32 h on Normal, so the jet / weapon level gates matter (BALANCE.md)
+  function xpNeed(L) { return Math.round(3600 + 1440 * Math.pow(L, 1.3)); }
 
   // =====================================================================================  AIRCRAFT PRICES
   // [match, price, level gate, rails, gun, hardpoints]  (ladder: mig21 → j29 → j35 → ja37 → jas39 → su27 → su35 → su57)
@@ -17482,7 +17692,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
     var key = spec.id + ' ' + (spec.name || ''), row = null;
     for (var i = 0; i < AC_TABLE.length; i++) if (AC_TABLE[i][0].test(key)) { row = AC_TABLE[i]; break; }
     var price = spec.price != null ? spec.price : row ? row[1] : 20000 + idx * 25000;
-    var level = spec.unlockLevel || (spec.tier != null ? TIER_LV[clamp(Math.round(spec.tier) - (minTier() > 0 ? minTier() : 0), 0, TIER_LV.length - 1)] : row ? row[2] : TIER_LV[clamp(idx, 0, 8)]);
+    var level = spec.unlockLevel || (spec.tier != null ? TIER_LV[clamp(Math.round(spec.tier) - Math.max(1, Math.round(minTier())), 0, TIER_LV.length - 1)] : row ? row[2] : TIER_LV[clamp(idx, 0, 8)]);
     if (price <= 0) level = 1;
     return { price: price, level: level, rails: spec.missiles || spec.rails || (row ? row[3] : 6), gun: spec.gun || (row ? row[4] : 'gsh30'), hardpoints: spec.hardpoints || (row ? row[5] : 4) };
   }
@@ -17596,7 +17806,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
 
     function newProfile() {
       var s = starterAc();
-      return { v: 3, credits: 2500, xp: 0, level: 1, sp: 0, upg: {}, skills: {}, skv: SKILL_V, skFix: 1, ownedAc: [s], ac: s, map: null,
+      return { v: 3, credits: 2500, xp: 0, level: 1, sp: 0, upg: {}, jetUpg: {}, upgV: 2, skills: {}, skv: SKILL_V, skFix: 2, ownedAc: [s], ac: s, map: null,
         ownedW: { gsh23: 1, r60: 1, fab500: 1 }, eqs: {}, mastery: {}, paint: {}, mirror: true,
         missions: 0, failed: 0, best: 0, earned: 0, kills: 0, ranks: { S: 0, A: 0, B: 0, C: 0 }, aces: {} };
     }
@@ -17606,7 +17816,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
       try { localStorage.setItem(KEY, s); } catch (e) {}
       return true;
     }
-    var loadNote = null;   // shown once after a save migration (skill refund, loadout moved)
+    var loadNote = null, noteQ = [], noteAt = 1.5, upgRefund = 0;   // shown once after a save migration (skill refund, loadout moved, upgrade refund)
     function load() {
       var raw = null;
       try { raw = localStorage.getItem(KEY); } catch (e) {}
@@ -17622,6 +17832,12 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
       if (!base.ranks || typeof base.ranks !== 'object') base.ranks = { S: 0, A: 0, B: 0, C: 0 };
       P = base;
       if (!(P.credits >= 0)) P.credits = 0;
+      // bad / hand-edited / old cloud saves: keep the numbers sane (NaN level or a non-array list would break the hangar)
+      if (!(P.level >= 1)) P.level = 1; P.level = Math.min(MAX_LEVEL, Math.floor(P.level));
+      if (!(P.xp >= 0)) P.xp = 0; if (!(P.sp >= 0)) P.sp = 0; if (!(P.earned >= 0)) P.earned = 0;
+      if (!Array.isArray(P.ownedAc)) P.ownedAc = [starterAc()];
+      if (!P.upg || typeof P.upg !== 'object') P.upg = {};
+      if (!P.ownedW || typeof P.ownedW !== 'object') P.ownedW = { gsh23: 1, r60: 1, fab500: 1 };
       validateAc();
       // v2 save: one loadout for all jets (eq.slots by index L1,R1,L2,R2..,C) -> per-jet, per-pylon loadout
       if (d && d.eq && !P.eqs[P.ac]) { migrateEq(d.eq); migrated = true; }
@@ -17638,6 +17854,32 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
         ['f_light', 'g_feed'].forEach(function (q) { if (P.skills[q] && SK[q]) { fixBack += P.skills[q] * SK[q].cost; delete P.skills[q]; } });
         P.skFix = 1; migrated = true;
         if (fixBack > 0) { P.sp += fixBack; if (!loadNote) loadNote = ['SKILLS CHANGED', 'LIGHT FRAME / FAST FEED · ' + fixBack + ' POINTS BACK']; }
+      }
+      // skFix 2 (balance pass): Knife fight -> Gunslinger, Showman -> Ghost (new effects) -> points back, the pilot chooses again
+      if (!(d && d.skFix >= 2)) {
+        var fixBack2 = 0;
+        ['g_knife', 'a_show'].forEach(function (q) { if (P.skills[q] && SK[q]) { fixBack2 += P.skills[q] * SK[q].cost; delete P.skills[q]; } });
+        P.skFix = 2; migrated = true;
+        if (fixBack2 > 0) { P.sp += fixBack2; if (!loadNote) loadNote = ['NEW SKILLS', 'GUNSLINGER / GHOST · ' + fixBack2 + ' POINTS BACK']; }
+      }
+      // upgV 2: jet parts are per jet (P.jetUpg[acId][id]). Old account-wide levels -> all credits back at the old prices.
+      // SVS + wingman (acct) stay in P.upg. Skills are not touched. The flag makes it run once per save.
+      if (!P.jetUpg || typeof P.jetUpg !== 'object') P.jetUpg = {};
+      if (!(d && d.upgV >= 2)) {
+        var upBack = 0;
+        UPGRADES.forEach(function (u) {
+          if (u.acct || P.upg[u.id] == null) return;
+          var ul = clamp(Math.floor(+P.upg[u.id] || 0), 0, 5);
+          for (var i = 0; i < ul; i++) upBack += upgPrice(u, i);
+          delete P.upg[u.id];
+        });
+        P.upgV = 2; migrated = true;
+        if (upBack > 0) {
+          P.credits += upBack;
+          if (loadNote) noteQ.push(loadNote);
+          loadNote = ['PER-JET UPGRADES', 'Upgrades are now per jet. ' + String(upBack).replace(/\B(?=(\d{3})+(?!\d))/g, ',') + ' credits refunded.'];
+          upgRefund = upBack;
+        }
       }
       var fresh = !P.eqs[P.ac];
       var dropped = fitLoadout();
@@ -17668,9 +17910,17 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
     }
 
     // ---------------------------------------------------------------- stats
-    function upgLevel(id) { return P.upg[id] || 0; }
+    // per-jet levels: P.jetUpg[acId][id] (acId default = the jet you fly). acct upgrades (SVS, wingman): P.upg[id] for all jets.
+    function lv5(v) { return clamp(Math.floor(+v || 0), 0, 5); }
+    function upgLevel(id, acId) {
+      var u = UPG[id]; if (u && u.acct) return lv5(P.upg[id]);
+      var o = P.jetUpg && P.jetUpg[acId || P.ac]; return o ? lv5(o[id]) : 0;
+    }
+    function jetUpgOf(acId) { var o = P.jetUpg[acId]; if (!o || typeof o !== 'object') o = P.jetUpg[acId] = {}; return o; }
+    // jet parts on one jet: n = levels bought, max = 5 x parts (14 parts -> 70)
+    function jetUpgCount(acId) { var n = 0, m = 0; UPGRADES.forEach(function (u) { if (!u.acct) { n += upgLevel(u.id, acId); m += 5; } }); return { n: n, max: m }; }
     function skillRank(id) { return P.skills[id] || 0; }
-    function upgTotal() { var t = 0; for (var k in P.upg) t += P.upg[k]; return t; }
+    function upgTotal() { var t = 0; UPGRADES.forEach(function (u) { t += upgLevel(u.id); }); return t; }   // jet you fly + acct (mission difficulty)
 
     function stats() {
       var s = {
@@ -17726,7 +17976,6 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
     }
 
     // ---------------------------------------------------------------- loadout (per jet, per pylon)
-    function isAAM(w) { return isAAMw(w); }
     function handling(kg, jet) { return clamp(1 - kg / (jet * 0.35), 0, 1); }
     function layoutOf(acId) {
       var spec = acSpec(acId) || { id: acId }, i = acIdx(acId);
@@ -18026,7 +18275,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
       strike: { title: 'STRIKE', base: 3000 }, sead: { title: 'SEAD', base: 3200 }, cap: { title: 'CAP', base: 2800 },
       convoy: { title: 'CONVOY HUNT', base: 2600 }, bridge: { title: 'BRIDGE STRIKE', base: 3000 }, naval: { title: 'NAVAL STRIKE', base: 3800 },
       cave: { title: 'CAVE RUN', base: 4200 }, bomber: { title: 'INTERCEPT', base: 4500 }, train: { title: 'TRAIN HUNT', base: 3600 },
-      compound: { title: 'ASSAULT', base: 5000 }, boss: { title: 'BOSS', base: 12000 },
+      compound: { title: 'ASSAULT', base: 5000 }, boss: { title: 'BOSS', base: 6000 },   // + boss bounty (missionx.js): the bounty is the big number
       intercept: { title: 'INTERCEPT', base: 2200 }, samsite: { title: 'SAM SITE', base: 2000 },
       carrier: { title: 'CARRIER STRIKE', base: 9000 }
     };
@@ -18433,8 +18682,9 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
       if (m.tMain != null) m.tZone = m.tMain;                      // time bonus / rank use the time to the main target
       var s = stats(), base = TYPE[m.type].base * (1 + 0.06 * Math.min(m.no - 1, 30));
       var clearB = m.cleared && m.left0 ? base * 0.25 : 0;          // bonus for clearing every target in the area
-      if (m.type === 'boss') base *= s.bossBonusMul;
-      var par = 150 + (m.type === 'boss' ? 120 : 0);
+      var isBoss = m.type === 'boss' || m.type === 'xboss' || !!m.boss;   // missionx arc bosses are 'xboss'
+      if (isBoss) base *= s.bossBonusMul;
+      var par = 150 + (isBoss ? 120 : 0);
       var timeB = base * 0.4 * clamp(1 - m.tZone / par, 0, 1) * s.timeBonusMul;
       var noDmg = m.dmg <= 0 ? base * 0.25 * s.noDamageBonusMul : 0;
       var combo = m.maxChain >= 2 ? 250 * (m.maxChain - 1) : 0;
@@ -18479,7 +18729,11 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
     // ---------------------------------------------------------------- runtime perks (skills + jet mastery)
     var perk = { lastSpd: 0, cobra: false, cobraV0: 0, extUsed: false, flareT: 0, scanT: 0 };
     function perks(dt, st, s) {
-      if (st.crashed) { perk.extUsed = false; perk.cobra = false; perk.lastSpd = 0; return; }   // new life: perks reset
+      if (st.crashed) {   // new life: perks reset
+        perk.extUsed = false; perk.cobra = false; perk.lastSpd = 0;
+        if ((perk.pg !== 1 || perk.pd !== 1) && combat.setPerk) { perk.pg = perk.pd = 1; try { combat.setPerk({ gun: 1, detect: 1 }); } catch (e) {} }
+        return;
+      }
       var v = st.vel ? st.vel.length() : 0;
       // drift: give back part of the speed lost this frame
       if (s.driftKeep > 0 && st.drift && !st.onGround && perk.lastSpd > 0 && v > 1 && v < perk.lastSpd) {
@@ -18495,6 +18749,10 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
         }
       }
       perk.lastSpd = v;
+      // Gunslinger (gun x1.4 in a drift / Cobra) and Ghost (radar range x0.55 below 400 m AGL): situational multipliers in combat
+      var pg = s.gunSlinger > 0 && (st.drift || st.cobra) ? 1 + s.gunSlinger : 1;
+      var pd = s.ghost > 0 && st.agl != null && st.agl < 400 && !st.onGround ? Math.max(0.3, 1 - s.ghost) : 1;
+      if ((pg !== perk.pg || pd !== perk.pd) && combat.setPerk) { perk.pg = pg; perk.pd = pd; try { combat.setPerk({ gun: pg, detect: pd }); } catch (e) {} }
       // fire extinguisher: one time in each life
       if (s.extinguisher > 0 && !perk.extUsed && st.health > 0 && st.health < 30) { perk.extUsed = true; st.health = 60; showToast('FIRE OUT', 'HEALTH 60 HP'); }
       // auto flares: a missile closer than 2.5 km -> 1 pair, then wait 1.5 s
@@ -18546,7 +18804,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
       var s = curStats();
       if (!st.crashed && st.health < 100 && st.health > 0 && s.repairPerSec > 0) st.health = Math.min(100, st.health + s.repairPerSec * dt);
       perks(dt, st, s);
-      if (loadNote && simT > 1.5) { showToast(loadNote[0], loadNote[1]); loadNote = null; }
+      if (loadNote && simT > noteAt) { showToast(loadNote[0], loadNote[1]); loadNote = noteQ.shift() || null; noteAt = simT + 4; }
       // co-op client: the host runs the missions. The client only shows the host mission (applyNetState + host waypoint).
       if (isClient()) {
         if (active) stop();
@@ -18695,6 +18953,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
 
     // =================================================================================  HANGAR UI
     var hangarOpen = false, hangarLatch = false, tab = 'upgrades', skillBranch = 'flight', selSlot = 'L1', focusKey = null, el = null, rafId = 0, loMsg = '';
+    var upgAc = null;   // Upgrades tab: the owned jet whose parts you see (null = the jet you fly)
+    function viewAc() { return upgAc && P.ownedAc.indexOf(upgAc) >= 0 && acSpec(upgAc) ? upgAc : P.ac; }
     var TABS = [['upgrades', 'Upgrades'], ['loadout', 'Loadout'], ['aircraft', 'Aircraft'], ['skills', 'Skills'], ['maps', 'Maps']];
 
     var flownSinceHangar = false;
@@ -18830,6 +19090,11 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
       'font-family:"Oxanium",system-ui,sans-serif;color:#93ffc4;background:rgba(6,16,14,.72);border:1px solid rgba(147,255,196,.45);padding:12px 26px;transition:opacity .4s,transform .4s}',
       '.flc-toast b{display:block;font:800 30px/1 "Oxanium",system-ui,sans-serif;letter-spacing:.12em}.flc-toast span{font:12px/1 "Share Tech Mono",monospace;letter-spacing:.18em;color:#ffbe55}',
       '.flc-toast.off{opacity:0;transform:translate(-50%,-10px)}',
+      // Upgrades tab: jet header + jet switcher; Aircraft tab: upgrade bar on owned jets
+      '.flc-uph{display:grid;grid-template-columns:minmax(0,200px) minmax(0,1fr);gap:8px 16px;align-items:center;border:1px solid var(--line);background:rgba(4,12,12,.55);padding:10px 14px;margin-bottom:12px}',
+      '.flc-uph .fli-th{border:0}.flc-uph h3{margin:4px 0 0;font:800 clamp(18px,2.6vw,24px)/1.1 var(--disp);text-transform:uppercase}.flc-uph p{margin:6px 0 0;color:var(--dim);font-size:13px;line-height:1.35}',
+      '.flc-upb{display:flex;flex-direction:column;gap:0}.flc-upb .flc-bar{margin-top:5px}.flc-upb .flc-bar i.full{background:var(--a)}',
+      '@media (max-width:760px){.flc-uph{grid-template-columns:110px minmax(0,1fr);padding:8px 10px}}',
       '@media (max-width:760px){.flc-head{padding:14px 14px 10px}.flc-body{padding:14px}.flc-foot{padding:10px 14px}.flc-sk{grid-template-columns:1fr}.flc-det{position:static;order:-1}',
       '.flc-lsum{grid-template-columns:1fr 1fr;gap:12px 16px}.flc-hand{grid-column:1 / -1;order:3}.flc-lsum b{font-size:22px}'+
       '.flc-wing{grid-template-columns:minmax(0,1fr) 34px minmax(0,1fr);row-gap:22px;padding:22px 0 8px}.flc-wing::before{display:none}'+
@@ -18873,7 +19138,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
 
     function openHangar() {
       ensureDom(); if (!el) return;
-      hangarOpen = true; el.hidden = false;
+      hangarOpen = true; el.hidden = false; upgAc = null;
       try { if (combat.setGun) combat.setGun(false); } catch (e) {}
       render(); focusFirst();
       padPrev = readPadButtons(); cancelAnimationFrame(rafId); rafId = requestAnimationFrame(padLoop);
@@ -18919,9 +19184,20 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
 
     function htmlUpgrades() {
       var s0 = curStats(), aamN = s0.firstAAM && FL.WEAPONS[s0.firstAAM] ? shortName(FL.WEAPONS[s0.firstAAM]) : '';
-      return '<div class="flc-grid">' + UPGRADES.map(function (u, ui) {
-        var l = upgLevel(u.id), p = upgPrice(u, l), max = l >= 5, req = Math.max(LV_REQ[Math.min(l, 4)], u.minLevel || 0), gated = P.level < req;
-        var gh = !ui || UPGRADES[ui - 1].grp !== u.grp ? UPG_GROUPS.filter(function (g) { return g[0] === u.grp; }).map(function (g) { return '<div class="fli-grp">' + g[1] + '</div>'; }).join('') : '';
+      // header: the jet whose parts you see + switcher over your owned jets
+      var va = viewAc(), vs = acSpec(va), uc = jetUpgCount(va), HI = FL.hangarIcons;
+      var head = '<div class="flc-uph"' + (HI ? '>' + HI.thumbHtml(va) : ' style="grid-template-columns:1fr">') + '<div><span class="flc-lab">' + (va === P.ac ? 'Flying now' : 'In the hangar') +
+        ' · tier ' + acTier(va) + ' · part prices ×' + upgMul(UPG.engine, va).toFixed(2) + '</span><h3>' + esc(vs ? vs.name : va) + ' · Upgrades ' + uc.n + '/' + uc.max + '</h3>' +
+        '<p>Parts stay on this jet. Systems are for all your jets. Skills and mastery add on top.</p></div></div>';
+      var own = acList().filter(function (a) { return P.ownedAc.indexOf(a.id) >= 0; });
+      if (own.length > 1) head += '<div class="flc-br" role="group" aria-label="Jet to upgrade">' + own.map(function (a) {
+        var c = jetUpgCount(a.id);
+        return '<button class="' + (a.id === va ? 'on' : '') + '" data-act="upgac" data-id="' + esc(a.id) + '" data-key="upgac-' + esc(a.id) + '" aria-pressed="' + (a.id === va) + '">' +
+          esc(a.name || a.id) + (a.id === P.ac ? ' · flying' : '') + '<span class="n">' + c.n + '/' + c.max + '</span></button>';
+      }).join('') + '</div>';
+      return head + '<div class="flc-grid">' + UPGRADES.map(function (u, ui) {
+        var l = upgLevel(u.id, va), p = upgPrice(u, l, va), max = l >= 5, req = Math.max(LV_REQ[Math.min(l, 4)], u.minLevel || 0), gated = P.level < req;
+        var gh = !ui || UPGRADES[ui - 1].grp !== u.grp ? UPG_GROUPS.filter(function (g) { return g[0] === u.grp; }).map(function (g) { return '<div class="fli-grp">' + g[1] + (u.acct ? ' · all your jets' : ' · ' + esc(vs ? vs.name : va)) + '</div>'; }).join('') : '';
         var real = function (k, a, nb) {   // second line with real numbers (km, m/s, g) where they help
           if (!REAL_NOTE[k] || ((k === 'missileSpeed' || k === 'missileG') && !aamN)) return '';
           return '<div><span>' + (k === 'missileSpeed' || k === 'missileG' ? esc(aamN) : REAL_NOTE[k]) + '</span> ' + realStat(k, a, s0) + (nb != null && nb !== a ? ' → <em>' + realStat(k, nb, s0) + '</em>' : '') + '</div>';
@@ -18929,8 +19205,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
         var pips = ''; for (var i = 0; i < 5; i++) pips += '<i class="' + (i < l ? 'on' : '') + '"></i>';
         var fx = Object.keys(u.v).map(function (k) {
           var a = u.v[k][l], nb = max ? null : u.v[k][l + 1];
-          if (k === 'pylonsAdd') {   // show real pylon counts on the jet you fly
-            var lay = layoutOf(P.ac), cnt = function (add) { var n = 0, g = Math.min(lay.groups.length, lay.base + add); for (var j = 0; j < g; j++) n += lay.groups[j].st.length; return n; };
+          if (k === 'pylonsAdd') {   // show real pylon counts on the jet you see
+            var lay = layoutOf(va), cnt = function (add) { var n = 0, g = Math.min(lay.groups.length, lay.base + add); for (var j = 0; j < g; j++) n += lay.groups[j].st.length; return n; };
             var c0 = cnt(a), c1 = nb != null ? cnt(nb) : c0, cm = cnt(99);
             return '<div><span>Pylons</span> ' + c0 + (c1 !== c0 ? ' → <em>' + c1 + '</em>' : '') + ' <span>of ' + cm + (c0 >= cm ? ' · max on this jet' : '') + '</span></div>';
           }
@@ -19135,6 +19411,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
         var mh = '<div class="flc-mast"><div class="flc-ring' + (ml >= 10 ? ' max' : '') + '" style="--p:' + Math.round(mp * 100) + '" title="Mastery ' + ml + '"><b>' + ml + '</b></div>' +
           '<dl><dt>Mastery</dt><dd>' + ml + ' / 10</dd><dt>Next</dt><dd>' + (nx ? esc(short(nx.name, 18)) : 'done') + '</dd><dt>Specials</dt><dd>' + esc(short(ms[5].name, 18)) + '</dd><dd></dd><dd>' + esc(short(ms[10].name, 18)) + '</dd></dl></div>';
         var stTxt = own ? (cur ? 'Flying now' : 'Owned') : gated ? lockTxt : fmtN(inf.price) + ' cr';
+        if (own) { var uc = jetUpgCount(a.id), upct = uc.max ? Math.round(100 * uc.n / uc.max) : 0;   // per-jet upgrade progress
+          mh += '<div class="flc-upb" title="Upgrades on this jet"><span class="flc-lab">Upgrades ' + uc.n + ' / ' + uc.max + '</span><div class="flc-bar"><i class="' + (uc.n >= uc.max ? 'full' : '') + '" style="width:' + upct + '%"></i></div></div>'; }
         return '<div class="flc-card' + (cur ? ' on' : '') + (!own && gated ? ' lockd' : '') + '" data-fli-ac="' + esc(a.id) + '" data-fli-st="' + esc(stTxt) + '">' + (HI ? HI.thumbHtml(a.id) : '') +
           '<h3>' + esc(a.name || a.id) + '<small>' + esc(a.nation || '') + ' · ' + inf.hardpoints + '–' + pmax + ' pylons</small></h3>' +
           (a.desc || a.blurb ? '<p>' + esc(a.desc || a.blurb) + '</p>' : '') + mh + (sb ? '<div class="flc-stat">' + sb + '</div>' : '') +
@@ -19183,7 +19461,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
       bombBlastMul: ['Bomb blast', ''], rocketDamageMul: ['Rocket damage', ''], podAmmoAdd: ['Rockets per pod', ''], rocketSalvoAdd: ['Rockets per salvo', ''], bombRackAdd: ['Bombs per pylon', ''],
       agmRangeMul: ['Ground missile range', ''], agmLockMul: ['Ground lock time', ''], flares: ['Flares', ''], flareEff: ['Decoy chance', ''], repairPerSec: ['Repair', ' HP/s'],
       autoFlare: ['Auto flares', 'on'], extinguisher: ['Fire extinguisher', 'on'], creditMul: ['Credits', ''], xpMul: ['XP', ''], comboWindow: ['Chain time', ' s'], chainCash: ['Credits per chain kill', ' cr'],
-      killFuel: ['Afterburner per kill', '%'], stuntCash: ['Credits per stunt kill', ' cr'] };
+      killFuel: ['Afterburner per kill', '%'], stuntCash: ['Credits per stunt kill', ' cr'], gunSlinger: ['Gun damage in a drift', '%'], ghost: ['Radar range cut when low', '%'],
+      thrustMul: ['Thrust', ''] };
     function showSkill(id) {
       if (!el || tab !== 'skills') return;
       var det = el.querySelector('#flcDet'); if (!det) return;
@@ -19237,7 +19516,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
       var ok = null, buy = false;
       if (a === 'go') { closeHangar(); return; }
       if (a === 'tab') { tab = id; focusKey = 'tab-' + id; render(); return; }
-      if (a === 'upg') { ok = buyUpgrade(id); buy = true; }
+      if (a === 'upg') { ok = buyUpgrade(id, viewAc()); buy = true; }
+      else if (a === 'upgac') { upgAc = id; render(); return; }
       else if (a === 'buyw') { ok = buyWeapon(id); buy = true; }
       else if (a === 'eqw') { ok = equipWeapon(id, selSlot); }
       else if (a === 'slot') { selSlot = id; loMsg = ''; render(); return; }
@@ -19255,11 +19535,14 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
       else if (ok && a === 'skill') sfx('lock');
       render();
     }
-    function buyUpgrade(id) {
+    // acId: an owned jet (default: the jet you fly). acct upgrades ignore it.
+    function buyUpgrade(id, acId) {
       var u = UPG[id]; if (!u) return false;
-      var l = upgLevel(id); if (l >= 5 || P.level < Math.max(LV_REQ[l], u.minLevel || 0)) return false;
-      var p = upgPrice(u, l); if (P.credits < p) return false;
-      P.credits -= p; P.upg[id] = l + 1; fitLoadout(); applyAll(); return true;
+      acId = u.acct ? P.ac : (acId || P.ac); if (acId !== P.ac && (P.ownedAc.indexOf(acId) < 0 || !acSpec(acId))) return false;
+      var l = upgLevel(id, acId); if (l >= 5 || P.level < Math.max(LV_REQ[l], u.minLevel || 0)) return false;
+      var p = upgPrice(u, l, acId); if (P.credits < p) return false;
+      P.credits -= p; if (u.acct) P.upg[id] = l + 1; else jetUpgOf(acId)[id] = l + 1;
+      if (acId === P.ac) fitLoadout(); applyAll(); return true;
     }
     function buyWeapon(id) {
       var w = FL.WEAPONS[id]; if (!w || P.ownedW[id] || P.credits < (w.price || 0)) return false;
@@ -19349,7 +19632,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
         var pe = P.eqs[prev], ne = P.eqs[id] = { gun: null, pyl: {} };
         for (var k in pe.pyl) ne.pyl[k] = pe.pyl[k];
       }
-      P.ac = id; var dropped = fitLoadout(); ensureAAM(); save();
+      P.ac = id; upgAc = null; var dropped = fitLoadout(); ensureAAM(); save();
       if (dropped) showToast('LOADOUT', dropped + ' STORE' + (dropped > 1 ? 'S' : '') + ' DO NOT FIT · REMOVED');
       try { localStorage.setItem('flk_ac', id); } catch (e) {}
       try { if (opt.onChangeAircraft) opt.onChangeAircraft(id); } catch (e) { console.warn('onChangeAircraft', e); }
@@ -19475,7 +19758,14 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
       // personal reward (medals): credits + XP to this pilot only, no team broadcast; level-ups / save as usual
       grantReward: function (credits, xp, reason) { return credit(+credits || 0, +xp || 0, reason || 'reward'); },
       // shop actions (also used by tests / net layer)
-      buyUpgrade: function (id) { var r = buyUpgrade(id); if (hangarOpen) render(); return r; },
+      buyUpgrade: function (id, acId) { var r = buyUpgrade(id, acId); if (hangarOpen) render(); return r; },
+      // per-jet upgrades: level of one part (acId default = jet you fly), all parts of a jet, price of the next level
+      upgLevel: function (id, acId) { return upgLevel(id, acId); },
+      jetUpgrades: function (acId) { acId = acId || P.ac; var c = jetUpgCount(acId), lv = {}; UPGRADES.forEach(function (u) { if (!u.acct) lv[u.id] = upgLevel(u.id, acId); });
+        return { aircraftId: acId, levels: lv, n: c.n, max: c.max, tier: acTier(acId), priceMul: upgMul(UPG.engine, acId) }; },
+      upgPrice: function (id, acId) { var u = UPG[id]; return u ? upgPrice(u, upgLevel(id, acId), u.acct ? null : (acId || P.ac)) : 0; },
+      upgRefund: function () { return upgRefund; },   // credits given back by the per-jet migration in this session (0 = none)
+      setUpgradeJet: function (acId) { upgAc = acId || null; if (hangarOpen && tab === 'upgrades') render(); },
       buyWeapon: function (id) { var r = buyWeapon(id); if (hangarOpen) render(); return r; },
       equipWeapon: function (id, slot) { var r = equipWeapon(id, slot || 'auto'); if (hangarOpen) render(); return r; },
       setPylon: function (slot, id) { var r = setPylon(slot, id); if (hangarOpen) render(); return r; },
@@ -19871,6 +20161,9 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
     var LO = { lockTime: 1.0, missileSpeed: 800, missileG: 40, missiles: 10, gunDamageMul: 1, gunHeatMul: 1, flares: 40,
                armorMul: 1, bombs: 0, seekerCone: 25, lockRange: 1, multiLock: 1, repairPerSec: 0, detectMul: 1, flareEff: 1, damageMul: 1, weapons: null,
                aimAssist: 0.35, bombAimAssist: 0, gunRateMul: 1, gunSpreadMul: 1, gunRangeMul: 1, gunGroundMul: 1 };
+    // situational skill multipliers (campaign.js perks() sets them each frame): gun = Gunslinger (drift / Cobra), detect = Ghost (low level)
+    var PERK = { gun: 1, detect: 1 };
+    function setPerk(o) { if (!o) return; if (o.gun > 0) PERK.gun = +o.gun; if (o.detect > 0) PERK.detect = +o.detect; LP.detectMul = LO.detectMul * PERK.detect; }
     var wl = [], wsel = 0, nFlares = LO.flares, sideLR = 1;
     var gunLegacy = false, trigDown = false, trigLast = -10, gunOn = false;
     var gunHeat = 0, gunOver = false, gunAcc = 0, gunRound = 0, flareCd = 0;
@@ -21003,12 +21296,6 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
         }
       }
     }
-    function spawnHelis(n, group) {
-      for (var i = 0; i < n; i++) {
-        lowSpot(6000, 14000, tE);
-        makeHeli(tE.x + rand(-300, 300), tE.z + rand(-300, 300), group);
-      }
-    }
 
     // ======================================================================
     // Ground convoys
@@ -21776,6 +22063,11 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
       var x = o.e || 0, z = -(o.n || 0);
       var alt = o.alt != null ? o.alt : (cat === 'air' ? Math.max(2000, gAt(x, z) + 600) : (cat === 'sea' ? 0 : gAt(x, z)));
       var hp = def.hp || 100;
+      // co-op: boss parts get +60 % HP per extra pilot, so a 4-pilot boss fight still lasts minutes (host only; HP syncs as hp01)
+      if (parent && parent.reg && parent.reg.boss && def.subTarget && hosting()) {
+        var nPil = 0; for (var pi_ = 0; pi_ < pts.length; pi_++) if (pts[pi_] && !pts[pi_].ai) nPil++;
+        if (nPil > 1) hp = Math.round(hp * (1 + 0.6 * Math.min(3, nPil - 1)));
+      }
       var ent = {
         id: o.id || 0, kind: kind, variant: o.variant || null, group: null, pos: new THREE.Vector3(x, alt, z), vel: new THREE.Vector3(),
         q: new THREE.Quaternion(), hp: hp, maxHp: hp, alive: true, data: {}, parent: parent ? parent.id : null, model: null,
@@ -22565,7 +22857,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
         else if (wl[i].cap > b.cap) wl[i].ammo = Math.min(wl[i].cap, b.ammo + (wl[i].cap - b.cap));
       }
       cosCone = Math.cos(coneDeg() * DEG);
-      LP.detectMul = LO.detectMul; LP.flareEff = LO.flareEff;
+      LP.detectMul = LO.detectMul * PERK.detect; LP.flareEff = LO.flareEff;
       return LO;
     }
     function dropFlares() {
@@ -22707,7 +22999,6 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
     }
     if (fx.setWorld) { try { fx.setWorld(world); } catch (e) { /* ignore */ } }        // tracer dust / splashes on terrain
     var asT = new THREE.Vector3(), asD = new THREE.Vector3();
-    function gunSpec() { var w = selW(); if (w && w.spec.type === 'gun') return w.spec; var g = firstOf('gun'); return g ? g.spec : DEF_W.gun; }
     // Heat is per second of fire (rate independent): 0.22/s x gunHeatMul (campaign: gunHeatMul = 4.545 / gunBurst s) ->
     // stock overheat after ~4.5 s of trigger, cools from full in ~3 s, usable again below 30 %. Pods have no barrel heat.
     var GUN_HEAT_PS = 0.22, GUN_COOL_PS = 0.34, gunSig = 0;
@@ -22726,7 +23017,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
         var bl = pBul.add();
         bl.pos.copy(from); bl.prev.copy(from); bl.vel.copy(tC); bl.src = null; bl.owner = LP; bl.cls = cls;
         bl.life = clamp((gs.range || 1000) * (LO.gunRangeMul || 1) * 1.6 / spd, 1.2, 2.2);
-        bl.dmg = (gs.damage || C.gunDmg) * LO.gunDamageMul; bl.spec = gs;
+        bl.dmg = (gs.damage || C.gunDmg) * LO.gunDamageMul * PERK.gun; bl.spec = gs;
         if (fx.tracer) fx.tracer(bl.pos.clone(), bl.vel.clone(), col, size);
         if (hosting()) netTracer(bl.pos, bl.vel, 0);
       }
@@ -22765,7 +23056,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
       if (client && sig !== gunSig) {
         gunSig = sig; LP.gun = sig > 0;
         net.sendEvent({ t: 'gun', on: sig > 0, T: net.now(), pos: v3a(player.pos), vel: v3a(player.vel), q: [r4(player.q.x), r4(player.q.y), r4(player.q.z), r4(player.q.w)],
-                        r: Math.round((gunCan ? rate : 0) + (podCan ? podRate : 0)), d: (gs.damage || 12) * LO.gunDamageMul, s: gs.spread != null ? gs.spread : 0.004, sp: gs.speed || C.gunSpeed });
+                        r: Math.round((gunCan ? rate : 0) + (podCan ? podRate : 0)), d: (gs.damage || 12) * LO.gunDamageMul * PERK.gun, s: gs.spread != null ? gs.spread : 0.004, sp: gs.speed || C.gunSpeed });
       }
       if (gunCan) {
         gunHeat += GUN_HEAT_PS * (LO.gunHeatMul || 1) * h;
@@ -23704,7 +23995,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
         w: [Math.round(angW.x * 1000) / 1000, Math.round(angW.y * 1000) / 1000, Math.round(angW.z * 1000) / 1000],
         a: [Math.round(localVis.thr * 100), Math.round(localVis.ab * 100), Math.round(localVis.gearT * 100)],
         al: pAlive ? 1 : 0, ab: player.airborne && !player.airborne() ? 0 : 1, hp: Math.round(player.health || 0),
-        dm: LO.detectMul, vd: Math.round(viewDelayMs()), lk: lockId, ld: locked ? 1 : 0, n: stateSeq % C.stateHz === 1 ? localInfo.name : undefined, ac: stateSeq % C.stateHz === 1 ? localInfo.aircraftId : undefined, wl: stateSeq % C.stateHz === 1 ? (localInfo.wingLvl | 0) : undefined });
+        dm: LO.detectMul * PERK.detect, vd: Math.round(viewDelayMs()), lk: lockId, ld: locked ? 1 : 0, n: stateSeq % C.stateHz === 1 ? localInfo.name : undefined, ac: stateSeq % C.stateHz === 1 ? localInfo.aircraftId : undefined, wl: stateSeq % C.stateHz === 1 ? (localInfo.wingLvl | 0) : undefined });
     }
     function viewDelayMs() { return client ? snapClock.base + snapClock.delay : 0; }
     function syncPeers() {
@@ -24152,7 +24443,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
       LP.agl = pAGL;
       pCloud = cloudAt(player.pos); LP.cloud = pCloud;
       LP.hp = player.health != null ? player.health : 100;
-      LP.detectMul = LO.detectMul;
+      LP.detectMul = LO.detectMul * PERK.detect;
       LP.lockId = desig ? desig.id : 0; LP.locked = locked;
     }
     function step(h) {
@@ -24416,6 +24707,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
     combat.dropFlares = dropFlares;
     combat.cycleTarget = cycleTarget;
     combat.setLoadout = setLoadout;
+    combat.setPerk = setPerk;
     combat.rearm = rearm;
     // playerfeatures.js: checkpoint ammo save / restore ({w:{weaponId: ammo}, flares, heat})
     combat.ammoState = function () { var o = { w: {}, flares: nFlares, heat: gunHeat }; for (var i = 0; i < wl.length; i++) o.w[wl[i].spec.id] = wl[i].ammo; return o; };
@@ -25063,9 +25355,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
         if (h.active && h.enemiesLeft === 0 && prev.left > 0) say('clear', pick(['Picture clear.', 'Scope clean. Good shooting.']), 2, 2);
         var inc = h.incoming ? h.incoming.length : 0;
         if (inc > prev.incoming && inc >= 1) say('mslwarn', pick(['Missile! Flares, break!', 'Launch! Defend!', 'Missile in the air!']), 3, 10);
-        if (false && h.spiked && !prev.spiked && h.active) say('spiked', pick(['Flanker One, spiked. Enemy radar has you.', 'Enemy radar has you. Descend.']), 2, 14);
-        if (false && h.hidden && !prev.hidden && h.active && !st.crashed) say('hidden', pick(['You are off their radar. Stay low.', 'They lost you on radar. Stay low.']), 2, 16);
-        // (removed: too chatty)
+        // (spiked / off-radar calls removed: too chatty)
         if (h.score > prev.score) {
           var pops = h.popups || [], lastTxt = pops.length ? pops[pops.length - 1].text : '';
           var allTxt = pops.map(function (p) { return p.text; }).join(' ');
@@ -25645,12 +25935,6 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
       tn(v, t, { at: at, wave: 'sawtooth', f: f, det: -6, lp: 500, lp2: 3400, lp3: 1600, lglide: 0.06, pk: pk, a: 0.012, h: h, d: d });
       tn(v, t, { at: at, wave: 'sawtooth', f: f, det: 7, lp: 500, lp2: 3000, lp3: 1400, lglide: 0.07, pk: pk * 0.8, a: 0.015, h: h, d: d });
       tn(v, t, { at: at, wave: 'triangle', f: f / 2, pk: pk * 0.5, a: 0.01, h: h, d: d });
-    }
-    function notes(v, t, list, step, wave, pk, d, lp) {
-      for (var i = 0; i < list.length; i++) {
-        tn(v, t, { at: i * step, wave: wave, f: list[i], pk: pk, a: 0.006, h: 0.03, d: i === list.length - 1 ? d * 2 : d, lp: lp });
-        tn(v, t, { at: i * step, wave: 'sine', f: list[i] * 2, pk: pk * 0.25, a: 0.004, d: d * 0.6 });
-      }
     }
 
     // sample layer: o = {pk, rate, at, lp, hp, off}. Returns false when the sample is not loaded (caller synthesizes instead).
@@ -28288,6 +28572,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
       var s = st(), now = rnow();
       var gp = readPad(), B = function (i) { return !!(gp && gp.buttons[i] && gp.buttons[i].pressed); }, E = function (i) { return B(i) && !padPrev[i]; };
       tickToasts(rdt);
+      updateMenuUi();   // pause menu: "Photo mode" button only while a flight is paused and the photo key setting is on (was never shown)
       if (E(10) && settings.photoKey && (PH.on || inGame())) photoMode(!PH.on);
       if (medalsOpen && E(1)) closeMedals();
       if (cardOpen && (E(1) || E(0))) closePilotCard();
@@ -28755,7 +29040,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
     function updateMenuUi() {
       if (!menuUi) return;
       var res = $('bResume');
-      if (menuUi.photo) { var show = !!(res && !res.hidden && menuOpen() && st()); if (menuUi.photo.hidden === show) menuUi.photo.hidden = !show; }
+      if (menuUi.photo) { var show = !!(settings.photoKey && res && !res.hidden && menuOpen() && st()); if (menuUi.photo.hidden === show) menuUi.photo.hidden = !show; }
     }
     function setSetting(k, v) {
       if (!(k in settings)) return;
@@ -30888,6 +31173,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
     if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
     var t = e.target; if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
     if (R.campaign && R.campaign.hangarOpen) return;
+    var mn = root.document && document.getElementById('menu'); if (mn && !mn.hidden) return;   // paused / in menus: no wing commands
     if (e.code === 'KeyY') command('attack'); else if (e.code === 'KeyU') command('cover');
   });
 
@@ -33959,12 +34245,6 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
   function sph(r, w, h) { return new T.SphereGeometry(r, w || 12, h || 8); }
   function flat(g) { var n = g.index ? g.toNonIndexed() : g; if (n !== g) g.dispose(); n.deleteAttribute('normal'); n.computeVertexNormals(); return n; }   // hard-edged facets
   function hemi(r, w) { return new T.SphereGeometry(r, w || 16, Math.max(4, (w || 16) >> 1), 0, TAU, 0, Math.PI / 2); }
-  function plan(pts, thick) {          // top-view outline [[x, z]...] extruded up by thick (y 0..thick)
-    var sh = new T.Shape(); sh.moveTo(pts[0][0], -pts[0][1]);
-    for (var i = 1; i < pts.length; i++) sh.lineTo(pts[i][0], -pts[i][1]);
-    var g = new T.ExtrudeGeometry(sh, { depth: thick, bevelEnabled: false }); g.rotateX(-Math.PI / 2); return g;
-  }
-  function mirrorPlan(half) { var a = half.slice(); for (var i = half.length - 1; i >= 0; i--) if (half[i][0] !== 0) a.push([-half[i][0], half[i][1]]); return a; }
   var VMAT = null, VCHAR = null, GLOW = null, INVIS = null, BEAM = null;
   function vmat() { return VMAT || (VMAT = new T.MeshStandardMaterial({ vertexColors: true, metalness: 0.32, roughness: 0.6 })); }
   function vchar() { return VCHAR || (VCHAR = new T.MeshStandardMaterial({ vertexColors: true, color: 0x302a26, metalness: 0.1, roughness: 0.95 })); }
@@ -35347,7 +35627,6 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
   var FL = root.FL = root.FL || {};
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
   function rnd(a, b) { return a + Math.random() * (b - a); }
-  function rint(a, b) { return Math.floor(rnd(a, b + 1)); }
   function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
   function fmt(n) { return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
@@ -35412,7 +35691,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
 
   FL.createMissionExt = function (C) {
     var combat = C.combat || {};
-    if (C.TYPE && !C.TYPE.xboss) C.TYPE.xboss = { title: 'BOSS', base: 12000 };
+    if (C.TYPE && !C.TYPE.xboss) C.TYPE.xboss = { title: 'BOSS', base: 6000 };   // balance pass: was 12000 (with the bounty a boss paid ~5 normal missions)
     var X = { force: null, pending: null };
     var simT = 0;
     function W() { return C.W0() || {}; }
@@ -35424,7 +35703,6 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
       a.ch = clamp(a.ch | 0, 0, CHAPTERS.length - 1); a.step = clamp(a.step | 0, 0, STEPS - 1); a.vet = Math.max(0, a.vet | 0); if (!a.bosses) a.bosses = {};
       return a;
     }
-    function chap() { return CHAPTERS[arc().ch]; }
     function chapTitle(a) { a = a || arc(); return (a.vet ? 'Veteran ' + a.vet + ' · ' : 'Chapter ' + (a.ch + 1) + ' · ') + CHAPTERS[a.ch].name; }
     function say(k, t, prio, cd) { C.say('x_' + k, t, prio || 2, cd == null ? 0 : cd); }
     function sound(n) { try { if (C.sound && C.sound.play) C.sound.play(n); } catch (e) {} }
@@ -36645,7 +36923,10 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
   function changeMap(id) {
     if (id === mapId && world) return;
     mapId = id; try { localStorage.setItem('flk_map', id); } catch (e) {}
-    if (combat) combat.stop();
+    // end a running mission first: else its groups vanish with combat.stop() and the campaign pays it out as "cleared"
+    var mapCli = !!(net && net.connected && !net.isHost);
+    if (campaign && campaign.active && !mapCli) { try { campaign.stop(); } catch (e) {} }
+    if (combat) combat.stop(!mapCli);   // host: force, so old-map enemies do not stay (and clients get the stop event)
     if (world && world.sun && world.sun.target && world.sun.target.parent) world.sun.target.parent.remove(world.sun.target);
     if (world && world.dispose) world.dispose();
     world = FL.buildWorld(scene, renderer, id);
@@ -37023,7 +37304,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
       var rmbEdge = mouseBtn.r && !rmbPrev; rmbPrev = mouseBtn.r;
       if (zoomMode === 'toggle') { if (E(11) || KP('KeyG') || rmbEdge) zoomLatch = !zoomLatch; zoomHeld = zoomLatch; }
       else { zoomHeld = B(11) || K('KeyG') || mouseBtn.r; zoomLatch = false; }
-      if (KP('KeyC') || E(8)) { view = (view + 1) % VIEWS.length; flash('CAMERA: ' + VIEWS[view]); camReset = true; }
+      // crashed on a sea map: C = carrier respawn, not camera
+      if ((KP('KeyC') && !(st.crashed && carrierOk())) || E(8)) { view = (view + 1) % VIEWS.length; flash('CAMERA: ' + VIEWS[view]); camReset = true; }
       if (KP('KeyT')) spawn('air');
       if (B(8) && B(9) && (E(8) || E(9))) setDbg(!dbgOn);
       if (KP('KeyM')) { setMuted(!muted); }
@@ -37099,7 +37381,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
     if (comms) comms.reset();
     if (kind === 'rejoin') { }
     else if (kind === 'air') { flash('AIR START'); }
-    else flash(thrMode === 'sim' ? 'SET THROTTLE WITH RT. PULL BACK AT 300 KM/H' : 'HOLD RT OR B. PULL BACK AT 300 KM/H');
+    else { var padUser = lastDevice === 'pad'; flash(padUser ? (thrMode === 'sim' ? 'SET THROTTLE WITH RT. PULL BACK AT 300 KM/H' : 'HOLD RT OR B. PULL BACK AT 300 KM/H') : (thrMode === 'sim' ? 'SET THROTTLE WITH W. PULL BACK AT 300 KM/H' : 'HOLD W OR SHIFT. PULL BACK AT 300 KM/H')); }
   }
   // respawn: during a mission (or in co-op) start in the air close to the fight, so the mission keeps going
   function respawn() {
@@ -39799,7 +40081,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793165955', updShown = false;
+  var BUILD = '1793167322', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
