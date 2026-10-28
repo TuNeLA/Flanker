@@ -1184,14 +1184,24 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   // ================================================================ grid helpers
   // Height on a regular grid exactly as THREE.PlaneGeometry triangulates it: cell (ix,iy) = triangles (a,b,d) + (b,c,d),
   // a=(ix,iy) b=(ix,iy+1) c=(ix+1,iy+1) d=(ix+1,iy); split along b-d (tx+ty = 1).
-  function triH(A, NV, fx, fy) {
+  function triH(A, NV, fx, fy, F) {
     let ix = Math.floor(fx), iy = Math.floor(fy);
     if (ix < 0) ix = 0; else if (ix > NV - 2) ix = NV - 2;
     if (iy < 0) iy = 0; else if (iy > NV - 2) iy = NV - 2;
     const tx = fx - ix, ty = fy - iy, k = iy * NV + ix;
     const a = A[k], d = A[k + 1], b = A[k + NV], c = A[k + NV + 1];
+    if (F && F[iy * (NV - 1) + ix]) { // cell split along a-c instead (edge-following triangulation)
+      if (ty >= tx) return a + (c - b) * tx + (b - a) * ty;
+      return a + (d - a) * tx + (c - d) * ty;
+    }
     if (tx + ty <= 1) return a + (d - a) * tx + (b - a) * ty;
     return c + (b - c) * (1 - tx) + (d - c) * (1 - ty);
+  }
+  // per-cell diagonal choice: split along the diagonal whose corners differ least (follows cliff edges, no sawtooth)
+  function cellFlips(H, NV) {
+    const nc = NV - 1, F = new Uint8Array(nc * nc);
+    for (let y = 0; y < nc; y++) for (let x = 0; x < nc; x++) { const k = y * NV + x; F[y * nc + x] = Math.abs(H[k] - H[k + NV + 1]) + 0.5 < Math.abs(H[k + NV] - H[k + 1]) ? 1 : 0; }
+    return F;
   }
   // smooth-ish vertex normals: central differences, but one-sided where one side is a cliff (keeps plateaus flat-lit)
   function gridNormals(H, NV, cell, out) {
@@ -1618,7 +1628,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     grids.push(base);
     ctx.mark('heights');
     const levels = [];
-    let lookup = (e, n) => triH(base.H, NV, (e + HALF) / BC, (HALF - n) / BC);
+    base.F = cellFlips(base.H, NV);
+    let lookup = (e, n) => triH(base.H, NV, (e + HALF) / BC, (HALF - n) / BC, base.F);
     for (const lv of def.levels || []) {
       const pc = levels.length ? levels[levels.length - 1].cell : BC;
       if (Math.abs(96000 / lv.tile - Math.round(96000 / lv.tile)) > 1e-6 || Math.abs(lv.tile / pc - Math.round(lv.tile / pc)) > 1e-6 || Math.abs(lv.tile / lv.cell - Math.round(lv.tile / lv.cell)) > 1e-6) throw new Error('world: terrain level tile ' + lv.tile + ' not aligned');
@@ -1657,11 +1668,12 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
           if (AX) AX[y * nv + x] = force ? 0 : def.aux();
         }
       }
+      for (const [i, j] of sel) { const g = grids[idx[j * L + i]]; g.F = cellFlips(g.H, g.NV); }
       levels.push(level);
       lookup = (function (prev, lvR) {
         return function (e, n) {
           const ii = Math.floor((e + HALF) / lvR.TS), jj = Math.floor((HALF - n) / lvR.TS);
-          if (ii >= 0 && jj >= 0 && ii < lvR.L && jj < lvR.L) { const gi = lvR.idx[jj * lvR.L + ii]; if (gi >= 0) { const g = grids[gi]; return triH(g.H, g.NV, (e - g.e0) / g.cell, (g.n0 - n) / g.cell); } }
+          if (ii >= 0 && jj >= 0 && ii < lvR.L && jj < lvR.L) { const gi = lvR.idx[jj * lvR.L + ii]; if (gi >= 0) { const g = grids[gi]; return triH(g.H, g.NV, (e - g.e0) / g.cell, (g.n0 - n) / g.cell, g.F); } }
           return prev(e, n);
         };
       })(pl, level);
@@ -1760,7 +1772,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       for (let y = 0; y < c.n; y += s) for (let x = 0; x < c.n; x += s) {
         if (hole && hole[(c.y0 + y) * nc + c.x0 + x]) continue;
         const a = c.vi(x, y), b = c.vi(x, y + s), cc = c.vi(x + s, y + s), d = c.vi(x + s, y);
-        IDX[nIdx++] = a; IDX[nIdx++] = b; IDX[nIdx++] = d; IDX[nIdx++] = b; IDX[nIdx++] = cc; IDX[nIdx++] = d;
+        if (s === 1 && g.F && g.F[(c.y0 + y) * nc + c.x0 + x]) { IDX[nIdx++] = a; IDX[nIdx++] = b; IDX[nIdx++] = cc; IDX[nIdx++] = a; IDX[nIdx++] = cc; IDX[nIdx++] = d; }
+        else { IDX[nIdx++] = a; IDX[nIdx++] = b; IDX[nIdx++] = d; IDX[nIdx++] = b; IDX[nIdx++] = cc; IDX[nIdx++] = d; }
       }
       const n1 = c.n + 1;
       for (let ed = 0; ed < 4; ed++) for (let i = 0; i < c.n; i += s) {
@@ -3667,14 +3680,14 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     for (const f of FING) { const a = f[3] * DEG; f.ec = coastC(f[0]); f.dE = -Math.cos(a); f.dN = Math.sin(a); f.lE = Math.sin(a); f.lN = Math.cos(a); }
     const ISL = { e: coastC(9000) - 15500, n: 9000, r: 3300 };
     // offshore islands: [e, n, r, cliffTop, summit, seed]
-    const ISLS = [{ name: 'Hirta', e: -38500, n: 35500, r: 2300, top: 170, sum: 430, s: 11 }, { name: 'Boreray', e: -33600, n: 38200, r: 800, top: 200, sum: 380, s: 12 },
+    const ISLS = [{ name: 'Hirta', e: -38500, n: 35500, r: 2300, top: 300, sum: 430, s: 11 }, { name: 'Boreray', e: -33600, n: 38200, r: 800, top: 290, sum: 384, s: 12 },
       { name: 'Staffa', e: coastC(-5000) - 7500, n: -5000, r: 360, top: 62, sum: 70, s: 13 }, { name: 'Rathlin', e: coastC(-41500) - 6500, n: -41500, r: 1700, top: 95, sum: 140, s: 14, white: 1 }];
     const STACKS = [];
     { const R = makeRng(4321); for (let k = 0; k < 22; k++) { const n = -44000 + R() * 88000, off = 180 + R() * 800; STACKS.push([coastC(n) - off, n, 40 + R() * 70, 90 + R() * 150]); } }
     for (let k = 0; k < 4; k++) { const a = k * 1.7 + 0.4; STACKS.push([ISL.e + Math.cos(a) * (ISL.r + 300), ISL.n + Math.sin(a) * (ISL.r + 300), 40 + k * 10, 60 + k * 15]); }
     // St Kilda giants (Stac an Armin 196 m, Stac Lee 172 m, Levenish), the Old Man of Hoy (137 m, slender)
     STACKS.push([-33100, 39300, 75, 196], [-32700, 37400, 65, 172], [-36400, 32600, 50, 62], [-40900, 34700, 45, 110]);
-    const HOY = { n: 29500 }; HOY.e = coastC(HOY.n) - 260; STACKS.push([HOY.e, HOY.n, 26, 150, 1]);
+    const HOY = { n: 29500 }; HOY.e = coastC(HOY.n) - 260; STACKS.push([HOY.e, HOY.n, 32, 150, 1]);
     function chan(e, n, sc, seed) {
       const wx = e / sc + 1.4 * fbm(e / (sc * 1.7) + 5.2, n / (sc * 1.7) + 1.3, 3, seed), wy = n / sc + 1.4 * fbm(e / (sc * 1.7) - 3.7, n / (sc * 1.7) + 9.1, 3, seed + 2);
       return Math.abs(2 * fbm(wx, wy, 3, seed + 4) - 1) * sc * 0.9;
@@ -3694,7 +3707,16 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       if (k > 0) {
         const r1 = ridged(e / 4300 + 1, n / 4300 + 2, 5, 423), cu = Math.pow(r1, 2.3) * sstep(3000, 9000, dx) * (1 - sstep(26000, 34000, dx));
         P += k * (kM * (60 + 820 * cu * (0.7 + 0.6 * fbm(e / 9000, n / 9000, 2, 425))) + (kS + kN) * (40 + 260 * Math.pow(ridged(e / 6000, n / 6000, 3, 427), 1.6)));
-        P += sstep(9000, 22000, dx) * 420 * Math.pow(ridged(e / 7000 + 5, n / 7000, 4, 429), 1.7) * (0.6 + 0.8 * fbm(e / 15000, n / 15000, 2, 431));
+        P += sstep(9000, 22000, dx) * 650 * Math.pow(ridged(e / 7000 + 5, n / 7000, 4, 429), 1.6) * (0.6 + 0.8 * fbm(e / 15000, n / 15000, 2, 431));
+        // the Cuillin: a black horseshoe of knife-edge ridges (850-990 m) around the head of Loch Coruisk, open to the west
+        const ce = coastC(8500) + 12600, cn = 8500, dr = Math.hypot(e - ce, n - cn), th = Math.atan2(n - cn, e - ce);
+        if (dr < 6000) {
+          const ang = Math.abs(((th + Math.PI) % (2 * Math.PI)) - Math.PI);   // 0 = east (back of the horseshoe), PI = west (open side)
+          const crest = (860 + 130 * ridged(th * 3 + 1, 0.5, 3, 437)) * (1 - sstep(2.3, 2.75, ang));
+          const R0 = 3300 + 300 * Math.sin(th * 3), d = Math.abs(dr - R0) + 140 * (fbm(e / 400, n / 400, 2, 439) - 0.5);
+          const cu2 = crest * Math.pow(Math.max(0, 1 - d / 1700), 0.8) + 70 * (ridged(e / 180, n / 180, 2, 441) - 0.4) * sstep(500, 800, crest * (1 - d / 1700));
+          P = Math.max(P, cu2);
+        }
         const v = chan(e, n, 6500, 421);
         P -= Math.min(P - 60, 260) * (1 - sstep(150, 900, v)) * sstep(3000, 8000, dx);
       }
@@ -3937,7 +3959,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
           const R0 = S[2], H = S[3], g = new THREE.CylinderGeometry(R0 * 0.82, R0, H + 14, 14, 6), Pp = g.attributes.position, U = g.attributes.uv;
           for (let i = 0; i < Pp.count; i++) { const x = Pp.getX(i), y = Pp.getY(i), z = Pp.getZ(i), a = Math.atan2(z, x), k = 0.78 + 0.4 * fbm(a * 1.6 + S[0] * 0.01, y / 18, 2, 471); const top = y > (H + 14) / 2 - 0.1; Pp.setXYZ(i, x * k, top ? y + 3 * fbm(x / 10, z / 10, 1, 3) : y, z * k); U.setXY(i, a * R0 / 40, (y + 7) / 40); }
           g.computeVertexNormals();
-          geoTmp(g, mat4(S[0], (H + 14) / 2 - 14, -S[1]), rock, S[4] ? lin(0x8c5038) : cR);
+          geoTmp(g, mat4(S[0], (H + 14) / 2 - 14, -S[1]), rock, S[4] ? lin(0x7a4a3a) : cR);
           const geoTop = new THREE.CircleGeometry(R0 * 0.8, 12).rotateX(-Math.PI / 2);
           geoTmp(geoTop, mat4(S[0], H + 0.5, -S[1]), rock, cTop);
           const x0 = S[0], z0 = -S[1];
@@ -9443,7 +9465,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     fx.impact = function (id, pos, opts) {
       if (!pos || !isFinite(pos.x) || !isFinite(pos.y) || !isFinite(pos.z)) return;
       const P = FL.IMPACT && FL.IMPACT[id];
-      const k = opts && opts.scale > 0 ? opts.scale : 1;
+      let k = opts && opts.scale > 0 ? opts.scale : 1;
       if (!P) { boomCore(pos, k, opts); return; }
       const Lk = P.look;
       let water = !!(opts && opts.water);
@@ -9452,9 +9474,13 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       let y = pos.y;
       if (W && !air && !water && isWet(x, z) && y < 4) water = true;
       if (!air && W) { const g = gY(x, z); if (y < g + 0.3) y = g + 0.3; }
-      const cd = camera.position.distanceTo(pos) / ((Lk.s || 0) * k >= 1.5 ? 1.8 : 1);   // big blasts keep detail further out
+      const cd0 = camera.position.distanceTo(pos), big = (Lk.s || 0) * k >= 1;
+      const cd = cd0 / ((Lk.s || 0) * k >= 1.5 ? 1.8 : 1);   // big blasts keep detail further out
       const lod = cd > 9000 ? 3 : cd > 4500 ? 2 : cd > 2000 ? 1 : 0;
       const q0 = qm; qm = q0 * LOD_Q[lod];
+      // readability at range: big blasts grow up to x1.6 from 1.5 to 4.5 km (fewer, larger particles)
+      const kf = big ? 1 + 0.6 * clamp01((cd0 - 1500) / 3000) : 1;
+      k *= kf;
       try {
         const S = (Lk.s || 0) * k;
         if (S > 0) { _iP.set(x, pos.y, z); IO.water = water; IO.air = air; boomCore(_iP, S, IO); }
@@ -39038,7 +39064,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRvYi
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793157239', updShown = false;
+  var BUILD = '1793157379', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
