@@ -40,8 +40,8 @@ body { font-family: var(--display); -webkit-tap-highlight-color: transparent; to
   backdrop-filter: blur(12px) saturate(1.2); -webkit-backdrop-filter: blur(12px) saturate(1.2);
   padding: clamp(18px, 3.4vw, 34px); display: grid; gap: 22px; box-shadow: 0 30px 80px rgba(0, 0, 0, .45); }
 .kicker { font-family: var(--mono); font-size: 12px; letter-spacing: .14em; color: var(--hud); text-transform: uppercase; margin: 0; }
-h1 { font-weight: 800; font-size: clamp(48px, 9vw, 96px); line-height: .9; margin: 6px 0 0; letter-spacing: -.01em; text-transform: uppercase; text-wrap: balance; }
-h1 em { display: block; font-style: normal; font-weight: 500; font-size: .3em; letter-spacing: .34em; color: var(--hud); margin-top: 10px; }
+h1 { font-weight: 800; font-size: clamp(46px, 8vw, 84px); line-height: .9; margin: 6px 0 0; letter-spacing: -.01em; text-transform: uppercase; text-wrap: balance; }
+h1 em { display: block; font-style: normal; font-weight: 500; font-size: max(13px, .24em); letter-spacing: .3em; white-space: nowrap; color: var(--hud); margin-top: 10px; }
 .lede { margin: 12px 0 0; max-width: 60ch; color: var(--ink-dim); font-size: 16px; line-height: 1.5; font-family: var(--display); font-weight: 500; }
 .actions { display: flex; flex-wrap: wrap; gap: 10px; }
 button { font: 700 15px/1 var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 14px 18px; border-radius: 2px;
@@ -81,7 +81,8 @@ button.small { padding: 8px 12px; font-size: 12px; }
 #loading { font-family: var(--mono); color: var(--amber); font-size: 13px; margin: 0; }
 
 /* menu screens */
-.screen { display: grid; gap: 20px; min-width: 0; }
+.screen { display: grid; gap: 16px; min-width: 0; }
+#scrMain .lede { margin-top: 8px; }
 .shead { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 .shead h2 { font: 800 clamp(24px, 4vw, 34px)/1 var(--display); text-transform: uppercase; letter-spacing: .03em; margin: 0; }
 button.back { padding: 10px 14px; font-size: 13px; }
@@ -95,17 +96,18 @@ button.map { text-transform: none; letter-spacing: 0; text-align: left; display:
 button.map b { font: 700 14px/1.15 var(--display); color: var(--hud); text-transform: uppercase; letter-spacing: .04em; }
 button.map span { font: 500 12.5px/1.3 var(--display); color: var(--ink-dim); }
 button.map[aria-pressed="true"] { border-color: var(--hud); background: rgba(147, 255, 196, .14); box-shadow: inset 0 0 0 1px var(--hud); }
-button.map[aria-pressed="true"] b::after { content: ' · here'; color: var(--amber); font-size: 11px; letter-spacing: .1em; }
+button.map[aria-pressed="true"] b::before { content: '● '; color: var(--amber); }
 button.map:disabled { cursor: not-allowed; opacity: .4; }
 .mfoot { display: flex; flex-wrap: wrap; gap: 8px 22px; font: 13px var(--mono); color: var(--ink-dim); border-top: 1px solid var(--line); padding-top: 12px; margin: 0; }
-.groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 18px 30px; }
+.groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 18px 26px; }
 .grp { display: grid; gap: 8px; align-content: start; border-top: 1px solid var(--line); padding-top: 12px; min-width: 0; }
 .grp h3 { font: 700 12px/1 var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--amber); margin: 0 0 4px; }
 .opt { display: flex; justify-content: space-between; align-items: center; gap: 14px; min-height: 34px; font: 500 15px/1.25 var(--display); color: var(--ink); cursor: pointer; }
 .opt small { display: block; color: var(--ink-dim); font-size: 12px; }
 .opt input[type=checkbox] { accent-color: var(--hud); width: 20px; height: 20px; flex: none; margin: 0; }
-.opt input[type=range] { accent-color: var(--hud); width: 140px; flex: none; }
-.opt select { font: 14px var(--mono); background: #0c1a17; color: var(--ink); border: 1px solid var(--line); padding: 6px 8px; max-width: 200px; flex: none; }
+.opt input[type=range] { accent-color: var(--hud); width: 120px; flex: none; }
+.opt select { font: 14px var(--mono); background: #0c1a17; color: var(--ink); border: 1px solid var(--line); padding: 6px 8px; max-width: 160px; flex: none; }
+.opt .sec { font-size: 12px; vertical-align: 0; }
 .opt select:focus-visible { outline: 2px solid var(--amber); outline-offset: 3px; }
 .presets { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; }
 button.chip { text-transform: none; letter-spacing: 0; text-align: left; display: grid; align-content: start; gap: 6px; padding: 12px 14px;
@@ -119,7 +121,7 @@ button.chip[aria-pressed="true"] b::before { content: '● '; color: var(--amber
 .q h3 { font: 700 12px/1 var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--amber); margin: 0; }
 .hint { margin: 0; font: 500 13px/1.4 var(--display); color: var(--ink-dim); }
 .controls section.mine h2::after { content: ' · you'; color: var(--hud); }
-.mixrow { max-width: 520px; margin-top: 10px; }
+.mixrow { justify-content: flex-start; gap: 18px 28px; flex-wrap: wrap; margin-top: 10px; }
 .comap { margin: 0; font: 600 15px/1.35 var(--display); color: var(--ink); }
 .comap b { color: var(--hud); }
 .kbnav :focus { outline: 2px solid var(--amber); outline-offset: 3px; }
@@ -226,8 +228,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
           <label class="opt"><span>Fly with right stick<small>Southpaw. The left stick moves the view.</small></span><input type="checkbox" id="optSwap"></label>
           <label class="opt"><span>Invert pitch<small>Push forward to raise the nose.</small></span><input type="checkbox" id="optInvert"></label>
           <label class="opt"><span>Mouse aim<small>The jet flies to the mouse pointer.</small></span><input type="checkbox" id="optMouse" checked></label>
-          <label class="opt"><span>Mouse mode<small>Aim: the jet flies to the circle. Joystick: the mouse is the stick.</small></span>
-            <select id="optMouseMode"><option value="aim">Aim · War Thunder</option><option value="stick">Joystick</option></select></label>
+          <label class="opt"><span>Mouse mode<small>Aim or joystick.</small></span>
+            <select id="optMouseMode"><option value="aim">Aim</option><option value="stick">Joystick</option></select></label>
           <label class="opt"><span>Mouse speed</span><input type="range" id="optSens" min="0.3" max="2.5" step="0.05" value="1"></label>
           <div class="actions"><button id="bSetup" class="small">Quick setup</button><button id="bToControls" class="small">Control presets</button></div>
         </div>
@@ -7212,8 +7214,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     };
   }
   // body atlas: top half of canvas = upper surfaces, bottom half = under surfaces. u = along the length.
-  function bodyTexture(def) {
-    const L = def.liv, W = 2048, H = 2048, c = mkCanvas(W, H), x = c.getContext('2d');
+  function bodyTexture(def, liv) {
+    const L = liv || def.liv, W = 2048, H = 2048, c = mkCanvas(W, H), x = c.getContext('2d');
     const R = mulberry(def.seed || 7);
     x.fillStyle = L.base; x.fillRect(0, 0, W, H / 2);
     x.fillStyle = L.under; x.fillRect(0, H / 2, W, H / 2);
@@ -7270,7 +7272,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       x.fillRect(R() * W, R() * H, 2 + R() * 8, 2 + R() * 4);
     }
     const uOf = (z) => (z - def.len[0]) / (def.len[1] - def.len[0]);
-    if (L.radome) { x.fillStyle = L.radome; x.fillRect(0, 0, uOf(def.radomeZ) * W, H); }
+    if (L.radome || def.liv.radome) { x.fillStyle = L.radome || def.liv.radome; x.fillRect(0, 0, uOf(def.radomeZ) * W, H); }
     // panel lines, rivets, access panels, soot, wear
     if (def.ops) K.renderOps(def.ops.ops, x, W, H, 'color');
     const tex = new T.CanvasTexture(c);
@@ -8210,7 +8212,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   }
   // one store on one station -> { parts (station-local, origin at the skin), release: [x,y,z] (station-local) }
   function storeParts(st, it) {
-    const t = it.type, id = String(it.weaponId || '').toLowerCase(), n = Math.max(1, it.count | 0 || 1), out = [];
+    const t = it.type === 'aam' || it.type === 'agm' ? 'missile' : it.type, id = String(it.weaponId || it.id || '').toLowerCase(), n = Math.max(1, it.count | 0 || 1), out = [];
     const drop = st.kind === 'tip' ? 0.07 : st.drop != null ? st.drop : st.kind === 'belly' ? 0.2 : 0.24;
     let g, r, L;
     if (t === 'missile') {
@@ -8303,6 +8305,41 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     return api;
   }
   let SU27HIT = null;
+  // ------------------------------------------------------------------ paints (campaign.paint(acId): factory | grey | splinter | desert | ace)
+  const PAINT_LIV = {
+    grey: { pattern: 'mottle', base: '#8e979e', tones: ['#7d868d', '#9ea6ac', '#868f96'], under: '#aab2b7' },
+    splinter: { pattern: 'splinter', cols: ['#9a7a4c', '#55683a', '#2f3e27', '#1c1e1b'], base: '#55683a', under: '#a3a7a5' },
+    desert: { pattern: 'mottle', base: '#c2a477', tones: ['#a8875a', '#d4bd94', '#8f7350'], under: '#cdd3d6' },
+    ace: { pattern: 'mottle', base: '#26282c', tones: ['#1d1f22', '#5a1216', '#2e3035'], under: '#2a2c30', radome: '#8a1015' },
+  };
+  const PAINT_TINT = { grey: [0.88, 0.9, 0.93], splinter: [0.68, 0.84, 0.52], desert: [1.18, 0.96, 0.68], ace: [0.3, 0.28, 0.32] }; // Su-27 (fx.js livery) tints
+  function paintMat(C, name) {
+    if (!PAINT_LIV[name]) return C.bodyMat;
+    C.paints = C.paints || {};
+    if (C.paints[name]) return C.paints[name];
+    const b = C.bodyMat;
+    return (C.paints[name] = new T.MeshStandardMaterial({ map: bodyTexture(C.def, PAINT_LIV[name]), normalMap: b.normalMap, normalScale: b.normalScale,
+      roughnessMap: b.roughnessMap, metalnessMap: b.metalnessMap, metalness: C.def.metalBody ? 0.35 : 1, roughness: 1 }));
+  }
+  const TINTED = {};
+  function attachPaint(api, bodyMat, getMat) {
+    const meshes = [];
+    api.group.traverse((o) => { if (o.isMesh && o.material === bodyMat) meshes.push(o); });
+    api.paint = 'factory';
+    api.setPaint = function (name) {
+      name = PAINT_LIV[name] ? name : 'factory';
+      api.paint = name;
+      const m = getMat(name);
+      for (const o of meshes) o.material = m;
+    };
+    return api;
+  }
+  function su27PaintMat(base, name) {
+    if (!PAINT_TINT[name]) return base;
+    const k = base.uuid + name;
+    if (!TINTED[k]) { TINTED[k] = base.clone(); TINTED[k].color.setRGB(...PAINT_TINT[name]); }
+    return TINTED[k];
+  }
 
   // ------------------------------------------------------------------ buildAircraft
   FL.AIRCRAFT_TYPES = ['su27'].concat(Object.keys(DEFS));
@@ -8313,6 +8350,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       if (!f.setAirbrake) f.setAirbrake = function () {};
       if (!f.setControls) f.setControls = function () {};
       if (!SU27HIT) SU27HIT = K.hitter(f.group.children[0].geometry);
+      const bm = f.group.children[0].material;
+      attachPaint(f, bm, (n) => su27PaintMat(bm, n));
       return attachStores(f, 'su27', SU27HIT, f.storesMesh);
     }
     const C = typeCache(type), def = C.def, S = common();
@@ -8442,8 +8481,19 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     api.setEngine(0.2, 0, 0);
     api.setControls(0, 0, 0);
     api.setAirbrake(0);
+    attachPaint(api, C.bodyMat, (n) => paintMat(C, n));
     return attachStores(api, type, C.hit, defStores);
   };
+  // hangar / campaign: pylon positions per jet (model local; y approximate)
+  for (const spec of FL.AIRCRAFT) {
+    const rows = STATIONS[spec.id]; if (!rows) continue;
+    const pyl = {};
+    for (const r of rows) for (const sd of r[1] > 0.01 ? [1, -1] : [0]) {
+      const id = sd < 0 ? 'L' + r[0].slice(1) : r[0];
+      pyl[id] = { x: +(sd * r[1] || 0).toFixed(2), y: r[3] === 'belly' ? -0.75 : r[3] === 'tip' ? -0.1 : -0.35, z: r[2], kind: r[3] };
+    }
+    spec.pylons = pyl;
+  }
 })();
 
 </script>
@@ -11797,7 +11847,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       // radar warning before launch: hold a track inside the envelope (host shows it as hud.tracked)
       var inEnv = dist > (cfg.min || 1000) && dist < (cfg.max || 12000) * rs * 1.15;
       d.trackT = inEnv ? (d.trackT || 0) + dt : Math.max(0, (d.trackT || 0) - 2 * dt);
-      if (d.samCd <= 0 && d.trackT >= lerp(4.5, 2.0, s) && dist > (cfg.min || 1000) && dist < (cfg.max || 12000) * rs) {
+      var SW = FL.SAM_WARN || { trackLo: 4.5, trackHi: 2.0 };
+      if (d.samCd <= 0 && d.trackT >= lerp(SW.trackLo, SW.trackHi, s) && dist > (cfg.min || 1000) && dist < (cfg.max || 12000) * rs) {
         d.samCd = (cfg.cd || 9) * lerp(2, 1, s) + RR(ctx, 0, 3);
         _from.set(0, 0.6, -3.6);
         if (M.pitch) { M.pitch.updateWorldMatrix(true, false); _from.applyMatrix4(M.pitch.matrixWorld); } else _from.applyQuaternion(ent.q).add(ent.pos).setY(ent.pos.y + 4);
@@ -11982,7 +12033,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   var ROADIX = null;
   function roadIndex(w) {
     if (ROADIX && ROADIX.w === w) return ROADIX;
-    var cells = {}, R = (w && w.roads) || [], ends = [];
+    var cells = {}, R = (w && w.roads) || [];
     for (var i = 0; i < R.length; i++) {
       var L = R[i]; if (!L || L.length < 2) continue;
       for (var j = 0; j < L.length; j++) { var x = L[j][0], z = -L[j][1], k = Math.floor(x / 500) + ',' + Math.floor(z / 500); (cells[k] || (cells[k] = [])).push(x, z, i, j); }
@@ -15198,7 +15249,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   };
   var DECOY = { ir: 0.25, radar: 0.1, sarh: 0.15, arm: 0, antiship: 0.05, laser: 0, none: 0 };
   // SAM radar warning: seconds of continuous track (in the launch envelope) before the first / next launch, skill 0..1
-  var SAMW = { trackLo: 4.5, trackHi: 2.0 };
+  var SAMW = FL.SAM_WARN = { trackLo: 4.5, trackHi: 2.0 };
   var SIDE_CODE = { player: 0, bandit: 1, sam: 2, heli: 3, ebomb: 4, rocket: 5, pbomb: 6, reg: 7 };
 
   FL.createCombat = function (opt) {
@@ -21793,6 +21844,42 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     let time = 0;
     const actW = new Int32Array(8), actH = new Int32Array(8);
 
+    // ---- optional GPU timing per stage (EXT_disjoint_timer_query_webgl2): post.setGpuTiming(true); read post.info.gpu
+    // scene = shadow map + scene draw into the HDR target; bloom = prefilter/down/up; comp = composite (+FXAA). EMA in ms.
+    const TQ = { on: false, ext: null, gl: null, active: -1, recs: [], head: 0, n: 0 };
+    const gpuMs = { scene: 0, bloom: 0, comp: 0, total: 0, ok: false };
+    const TQ_STAGES = ['scene', 'bloom', 'comp'];
+    function tqInit(on) {
+      TQ.on = false;
+      if (!on) return false;
+      const gl = renderer.getContext();
+      const ext = caps.isWebGL2 ? gl.getExtension('EXT_disjoint_timer_query_webgl2') : null;
+      if (!ext) return false;
+      TQ.gl = gl; TQ.ext = ext; TQ.on = true;
+      if (!TQ.recs.length) for (let i = 0; i < 24; i++) TQ.recs.push({ q: gl.createQuery(), st: 0 });
+      return true;
+    }
+    function tqBegin(stage) {
+      if (!TQ.on || TQ.active >= 0 || TQ.n >= TQ.recs.length) return;
+      const i = (TQ.head + TQ.n) % TQ.recs.length, r = TQ.recs[i];
+      r.st = stage; TQ.gl.beginQuery(TQ.ext.TIME_ELAPSED_EXT, r.q); TQ.active = i;
+    }
+    function tqEnd() {
+      if (TQ.active < 0) return;
+      TQ.gl.endQuery(TQ.ext.TIME_ELAPSED_EXT); TQ.active = -1; TQ.n++;
+    }
+    function tqPoll() {
+      if (!TQ.on) return;
+      const gl = TQ.gl, disjoint = gl.getParameter(TQ.ext.GPU_DISJOINT_EXT);
+      while (TQ.n > 0) {
+        const r = TQ.recs[TQ.head];
+        if (!disjoint && !gl.getQueryParameter(r.q, gl.QUERY_RESULT_AVAILABLE)) break;
+        if (!disjoint) { const ms = gl.getQueryParameter(r.q, gl.QUERY_RESULT) / 1e6, k = TQ_STAGES[r.st]; gpuMs[k] += (ms - gpuMs[k]) * (gpuMs.ok ? 0.1 : 1); if (r.st === 2) gpuMs.ok = true; }
+        TQ.head = (TQ.head + 1) % TQ.recs.length; TQ.n--;
+      }
+      gpuMs.total = gpuMs.scene + gpuMs.bloom + gpuMs.comp;
+    }
+
     function pass(material, target) {
       quad.material = material;
       renderer.setRenderTarget(target);
@@ -21803,7 +21890,9 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     const post = {
       enabled: true,
       supported: supported,
-      info: { quality: 'high', samples: 0, levels: 0, passes: 0, renderW: 0, renderH: 0 },
+      info: { quality: 'high', degrade: 0, samples: 0, levels: 0, passes: 0, renderW: 0, renderH: 0, gpu: gpuMs },
+      // true -> per-stage GPU ms in post.info.gpu (when the browser exposes EXT_disjoint_timer_query_webgl2). Returns availability.
+      setGpuTiming: function (on) { return tqInit(!!on); },
       setSize: function (w, h, pr) {
         pr = pr || renderer.getPixelRatio();
         const nw = Math.max(1, Math.floor(w * pr)), nh = Math.max(1, Math.floor(h * pr));
@@ -21875,14 +21964,18 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
           if (!tmpC.equals(skyKey) || ex !== skyKeyEx) { skyKey.copy(tmpC); skyKeyEx = ex; displayToSceneLinear(tmpC, ex, skyLin); }
           skyU.value.set(skyLin.r, skyLin.g, skyLin.b);
         }
+        tqPoll();
         setActive(sceneRT, sw, sh);
         renderer.setRenderTarget(sceneRT);
+        tqBegin(0);
         renderer.render(scene, camera);
+        tqEnd();
         if (fog) fog.color.copy(fogSave);
         if (skyU) skyU.value.copy(skySave);
 
         renderer.autoClear = false;
         let passes = 1;
+        tqBegin(1);
         // 2. bloom: prefilter (threshold + Karis) -> 13-tap downs -> tent ups (additive)
         const L = mips.length;
         const thr = BLOOM.threshold * (1 - cloud);
@@ -21918,6 +22011,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
           pass(upMat, dst); passes++;
         }
 
+        tqEnd();
         // 3. composite
         const cu = compU;
         cu.tScene.value = sceneRT.texture; cu.tBloom.value = mips[0].texture;
@@ -21953,6 +22047,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         } else cu.uHeat.value.set(0.5, 0.27);
 
         const cm = compMat();
+        tqBegin(2);
         if (Q.fxaa) {
           cu.uRes.value.set(sw, sh);
           setActive(ldrRT, sw, sh);
@@ -21967,6 +22062,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
           pass(cm, null); passes++;
         }
 
+        tqEnd();
         renderer.autoClear = autoClear;
         info.autoReset = autoReset;
         const pi = post.info;
@@ -24879,6 +24975,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   }
   // trauma 0..1 decays; addTrauma from events. Also drives controller rumble.
   var trauma = 0, rumbleCool = 0;
+  var scrapeSeen = -1;
   function addTrauma(a) { trauma = Math.min(1, trauma + a); padRumble(Math.min(1, a * 1.6), Math.min(1, a * 1.1), 80 + a * 400); }
   function padRumble(strong, weak, ms) {
     if (rumbleCool > 0) return;
@@ -24991,6 +25088,11 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       camera.rotateX(ny * amt * 0.008); camera.rotateY(nx * amt * 0.008); camera.rotateZ(nz * amt * 0.012);
     }
     fov += st.ab * 2 + trauma * 1.5 * shakeScale;
+    // drift feel: FOV kick on drift entry, wider on the exit boost; shake on terrain scrapes
+    if (st.driftKickT > 0) fov += 3;
+    if (st.driftBoostT > 0) fov += 2 + 2 * (st.driftBoostLvl || 1);
+    if ((st.scrapes || 0) !== scrapeSeen) { if (scrapeSeen >= 0) addTrauma(st.scrapeWater ? 0.25 : 0.45); scrapeSeen = st.scrapes || 0; }
+    if (st.belly && st.scrapeT > 0) trauma = Math.max(trauma, 0.18);
     fovBase = lerp(fovBase, fov, 1 - Math.exp(-dt * 4));
     // zoom: hold R3 / G — smooth ease to 5x in ~200 ms
     zoomV += ((zoomHeld && started && !st.crashed ? 1 : 0) - zoomV) * (1 - Math.exp(-dt * 16));
