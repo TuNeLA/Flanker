@@ -26716,7 +26716,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   root.FL.navalSpot = function (world, e, n, want, avoid) {
     if (!world || !world.sampleH) return null;
     var dAt = fieldOf(world), best = null, bs = -1e18, W = want || 13000;
-    for (var r = 6000; r <= 26000; r += 1000) for (var k = 0; k < 36; k++) {
+    for (var r = W < 6000 ? 0 : 6000; r <= 26000; r += 1000) for (var k = 0; k < 36; k++) {
       var a = k / 36 * Math.PI * 2, pe = e + Math.sin(a) * r, pn = n + Math.cos(a) * r, dd = dAt(pe, pn);
       if (dd < 3800) continue;
       if (avoid && Math.hypot(pe - avoid.e, pn - avoid.n) < (avoid.r || 0) + 8000) continue;   // keep clear of the friendly carrier's course
@@ -26940,6 +26940,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     d.cat = 'navcarrier'; d.spd = 6; d.dir = Math.random() < 0.5 ? 1 : -1; d.ang = Math.random() * 6.283;
     d.psi0 = opts.heading != null ? (Math.abs(opts.heading) > 6.3 ? opts.heading * DEG : opts.heading) : 0;
     d.cx = opts.e != null ? opts.e : ent.pos.x; d.cz = opts.n != null ? -opts.n : ent.pos.z; d.R = 0;
+    if (w && !(w.sampleH(d.cx, -d.cz) < -14)) { var ns = root.FL.navalSpot(w, d.cx, -d.cz, 0); if (ns) { d.cx = ns.e; d.cz = -ns.n; } }   // never on land (the container would 'crash')
     var Rs = [opts.radius || 3000, 2200, 1500, 900];
     for (var ri = 0; ri < Rs.length && !d.R && w; ri++) {
       var ok = true;
@@ -28419,6 +28420,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       coop.parentNode.insertBefore(f, coop.nextSibling);
     }
     var bh = document.getElementById('bHost'); if (bh) bh.textContent = 'Create lobby';
+    var cs = document.getElementById('coStatus'); if (cs && /^To host/.test(cs.textContent)) cs.textContent = 'To host: push Create lobby. To join: find a lobby below, or type the room code and push Join.';
   })();
 
   function str(v, n) { return String(v == null ? '' : v).replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, n); }
@@ -28438,7 +28440,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     var $ = api.$ || function (id) { return document.getElementById(id); };
     if (!$('scrLobby')) return null;
     var tele = api.tele || {}, base = String(tele.url || '').replace(/\/+$/, '').replace(/\/rest\/v1(\/.*)?$/, ''), key = tele.key || '', ver = str(tele.version, 16);
-    var S = blank(), attached = null, findT = 0, findSig = '', lastFindOk = 0, myRate = [], hostRate = {};
+    var S = blank(), attached = null, waitT = 0, findT = 0, findSig = '', lastFindOk = 0, myRate = [], hostRate = {};
     function blank() {
       return { open: false, host: false, code: '', name: '', pub: false, max: 4, mj: true, status: 'lobby', ready: {}, rank: {}, members: {}, banned: {},
         myReady: false, gotInfo: false, prev: null, lastB: 0, lastBeat: 0, beatSig: '', pending: null };
@@ -28657,7 +28659,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     function sendChat() {
       var n = net(), inp = $('lrSay'), x = str(inp.value, 120);
       if (!x || !S.open || !n || !n.connected) return;
-      if (!rateOk(myRate, Date.now())) { addSys('Wait a moment. Then send again.'); return; }
+      if (!rateOk(myRate, Date.now())) { if (Date.now() - waitT > 3000) { waitT = Date.now(); addSys('Wait a moment. Then send again.'); } return; }
       inp.value = '';
       if (S.host) { addChat(api.name(), x, true); n.sendEvent({ t: 'chat', id: n.myId, n: str(api.name(), 24), x: x }); }
       else n.sendEvent({ t: 'chat', x: x });
@@ -28804,7 +28806,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       $('lrResume').hidden = !(t.started && t.paused);
       $('lrLeave').textContent = host ? 'Close lobby' : 'Leave lobby';
       var note;
-      if (host) note = t.started ? 'You fly. New pilots push Join the flight.' + (S.mj ? '' : ' Late join is off.') : nCli ? nReady + ' of ' + nCli + ' pilots are ready. Push Start mission. All pilots take off at the same time.' : 'Send the room code or the link to your friends. You can also start alone.';
+      if (host) note = t.started ? 'You fly. New pilots push Join the flight.' + (S.mj ? '' : ' Late join is off.') : nCli ? 'Ready: ' + nReady + ' of ' + nCli + '. Push Start mission. All pilots take off at the same time.' : 'Send the room code or the link to your friends. You can also start alone.';
       else note = fly ? (t.started ? 'You fly with the squadron.' : 'The squadron is flying. Push Join the flight. You start in the air near your team.') : 'Push Ready. The host starts the mission. All pilots take off at the same time.';
       $('lrNote').textContent = note;
       // settings
@@ -30349,6 +30351,20 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   // ---- own bombs / rockets / missiles in flight: small diamond on each, X + countdown at the predicted impact
   var ORP = {}, ORI = {};
   function drawOrdnance(u, ch) {
+    // guided-bomb release cue (only with a designated target): IN RANGE (green) / TOO FAR / TOO CLOSE (amber)
+    if (ch.bombCue && ch.weaponType === 'bomb') {
+      var cue = ch.bombCue, cc = cue === 'IN RANGE' ? HC : AMB, by = H * 0.5 + Math.min(W, H) * 0.13;
+      spaced('BOMB · ' + cue, W / 2, by, 13 * u, cc, 3 * u, W * 0.4);
+      var br = ch.bombRange;
+      if (br && br.max > br.min) {
+        var w = 140 * u, x0 = W / 2 - w / 2, y0 = by + 12 * u, k = function (d) { return x0 + w * clamp(d / (br.max * 1.3), 0, 1); };
+        var sb0 = hx.shadowBlur; hx.shadowBlur = 0;
+        hx.fillStyle = 'rgba(2,13,9,.6)'; hx.fillRect(x0, y0, w, 4 * u);
+        hx.fillStyle = 'rgba(147,255,196,.55)'; hx.fillRect(k(br.min), y0, k(br.max) - k(br.min), 4 * u);
+        hx.fillStyle = WHITE; hx.fillRect(k(br.dist) - 1.5 * u, y0 - 3 * u, 3 * u, 10 * u);
+        hx.shadowBlur = sb0;
+      }
+    }
     var L = ch.ordnance; if (!L || !L.length) return;
     var sb = hx.shadowBlur; hx.shadowBlur = 0;
     var pd = new Path2D(), px = new Path2D();
@@ -31926,7 +31942,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793152093', updShown = false;
+  var BUILD = '1793152241', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
