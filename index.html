@@ -238,6 +238,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
           <h3><span class="sec">2.2</span>Camera</h3>
           <label class="opt"><span>Camera roll<small>The view turns with the jet.</small></span>
             <select id="optRoll"><option value="0">Level</option><option value="0.4" selected>Partial</option><option value="1">Full</option></select></label>
+          <label class="opt"><span>Zoom<small>R3 or G. Zooms on the crosshair.</small></span>
+            <select id="optZoom"><option value="hold" selected>Hold</option><option value="toggle">Toggle</option></select></label>
           <label class="opt"><span>Camera shake</span><input type="range" id="optShake" min="0" max="1" step="0.05" value="0.35"></label>
           <h3 style="margin-top:14px"><span class="sec">2.3</span>Sound</h3>
           <label class="opt"><span>Sound</span><input type="checkbox" id="optSound" checked></label>
@@ -26429,7 +26431,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       inp.boost = B(1) || K('Space');
       inp.drift = B(0) || K('KeyV') || (mfly && mouseBtn.r) || touch.drift;
       if (inp.drift && tp * (invert ? -1 : 1) > 0) inp.cobra = true;   // keyboard: drift + pull key = Cobra at once (no ramp wait)
-      zoomHeld = B(11) || K('KeyG');
+      if (zoomMode === 'toggle') { if (E(11) || KP('KeyG')) zoomLatch = !zoomLatch; zoomHeld = zoomLatch; }
+      else { zoomHeld = B(11) || K('KeyG'); zoomLatch = false; }
       if (KP('KeyC') || E(8)) { view = (view + 1) % VIEWS.length; flash('CAMERA: ' + VIEWS[view]); camReset = true; }
       if (KP('KeyT')) spawn('air');
       if (B(8) && B(9) && (E(8) || E(9))) setDbg(!dbgOn);
@@ -26587,6 +26590,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   $('optSens').addEventListener('input', function (e) { mouseSens = parseFloat(e.target.value) || 1; try { localStorage.setItem('flk_msens', String(mouseSens)); } catch (er) {} });
   if ($('optMouseMode')) { $('optMouseMode').value = mouseMode; $('optMouseMode').addEventListener('change', function (e) { setMouseMode(e.target.value); if (typeof updateSchemeUi === 'function') updateSchemeUi(); }); }
   $('optQuality').addEventListener('change', function (e) { if (booted) setQuality(e.target.value); });
+  if ($('optZoom')) { $('optZoom').value = zoomMode; $('optZoom').addEventListener('change', function (e) { zoomMode = e.target.value === 'toggle' ? 'toggle' : 'hold'; zoomLatch = false; try { localStorage.setItem('flk_zoom', zoomMode); } catch (er) {} }); }
   if ($('optRes')) { $('optRes').value = resMode; $('optRes').addEventListener('change', function (e) { setResMode(e.target.value); }); }
   $('optShake').addEventListener('input', function (e) { shakeScale = parseFloat(e.target.value) || 0; try { localStorage.setItem('flk_shake', String(shakeScale)); } catch (er) {} });
   try { $('optRadio').value = localStorage.getItem('flk_radio') || 'important'; } catch (e) {}
@@ -26909,7 +26913,9 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   var camOff = new V3(), camUp = new V3(0, 1, 0), tgtPos = new V3(), tmp = new V3(), tmp2 = new V3(), tmp3 = new V3();
   var lookQ = new T.Quaternion(), eul = new T.Euler(), flyPos = new V3(), flyAge = 99;
   var camQ = new T.Quaternion(), camQL = new T.Quaternion(), tgtQ = new T.Quaternion(), UPW = new V3(0, 1, 0), rigM = new T.Matrix4(), rX = new V3(), rY = new V3(), rZ = new V3();
-  var zoomHeld = false, zoomV = 0, fovBase = 62;
+  var zoomHeld = false, zoomV = 0, fovBase = 62, zoomLatch = false, zoomMode = 'hold';
+  try { zoomMode = localStorage.getItem('flk_zoom') === 'toggle' ? 'toggle' : 'hold'; } catch (e) {}
+  var zq0 = new THREE.Quaternion(), zq1 = new THREE.Quaternion(), zT = new V3(), zUp = new V3();
   var lookS = { y: 0, vy: 0, p: 0, vp: 0 }, distS = { x: 22, v: 0 }, shakeScale = 0.35, rollFollow = 0.4;
   try { var rfS = localStorage.getItem('flk_roll'); if (rfS != null) rollFollow = parseFloat(rfS); } catch (e) {}
   try { var ss = localStorage.getItem('flk_shake'); if (ss != null) shakeScale = parseFloat(ss); } catch (e) {}
@@ -27050,6 +27056,15 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     // zoom: hold R3 / G — smooth ease to 5x in ~200 ms
     zoomV += ((zoomHeld && started && !st.crashed ? 1 : 0) - zoomV) * (1 - Math.exp(-dt * 16));
     var ze = zoomV * zoomV * (3 - 2 * zoomV);
+    if (st.crashed) zoomLatch = false;
+    // zoom aims the camera at the crosshair (mouse-aim circle, else the gun boresight), not at the jet
+    if (ze > 0.001 && mode !== 'FLYBY') {
+      if (mouseAimOn()) zT.copy(camera.position).addScaledVector(aimDir, 2500);
+      else zT.copy(st.pos).addScaledVector(phys.axes().fwd, 2500);
+      zq0.copy(camera.quaternion); zUp.copy(camera.up); camera.up.set(0, 1, 0).applyQuaternion(zq0);
+      camera.lookAt(zT); zq1.copy(camera.quaternion); camera.up.copy(zUp);
+      camera.quaternion.copy(zq0).slerp(zq1, ze);
+    }
     camera.fov = fovBase / (1 + 4 * ze); camera.updateProjectionMatrix();
   }
 
@@ -28571,7 +28586,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   function pfFrame(ms) {
     var tot = 0, big = 0, bi = 0;
     for (var i = 0; i < 9; i++) { PF.sum[i] += PF.cur[i]; tot += PF.cur[i]; if (PF.cur[i] > big) { big = PF.cur[i]; bi = i; } }
-    PF.n++;
+    PF.n++; PF.frameSum = (PF.frameSum || 0) + ms;
     if (ms > 60 && playT > 3) glog('HITCH ' + ms.toFixed(0) + ' ms: ' + PF_NAMES[bi] + ' ' + big.toFixed(0) + ' ms (cpu ' + tot.toFixed(0) + ')' + (bi === 6 ? ' — likely shader compile / upload' : ''));
   }
   function pfLine() {
@@ -28579,9 +28594,15 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     for (var i = 0; i < 9; i++) { var v = PF.sum[i] / n; tot += v; parts.push(PF_NAMES[i] + ' ' + v.toFixed(2)); }
     var gpu = PF.gpuN ? PF.gpuSum / PF.gpuN : -1;
     var bound = gpu < 0 ? 'gpu ?' : (gpu > tot ? 'GPU-bound' : 'CPU-bound');
+    if (gpu < 0) {
+      // no timer query (Firefox, Safari): estimate. GPU-wait proxy = frame time minus non-render CPU; a large 'render'
+      // section also means the WebGL queue blocks on the GPU (backpressure). Includes vsync wait when not GPU-bound.
+      var frameAvg = (PF.frameSum || 0) / n, rnd = PF.sum[6] / n, est = Math.max(0, frameAvg - (tot - rnd));
+      bound = 'gpu~ ' + est.toFixed(1) + ' ms (frame ' + frameAvg.toFixed(1) + ')' + (rnd > 4 || est > Math.max(tot - rnd, 1) * 2 ? ' GPU-bound?' : ' CPU-bound?');
+    }
     var ents = 0; try { ents = ((combat && combat.hud().targets) || []).length; } catch (e) {}
     var line = 'cpu ms/frame: ' + parts.join(', ') + ' = ' + tot.toFixed(2) + ' | gpu ' + (gpu < 0 ? 'n/a' : gpu.toFixed(2) + ' ms (max ' + PF.gpuMax.toFixed(1) + ')') + ' | ' + bound + ' | px ' + Math.round(W * H * Math.pow(basePR() * (resScale || 1), 2) / 1000) + 'k | enemies ' + ents;
-    PF.sum.fill(0); PF.n = 0; PF.gpuSum = 0; PF.gpuN = 0; PF.gpuMax = 0;
+    PF.sum.fill(0); PF.n = 0; PF.frameSum = 0; PF.gpuSum = 0; PF.gpuN = 0; PF.gpuMax = 0;
     return line;
   }
   function dbgTick(dt) {
@@ -28626,23 +28647,51 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     var sorted = rafTimes.slice().sort(function (a, b) { return a - b; });
     refreshMs = Math.min(refreshMs, sorted[Math.floor(sorted.length * 0.1)]); // fastest typical frame ≈ display refresh
     var med = sorted[Math.floor(sorted.length * 0.5)];
-    var target = Math.max(refreshMs, 1000 / 100) * 1.1;              // keep resolution high; ~100 fps is plenty
+    // goal ~90 fps: on 144-240 Hz screens do not trade resolution for fps above that (refresh-capped below it)
+    var target = Math.max(refreshMs, 1000 / 90) * 1.1;
     var old = resScale;
     if (resMode !== 'auto') return;
-    if (med > target * 1.2) resScale = Math.max(0.75, resScale - 0.05);
+    // ladder: resolution down to 75% -> cheaper quality (ultra -> high -> high w/o MSAA -> fast) -> resolution down to 60%
+    var floor = autoQ.floorLow ? 0.6 : 0.75;
+    if (med > target * 1.2) resScale = Math.max(floor, resScale - 0.05);
     else if (med < target * 0.9 && resScale < 1) resScale = Math.min(1, resScale + 0.05);
     if (resScale !== old) { applyResScale(); glog('render scale ' + Math.round(resScale * 100) + '% (frame ' + med.toFixed(1) + ' ms)'); }
+    // frame times are quantized to vsync multiples, so judge "still slow at the floor" over ~4 s
+    if (resScale <= floor + 1e-6 && med > target * 1.4) autoQ.slowT += 1.5; else autoQ.slowT = 0;
+    if (autoQ.slowT >= 4 && Math.abs(playT - autoQ.lastT) > 6) { autoQ.slowT = 0; autoQ.lastT = playT; autoStepDown(med); }
+  }
+  var autoQ = { slowT: 0, lastT: -99, floorLow: false };
+  // first-run preset by GPU: integrated / mobile / software -> fast, everything else -> high (ultra only by choice)
+  function defaultQuality() {
+    var g = String(gpuName() || '').toLowerCase();
+    if (/swiftshader|llvmpipe|software|microsoft basic|mali|adreno|powervr|apple gpu|intel|iris|uhd|hd graphics|arc\b/.test(g)) return 'fast';
+    if (/radeon(\(tm\))? graphics|vega \d+ graphics|radeon (r[2-7]|hd [4-8]\d{3}[dg]|vega 3|vega 8)|amd radeon\(tm\) [0-9]+m/.test(g)) return 'fast';  // AMD APUs
+    if (navigator.maxTouchPoints > 0 && Math.min(screen.width, screen.height) < 900) return 'fast';  // phones / tablets
+    return 'high';
+  }
+  function autoStepDown(med) {
+    var deg = post && post.getDegrade ? post.getDegrade() : 0;
+    if (quality === 'ultra') { setQuality('high', true); flash('GRAPHICS SET TO HIGH — SLOW GPU'); }
+    else if (quality === 'high' && deg < 1 && post && post.setDegrade) { post.setDegrade(1); }   // MSAA -> FXAA, keeps shadows
+    else if (quality === 'high') { setQuality('fast', true); flash('GRAPHICS SET TO FAST — SLOW GPU'); }
+    else if (!autoQ.floorLow) autoQ.floorLow = true;
+    else return;
+    glog('auto quality -> ' + quality + (post && post.getDegrade ? ' (post step ' + post.getDegrade() + ')' : '') + ', res floor ' + (autoQ.floorLow ? 60 : 75) + '% (frame ' + med.toFixed(1) + ' ms)');
   }
   function applyResScale() {
     if (fx && fx.setResolutionScale) fx.setResolutionScale(resScale);
     if (post && post.setResolutionScale) post.setResolutionScale(resScale);
     else { renderer.setPixelRatio(basePR() * resScale); renderer.setSize(W, H, false); }
   }
-  function setQuality(q) {
+  // auto = an automatic step (slow GPU): not saved, the user's own pick stays in 'flk_q'
+  function setQuality(q, auto) {
     quality = q;
-    try { localStorage.setItem('flk_q', q); } catch (e) {}
-    renderer.shadowMap.enabled = q !== 'fast';
-    scene.traverse(function (o) { if (o.material) { (Array.isArray(o.material) ? o.material : [o.material]).forEach(function (m) { m.needsUpdate = true; }); } });
+    if (!auto) { try { localStorage.setItem('flk_q', q); } catch (e) {} autoQ.slowT = 0; autoQ.floorLow = false; if (post && post.setDegrade) post.setDegrade(0); }
+    var shOn = q !== 'fast';
+    if (renderer.shadowMap.enabled !== shOn) {   // shadow on/off changes every lit shader: recompile only then (avoids a hitch on ultra <-> high)
+      renderer.shadowMap.enabled = shOn;
+      scene.traverse(function (o) { if (o.material) { (Array.isArray(o.material) ? o.material : [o.material]).forEach(function (m) { m.needsUpdate = true; }); } });
+    }
     if (post && post.setQuality) post.setQuality(q === 'fast' ? 'fast' : q);
     if (fx && fx.setQuality) { try { fx.setQuality(q); } catch (e) {} }
     var sel = $('optQuality'); if (sel) sel.value = q;
@@ -28814,8 +28863,10 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       setAircraft(aircraftId, true);
       vapor = fx.createVapor();
       if (FL.createPost) { post = FL.createPost(renderer, scene, camera); post.setSize(W, H, Math.min(devicePixelRatio || 1, 1.6)); }
-      try { quality = localStorage.getItem('flk_q') || 'high'; } catch (e) {}
-      setQuality(quality);
+      var savedQ = null; try { savedQ = localStorage.getItem('flk_q'); } catch (e) {}
+      quality = savedQ === 'ultra' || savedQ === 'high' || savedQ === 'fast' ? savedQ : defaultQuality();
+      setQuality(quality, quality !== savedQ);   // a GPU-based default is not stored as the user's choice
+      glog('graphics ' + quality + (quality !== savedQ ? ' (default for this GPU)' : ' (your setting)'));
       comms = FL.createComms ? FL.createComms({ sound: sound }) : null;
       phys.reset('runway', { e: world.spawn.e, n: world.spawn.n, h: world.airportH, hdgDeg: world.spawn.hdgDeg });
       player = {
