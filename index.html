@@ -41558,6 +41558,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     scene.add(plane.group);
     phys.setSpec(spec, upgradeMods);
     if (combat && combat.setLocalInfo) combat.setLocalInfo({ name: playerName(), aircraftId: id });
+    try { if (net && net.setName) net.setName(playerName(), id); } catch (e) {}   // lobby list = flown jet (host drone checks read it)
     if (combat && combat.setPlayerModel) { try { combat.setPlayerModel(plane); } catch (e) {} }
     storesSig = ''; syncPaint();
     if (!quiet) flash((spec ? spec.name : 'Su-27') + ' READY');
@@ -44851,7 +44852,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793186926', updShown = false;
+  var BUILD = '1793187464', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
