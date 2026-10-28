@@ -3010,13 +3010,14 @@ body.flk-cover > .xm-pop, body.flk-cover > .xm-ban, body.flk-cover > .xm-card { 
     const mat = patchFog(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0.2 }), ctx.fogU);
     const im = new THREE.InstancedMesh(geo, mat, count); im.frustumCulled = false; im.castShadow = true; im.name = 'traffic';
     const R = makeRng(4242), pal = [0xd9d9d4, 0xb8342c, 0x2e5d9a, 0xe0b62e, 0x3f6f3a, 0x6d6f73, 0xe8e8e2, 0x1e2a36, 0xc66a2a];
+    const VSC = (window.FL && window.FL.VEH_SCALE) || 1;   // vehicle size (combat.js FL.VEH_SCALE); lane offset keeps the truck on the road
     const tmpC = new THREE.Color();
     const V = [];
     let tot = 0; for (const l of lanes) tot += l.P.length;
     for (let i = 0; i < count; i++) {
       let pick = R() * tot, li = 0; while (pick > lanes[li].P.length && li < lanes.length - 1) { pick -= lanes[li].P.length; li++; }
       const ln = lanes[li], len = (ln.P.length - 1) * ROAD_STEP;
-      V.push({ l: ln, s: R() * len, len: len, dir: R() < 0.5 ? 1 : -1, v: 14 + R() * 14, sc: 0.75 + R() * 0.45 });
+      V.push({ l: ln, s: R() * len, len: len, dir: R() < 0.5 ? 1 : -1, v: 14 + R() * 14, sc: (0.75 + R() * 0.45) * VSC });
       const hx = pal[Math.floor(R() * pal.length)]; const l3 = lin(hx); tmpC.setRGB(l3[0], l3[1], l3[2]); im.setColorAt(i, tmpC);
     }
     ctx.add(im);
@@ -3028,7 +3029,8 @@ body.flk-cover > .xm-pop, body.flk-cover > .xm-ban, body.flk-cover > .xm-card { 
         if (c.s < 0) { c.s = 0; c.dir = 1; } else if (c.s > c.len) { c.s = c.len; c.dir = -1; }
         const f = c.s / ROAD_STEP, k = Math.min(Math.floor(f), P.length - 2), t = f - k, a = P[k], bb = P[k + 1];
         const dx = bb[0] - a[0], dy = bb[1] - a[1], l = Math.hypot(dx, dy) || 1, ux = dx / l * c.dir, uy = dy / l * c.dir;
-        const off = 2.6 * (c.l.kind === 'hwy' ? 1.4 : 1);
+        // lane centre: half the road (hw 4.6 / 7) less the truck half width (1.2 x sc), at least 0.3 m right of the centre line
+        const off = c.l.kind === 'hwy' ? Math.max(0.3, Math.min(3.64, 7 - 1.25 * c.sc)) : Math.max(0.3, Math.min(2.6, 4.6 - 1.25 * c.sc));
         const e = a[0] + dx * t + uy * off, n = a[1] + dy * t - ux * off, y = Y[k] + (Y[k + 1] - Y[k]) * t + 0.05;
         // local -z = forward -> world (ux, -uy)? forward world = (ux, 0, -uy); right = (uy, 0, ux)
         const s = c.sc, o = i * 16;
@@ -18732,6 +18734,11 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
   var _q = new T.Quaternion(), _m4 = new T.Matrix4();
   var tA = V(), tB = V(), tC = V(), tD = V(), tE = V(), tF = V(), tG = V(), tH = V();
   var UP = V(0, 1, 0);
+  // unit size (FL.SHIP_SCALE / FL.VEH_SCALE, set in combat.js): the host scales the model group + hit size of kinds with
+  // def.scaleAs; the code here scales what depends on size (spacing, muzzles, smoke, sinking, rail track). ent.scl = applied.
+  function vehS() { return FL.VEH_SCALE || 1; }
+  function scl(ent) { return (ent && ent.scl) || 1; }
+  function colGap() { return 30 * vehS(); }          // armored column: metres between units on the path
   function ensure(ent) {
     if (!ent.pos) ent.pos = V(); if (!ent.vel) ent.vel = V(); if (!ent.q) ent.q = new T.Quaternion();
     if (!ent.data) ent.data = {};
@@ -20149,10 +20156,10 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
   function buildTrack(ctx, P) {
     var w = ctx.world, n = P.x.length, i;
     var bed = { p: [], n: [], uv: [], ix: [] }, emb = { p: [], ix: [] }, rail = { p: [], ix: [] };
-    var BW = 2.3, RG = 0.75;
+    var TS = vehS(), BW = 2.3 * TS, RG = 0.75 * TS;      // gauge, bed and rail height follow the (scaled) train cars
     function nrm(i) { var a = Math.max(0, i - 1), b = Math.min(n - 1, i + 1), dx = P.x[b] - P.x[a], dz = P.z[b] - P.z[a], l = Math.hypot(dx, dz) || 1; return [-dz / l, dx / l]; }
     for (i = 0; i < n; i++) {
-      var s = nrm(i), x = P.x[i], z = P.z[i], y = P.y[i] + 0.25, v = P.cum[i] / 2.6;
+      var s = nrm(i), x = P.x[i], z = P.z[i], y = P.y[i] + 0.25 * TS, v = P.cum[i] / (2.6 * TS);
       bed.p.push(x - s[0] * BW, y, z - s[1] * BW, x + s[0] * BW, y, z + s[1] * BW); bed.uv.push(0, v, 1, v);
       // embankment slopes down to ground (+ a little below), 1:1.4
       for (var side = -1; side <= 1; side += 2) {
@@ -20162,8 +20169,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       }
       // rails: top + two sides each
       for (var r = -1; r <= 1; r += 2) {
-        var rx = x + r * s[0] * RG, rz = z + r * s[1] * RG, hw = 0.06, ry = y + 0.34;
-        rail.p.push(rx - s[0] * hw, ry, rz - s[1] * hw, rx + s[0] * hw, ry, rz + s[1] * hw, rx - s[0] * hw, y + 0.12, rz - s[1] * hw, rx + s[0] * hw, y + 0.12, rz + s[1] * hw);
+        var rx = x + r * s[0] * RG, rz = z + r * s[1] * RG, hw = 0.06 * TS, ry = y + 0.34 * TS;
+        rail.p.push(rx - s[0] * hw, ry, rz - s[1] * hw, rx + s[0] * hw, ry, rz + s[1] * hw, rx - s[0] * hw, y + 0.12 * TS, rz - s[1] * hw, rx + s[0] * hw, y + 0.12 * TS, rz + s[1] * hw);
       }
     }
     for (i = 0; i < n - 1; i++) {
@@ -20191,7 +20198,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     // ends: buffer stops
     for (var e = 0; e < 2; e++) {
       var k = e ? n - 1 : 0, sn = nrm(k), stop = new T.Mesh(cached('bstop', function () { return box(3.2, 1.4, 0.8); }), mat('red'));
-      stop.position.set(P.x[k], P.y[k] + 1.0, P.z[k]); stop.rotation.y = Math.atan2(sn[0], sn[1]); grp.add(stop);
+      stop.position.set(P.x[k], P.y[k] + 1.0 * TS, P.z[k]); stop.rotation.y = Math.atan2(sn[0], sn[1]); stop.scale.setScalar(TS); grp.add(stop);
     }
     return grp;
   }
@@ -20225,8 +20232,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     d.cars = []; d.offs = [];
     var off = 0;
     for (var i = 0; i < list.length; i++) {
-      var L = CAR_LEN[list[i]] || 14;
-      off += L / 2; d.offs.push(off); off += L / 2 + 1.4;
+      var L = (CAR_LEN[list[i]] || 14) * vehS();
+      off += L / 2; d.offs.push(off); off += L / 2 + 1.4 * vehS();
     }
     d.trainLen = off;
     d.u = clamp(opts.u !== undefined ? opts.u : RR(ctx, 0.3, 0.7) * d.path.len, d.trainLen + 5, d.path.len - 5);
@@ -20268,8 +20275,9 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
   }
   function carPose(ent, P, u, L) {
     // car nose points toward decreasing u (front of the train = largest u ... we put the loco at the u-front)
+    var ts = vehS(); L *= ts;                      // L: model length (unscaled)
     pathAt(P, u + L * 0.34, _pa); pathAt(P, u - L * 0.34, _pb);
-    ent.pos.set((_pa.x + _pb.x) / 2, (_pa.y + _pb.y) / 2 + 0.6, (_pa.z + _pb.z) / 2);
+    ent.pos.set((_pa.x + _pb.x) / 2, (_pa.y + _pb.y) / 2 + 0.6 * ts, (_pa.z + _pb.z) / 2);
     tA.set(_pa.x - _pb.x, _pa.y - _pb.y, _pa.z - _pb.z);
     if (tA.lengthSq() > 1e-6) qFromFwdUp(ent.q, tA, UP);
   }
@@ -20297,7 +20305,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       var M = ent.model || {}, det = perceive(ent, dt, ctx, 5000);
       if (det && M.yaw) { _iq.copy(ent.q).invert(); tB.subVectors(det.pos, ent.pos).applyQuaternion(_iq); M.yaw.rotation.y = approachA(M.yaw.rotation.y, Math.atan2(-tB.x, -tB.z), dt); if (M.pitch) M.pitch.rotation.x = clamp(Math.atan2(tB.y, Math.hypot(tB.x, tB.z)), 0, 0.3); }
     }
-    if (ent.hp < (ent.maxHp || 100) * 0.5 && R(ctx) < dt * 6) puff(ctx, tA.copy(ent.pos).setY(ent.pos.y + 4), 6, 4, 0.2);
+    if (ent.hp < (ent.maxHp || 100) * 0.5 && R(ctx) < dt * 6) puff(ctx, tA.copy(ent.pos).setY(ent.pos.y + 4 * scl(ent)), 6 * scl(ent), 4, 0.2);
   }
 
   // ======================================================================= armored column
@@ -20324,8 +20332,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     }
     d.path = resample(ctx, route || planPath(ctx, A, B, 120), 15, false);
     var n = clamp(opts.units || (3 + ((R(ctx) * 4) | 0)), 3, 6);
-    d.u = RR(ctx, 0.2, 0.6) * d.path.len + n * 30;
-    d.u = clamp(d.u, n * 30, d.path.len);
+    d.u = RR(ctx, 0.2, 0.6) * d.path.len + n * colGap();
+    d.u = clamp(d.u, n * colGap(), d.path.len);
     pathAt(d.path, d.u, _pa); ent.pos.set(_pa.x, _pa.y + 2, _pa.z);   // copy, never replace ent.pos
     reg(ent);
     d.units = [];
@@ -20349,8 +20357,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     if (d.scT > 0) stopped = true;
     var n = d.units.length, P = d.path;
     if (!stopped) d.u += d.dir * d.spd * dt;
-    if (d.dir > 0 && d.u >= P.len) { d.u = P.len - (n - 1) * 30; d.dir = -1; d.flip = true; }
-    else if (d.dir < 0 && d.u <= 0) { d.u = (n - 1) * 30; d.dir = 1; d.flip = true; }
+    if (d.dir > 0 && d.u >= P.len) { d.u = P.len - (n - 1) * colGap(); d.dir = -1; d.flip = true; }
+    else if (d.dir < 0 && d.u <= 0) { d.u = (n - 1) * colGap(); d.dir = 1; d.flip = true; }
     if (d.flip) {
       // the old tail becomes the new head: unit i (at u_old - i*30*dir_old) keeps its spot with index n-1-i
       d.flip = false; d.units.reverse();
@@ -20362,8 +20370,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
   }
   var _n = V();
   function groundPose(ent, ctx, x, z, yaw) {
-    var w = ctx.world, h = hAt(w, x, z);
-    _n.set(hAt(w, x - 2.5, z) - hAt(w, x + 2.5, z), 5, hAt(w, x, z - 2.5) - hAt(w, x, z + 2.5)).normalize();
+    var w = ctx.world, h = hAt(w, x, z), r = 2.5 * scl(ent);       // terrain normal over the (scaled) footprint
+    _n.set(hAt(w, x - r, z) - hAt(w, x + r, z), 2 * r, hAt(w, x, z - r) - hAt(w, x, z + r)).normalize();
     tA.set(-Math.sin(yaw), 0, -Math.cos(yaw));
     tA.addScaledVector(_n, -tA.dot(_n)).normalize();
     qFromFwdUp(ent.q, tA, _n);
@@ -20376,7 +20384,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     ent.hp = ent.maxHp = [140, 80, 70][v]; ent.points = [450, 300, 400][v];
     d.gunCd = RR(ctx, 0, 3); d.burst = 0; d.samCd = RR(ctx, 4, 8);
     if (d.mount && d.mount.data && d.mount.data.path) {
-      var td = d.mount.data; pathAt(td.path, clamp(td.u - d.idx * 30 * td.dir, 0, td.path.len), d.seg);
+      var td = d.mount.data; pathAt(td.path, clamp(td.u - d.idx * colGap() * td.dir, 0, td.path.len), d.seg);
       d.yaw = Math.atan2(-d.seg.tx * td.dir, -d.seg.tz * td.dir);
       groundPose(ent, ctx, d.seg.x, d.seg.z, d.yaw);
     } else {
@@ -20394,12 +20402,12 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     if (d.mount && mountGone(ent)) d.mount = null;           // column container gone: stay as standalone
     var px = ent.pos.x, pz = ent.pos.z;
     if (d.mount && d.mount.data && d.mount.data.path) {
-      var td = d.mount.data, u = clamp(td.u - d.idx * 30 * td.dir, 0, td.path.len);
+      var td = d.mount.data, u = clamp(td.u - d.idx * colGap() * td.dir, 0, td.path.len), us = scl(ent);
       pathAt(td.path, u, d.seg);
       var wantYaw = Math.atan2(-d.seg.tx * td.dir, -d.seg.tz * td.dir), dy = wrapA(wantYaw - d.yaw);
       // scatter offset (column stopped under attack): drive diagonally off the road, then back on
-      var offW = td.scT > 0 ? (d.idx & 1 ? 1 : -1) * (18 + (d.idx % 3) * 7) : 0, offOld = d.off || 0;
-      d.off = offOld + clamp(offW - offOld, -3 * dt, 3 * dt);
+      var offW = td.scT > 0 ? (d.idx & 1 ? 1 : -1) * (18 + (d.idx % 3) * 7) * us : 0, offOld = d.off || 0;
+      d.off = offOld + clamp(offW - offOld, -3 * us * dt, 3 * us * dt);
       if (Math.abs(d.off - offOld) > 1e-4) wantYaw = Math.atan2(-(d.seg.tx * td.dir * 0.3 * dt - d.seg.tz * (d.off - offOld)), -(d.seg.tz * td.dir * 0.3 * dt + d.seg.tx * (d.off - offOld)));
       if (d.turning) { d.yaw = approachA(d.yaw, wantYaw, 0.9 * dt); if (Math.abs(dy) < 0.05) d.turning = false; }
       else { d.yaw = approachA(d.yaw, wantYaw, 1.5 * dt); px = d.seg.x - d.seg.tz * d.off; pz = d.seg.z + d.seg.tx * d.off; }
@@ -20423,13 +20431,13 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       if (v === 2) d.trackT = dist > 800 && dist < 5700 * ars ? (d.trackT || 0) + dt : Math.max(0, (d.trackT || 0) - 2 * dt);
       if (v === 2 && d.samCd <= 0 && d.trackT >= lerp(4, 1.8, as_) * ((FL.SAM_WARN && FL.SAM_WARN.mul) || 1) && dist > 800 && dist < 5000 * ars) {
         d.samCd = RR(ctx, 14, 18) * lerp(2, 1, as_);
-        worldPt(ent, 0, 3.2, 0, _from);
+        worldPt(ent, 0, 3.2 * scl(ent), 0, _from);
         missileOut(ent, ctx, _from, det, { speed: 560, g: 26, kind: 'heli' });
-        puff(ctx, _from, 6, 3, 0.85);
+        puff(ctx, _from, 6 * scl(ent), 3, 0.85);
       }
-      if (d.burst > 0) { d.burst -= dt; worldPt(ent, 0, 2.6, -2.5, _from); gunAt(ent, ctx, _from, det, { rate: 8, damage: 3, spread: 0.012 * lerp(2.5, 1, as_), color: 0xffd060 }); }
+      if (d.burst > 0) { d.burst -= dt; worldPt(ent, 0, 2.6 * scl(ent), -2.5 * scl(ent), _from); gunAt(ent, ctx, _from, det, { rate: 8, damage: 3, spread: 0.012 * lerp(2.5, 1, as_), color: 0xffd060 }); }
     } else d.burst = 0;
-    if (ent.hp < (ent.maxHp || 100) * 0.5 && R(ctx) < dt * 5) puff(ctx, tA.copy(ent.pos).setY(ent.pos.y + 3), 5, 4, 0.2);
+    if (ent.hp < (ent.maxHp || 100) * 0.5 && R(ctx) < dt * 5) puff(ctx, tA.copy(ent.pos).setY(ent.pos.y + 3 * scl(ent)), 5 * scl(ent), 4, 0.2);
     syncGroup(ent);
   }
 
@@ -20601,13 +20609,17 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       }
     }
     ent.pos.y = 0;
+    // room for the whole (scaled) hull: move to the nearest open water within 1.5 km when the bow or stern would touch land
+    var hl = SHIP.missile.L * 0.5 * scl(ent);
+    function room(x, z) { if (!(waterAt(w, x, z) && hAt(w, x, z) < -3)) return false; for (var a = 0; a < 8; a++) if (!waterAt(w, x + Math.cos(a * 0.785) * hl, z + Math.sin(a * 0.785) * hl)) return false; return true; }
+    if (!room(ent.pos.x, ent.pos.z)) for (var t = 0; t < 40; t++) { var ra = R(ctx) * TAU, rr = 100 + t * 35, tx = ent.pos.x + Math.cos(ra) * rr, tz = ent.pos.z + Math.sin(ra) * rr; if (room(tx, tz)) { ent.pos.x = tx; ent.pos.z = tz; break; } }
     d.yaw = opts.heading != null ? -hdgRad(opts.heading) : R(ctx) * TAU;
     reg(ent); boatPose(ent, 0, ctx);
   }
   function boatPose(ent, t, ctx) {
     var d = ent.data;
     _e.set(Math.sin(t * 0.9) * 0.03, d.yaw, Math.sin(t * 0.7 + 1) * 0.05, 'YXZ'); ent.q.setFromEuler(_e);
-    ent.pos.y = 0.0 + Math.sin(t * 1.1) * 0.3;
+    ent.pos.y = 0.0 + Math.sin(t * 1.1) * 0.3 * scl(ent);
     syncGroup(ent);
   }
   function boatThink(ent, dt, ctx) {
@@ -20623,11 +20635,11 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     } else d.yaw += Math.sin(ctx.time * 0.05 + (ent.id | 0)) * 0.02 * dt;
     var sp = okA ? d.spd : d.spd * 0.4;
     ent.vel.set(-Math.sin(d.yaw) * sp, 0, -Math.cos(d.yaw) * sp);
-    var nx = ent.pos.x + ent.vel.x * dt, nz = ent.pos.z + ent.vel.z * dt;
-    if (waterAt(w, nx, nz)) { ent.pos.x = nx; ent.pos.z = nz; } else d.yaw += Math.PI * dt;
+    var nx = ent.pos.x + ent.vel.x * dt, nz = ent.pos.z + ent.vel.z * dt, bow = SHIP.missile.L * 0.5 * scl(ent);
+    if (waterAt(w, nx, nz) && waterAt(w, nx + fx_ * bow, nz + fz_ * bow)) { ent.pos.x = nx; ent.pos.z = nz; } else d.yaw += Math.PI * dt;
     d.seaT += dt;
     boatPose(ent, d.seaT + (ent.id | 0), ctx);
-    if (R(ctx) < dt * 10) { worldPt(ent, RR(ctx, -3, 3), 0.3, 18, tA); tA.y = 0.6; puff(ctx, tA, 4, 2, 0.95); }
+    if (R(ctx) < dt * 10) { worldPt(ent, RR(ctx, -3, 3) * scl(ent), 0.3, 18 * scl(ent), tA); tA.y = 0.6; puff(ctx, tA, 4 * scl(ent), 2, 0.95); }
     aaThink(ent, dt, ctx, { flakRange: 4500, flakCd: 0.7, flakDmg: 8, gunRange: 1800, rate: 16, dmg: 3 });
     d.samCd = (d.samCd === undefined ? RR(ctx, 4, 8) : d.samCd) - dt;
     var bs = sk(ent), bdet = gate(ent, d.det, bs, ctx);
@@ -20635,7 +20647,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     d.trackT = bdet && bdist > 1500 && bdist < 10000 * lerp(0.45, 1, bs) ? (d.trackT || 0) + dt : Math.max(0, (d.trackT || 0) - 2 * dt);
     if (bdet && d.samCd <= 0 && d.trackT >= lerp(4.5, 2, bs) * ((FL.SAM_WARN && FL.SAM_WARN.mul) || 1)) {
       var dist = bdist;
-      if (dist > 1500 && dist < 9000 * lerp(0.45, 1, bs)) { d.samCd = RR(ctx, 12, 16) * lerp(2, 1, bs); worldPt(ent, 0, 5, 8, _from); missileOut(ent, ctx, _from, d.det, { speed: 650, g: 20, kind: 'sam' }); puff(ctx, _from, 10, 4, 0.85); }
+      if (dist > 1500 && dist < 9000 * lerp(0.45, 1, bs)) { d.samCd = RR(ctx, 12, 16) * lerp(2, 1, bs); worldPt(ent, 0, 5 * scl(ent), 8 * scl(ent), _from); missileOut(ent, ctx, _from, d.det, { speed: 650, g: 20, kind: 'sam' }); puff(ctx, _from, 10, 4, 0.85); }
     }
   }
 
@@ -20681,7 +20693,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       if (follow) follow();
       if (model.fire) { var s = size * (0.8 + 0.4 * Math.random()) * Math.max(0.2, 1 - t / life); model.fire.scale.set(s, s * 1.3, 1); model.fire.visible = t < life; }
       smk -= dt;
-      if (smk <= 0 && t < life * 1.3) { smk = 0.15; g.updateMatrixWorld(); tA.set(0, size * 0.25, 0).applyMatrix4(g.matrixWorld); tA.x += (Math.random() - 0.5) * size * 0.3; puff(null, tA, size * 1.2, 6, 0.08); }
+      if (smk <= 0 && t < life * 1.3) { smk = 0.15; g.updateMatrixWorld(); tA.set(0, size * 0.25, 0).applyMatrix4(g.matrixWorld); tA.x += (Math.random() - 0.5) * size * 0.3 * scl(ent); puff(null, tA, size * 1.2 * scl(ent), 6, 0.08); }
       if (t > life * 1.3) { if (keep) persist(g); return false; }
       return true;
     };
@@ -20816,13 +20828,14 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
   });
   def('train_car', {
     category: 'ground', label: 'Train car', hp: 150, points: 300, lockRange: 8000, radius: 9, radarRange: 9000, killMsg: 'CAR DESTROYED', needsBombs: false, subTarget: true,
+    scaleAs: 'veh',
     build: function (variant) {
       var m = buildTrainCar(variant);
       m.update = function (dt, ent) { var f = m.group.userData.flash; if (f) f.visible = !!(ent && ent.data && ent.data.firing && Math.random() < 0.6); };
       m.onDeath = function (ent, fx) {
         if (fx) LAST.fx = fx;
         charGroup(m.group);
-        boom(null, ent.pos, (ent.variant | 0) === 4 ? 4 : 2, false);
+        boom(null, ent.pos, ((ent.variant | 0) === 4 ? 4 : 2) * scl(ent), false);
         var tr = ent.data.mount;
         return burnWreck(ent, m, (ent.variant | 0) === 4 ? 26 : 14, 40, false, function () {
           if (tr && tr.data && tr.data.path && entAlive(tr)) { carPose(ent, tr.data.path, tr.data.u - tr.data.offs[ent.data.idx], CAR_LEN[ent.variant | 0] || 14); syncGroup(ent); }
@@ -20842,9 +20855,10 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
   });
   def('armor', {
     category: 'ground', label: 'Tank', hp: 140, points: 450, lockRange: 7000, radius: 5.5, radarRange: 6000, killMsg: 'TANK DESTROYED', needsBombs: false, subTarget: true,
+    scaleAs: 'veh',
     build: function (variant) {
       var m = buildArmor(variant | 0);
-      m.onDeath = function (ent, fx) { if (fx) LAST.fx = fx; charGroup(m.group); boom(null, ent.pos, 1.4, false); m.yaw.rotation.z = 0.25; m.yaw.position.y += 0.4; return burnWreck(ent, m, 9, 30, false); };
+      m.onDeath = function (ent, fx) { if (fx) LAST.fx = fx; charGroup(m.group); boom(null, ent.pos, 1.4 * scl(ent), false); m.yaw.rotation.z = 0.25; m.yaw.position.y += 0.4; return burnWreck(ent, m, 9, 30, false); };
       return m;
     },
     spawn: armorSpawn, think: armorThink
@@ -20934,6 +20948,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
   });
   def('boat', {
     category: 'sea', label: 'Missile boat', hp: 200, points: 800, lockRange: 9000, radius: 14, radarRange: 12000, killMsg: 'BOAT SUNK', needsBombs: false,
+    scaleAs: 'ship',
     build: function () {
       var g = shell(cached('boat', geoBoat), null, 'boat'), sh = shipOf('missile');
       var aa = buildNavalGun(); aa.group.position.set(0, sh.anchors.gun[1], -11); g.add(aa.group);
@@ -20942,9 +20957,10 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       var fire = fireSprite(g, 0, 5, 2, 14);
       var m = { group: g, yaw: aa.yaw, pitch: aa.pitch, fire: fire, update: function (dt, ent) { aa.update(dt, ent); if (entAlive(ent)) rad.rotation.y += dt * 2.2; }, dispose: function () {} };
       m.onDeath = function (ent, fx) {
-        if (fx) LAST.fx = fx; charGroup(g); boom(null, ent.pos, 2, false);
+        var s = scl(ent);
+        if (fx) LAST.fx = fx; charGroup(g); boom(null, ent.pos, 2 * s, false);
         var t = 0;
-        return function (dt) { t += dt; g.position.y -= dt * 0.35; g.rotation.z += dt * 0.02; if (Math.random() < dt * 5) puff(null, tB.copy(g.position).setY(3), 10, 6, 0.1); fire.visible = t < 14; return t < 22; };
+        return function (dt) { t += dt; g.position.y -= dt * 0.35 * s; g.rotation.z += dt * 0.02; if (Math.random() < dt * 5) puff(null, tB.copy(g.position).setY(3 * s), 10 * s, 6, 0.1); fire.visible = t < 14; return t < 22; };
       };
       return m;
     },
@@ -24723,6 +24739,19 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
   function rand(a, b) { return a + Math.random() * (b - a); }
   function numIn(v, d, a, b) { v = +v; return isFinite(v) && v !== 0 ? clamp(v, a, b) : d; }   // untrusted number -> clamped (0/NaN -> default)
 
+  // ---- unit size (TUNE HERE) --------------------------------------------------
+  // Enemy boats / ships and ground vehicles (trucks, tanks, trains, ICBM column, map traffic) are built at this scale:
+  // model, hit radius / capsule, spacing, muzzles, wake, fire, smoke and sinking all follow it. Kinds opt in with
+  // def.scaleAs = 'ship' | 'veh' | function (variant) -> 'ship' | 'veh' | null (FL.unitScale). Kirov builds its hull at
+  // FL.SHIP_SCALE itself. Not scaled: the friendly and enemy supercarrier (already 433 m), aircraft, static sites.
+  FL.SHIP_SCALE = FL.SHIP_SCALE || 2;
+  FL.VEH_SCALE = FL.VEH_SCALE || 2;
+  FL.unitScale = function (def, variant) {
+    var a = def && def.scaleAs; if (typeof a === 'function') a = a(variant);
+    return a === 'ship' ? FL.SHIP_SCALE || 1 : a === 'veh' ? FL.VEH_SCALE || 1 : 1;
+  };
+  var SS = FL.SHIP_SCALE, VS = FL.VEH_SCALE;
+
   // ---- tuning ---------------------------------------------------------------
   var C = {
     banditRange: 22000, samRange: 14000, closeRange: 2500, hideAGL: 150,
@@ -24738,7 +24767,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     samMin: 1000, samMax: 12000, samCd: 8, maxSamMissiles: 2, samHP: 60,
     heliRange: 10000, heliHP: 60, heliGunDmg: 15, heliHitR: 9, heliMissileRange: 4000, heliMissileCd: 12,
     heliGunRange: 900, heliGunRate: 10, heliLock: 8000,
-    truckHP: 40, truckHitR: 7, truckLock: 7000, convoySpacing: 32, aaaRange: 3000, aaaRate: 8, flakSpeed: 900,
+    truckHP: 40, truckHitR: 7 * VS, truckLock: 7000, convoySpacing: 32 * VS, aaaRange: 3000, aaaRate: 8, flakSpeed: 900,
     flakDmgR: 25, convoyBonus: 1500,
     cloudLoseMissile: 0.6, cloudNoGuns: 0.5, blindTime: 0.8, reacqTime: 1.5,
     snapHz: 20, stateHz: 20      // 20 Hz player state (was 30): -33 % upload; the adaptive jitter buffer + Hermite smoothing hide it
@@ -26163,7 +26192,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
         };
       }
       var A = convAssets, g = new THREE.Group(); g.rotation.order = 'YXZ';
-      var body = new THREE.Group(); body.scale.setScalar(1.25); g.add(body);
+      var body = new THREE.Group(); body.scale.setScalar(1.25 * VS); g.add(body);
       var EM = FL.ENEMY_MODELS;
       if (EM) {     // detailed Ural-4320 / ZU-23 truck from enemies.js
         EM.truck(body, aaa, false);
@@ -26310,16 +26339,16 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       if (h > 0 && sp < 0.3 && Math.abs(dOff) < 1e-4) yawT = v.yaw;               // parked: keep the yaw
       v.yaw = h > 0 ? approachAngle(v.yaw, yawT, 0.9 * h) : yawT;
       var x = v.pos.x, z = v.pos.z, fx_ = -Math.sin(v.yaw), fz_ = -Math.cos(v.yaw);
-      var hf = gAt(x + fx_ * 3, z + fz_ * 3), hb = gAt(x - fx_ * 3, z - fz_ * 3);
-      var hl = gAt(x + fz_ * 1.5, z - fx_ * 1.5), hr = gAt(x - fz_ * 1.5, z + fx_ * 1.5);
+      var hf = gAt(x + fx_ * 3 * VS, z + fz_ * 3 * VS), hb = gAt(x - fx_ * 3 * VS, z - fz_ * 3 * VS);
+      var hl = gAt(x + fz_ * 1.5 * VS, z - fx_ * 1.5 * VS), hr = gAt(x - fz_ * 1.5 * VS, z + fx_ * 1.5 * VS);
       v.pos.y = Math.max(gAt(x, z), (hf + hb) / 2);
-      v.aim.copy(v.pos); v.aim.y += 2;
+      v.aim.copy(v.pos); v.aim.y += 2 * VS;
       if (h > 0) v.vel.set((v.pos.x - (v.lastX != null ? v.lastX : x)) / h, 0, (v.pos.z - (v.lastZ != null ? v.lastZ : z)) / h); else v.vel.set(hx * sp, 0, hz * sp);
       if (v.vel.lengthSq() > 40 * 40) v.vel.set(hx * sp, 0, hz * sp);
       v.lastX = x; v.lastZ = z;
       var g = v.vis.group;
       g.position.copy(v.pos);
-      g.rotation.set(Math.atan2(hf - hb, 6), v.yaw, Math.atan2(hr - hl, 3) * -1);
+      g.rotation.set(Math.atan2(hf - hb, 6 * VS), v.yaw, Math.atan2(hr - hl, 3 * VS) * -1);
       v.q.setFromEuler(g.rotation);
     }
     function updateConvoy(cv, h) {
@@ -26338,7 +26367,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
         for (i = 0; i < missiles.length && !alarm; i++) { var mm = missiles[i]; if (mm.alive && mm.side === 'player' && mm.target && mm.target.convoy === cv) alarm = true; }
         if (alarm) {
           cv.state = 'scatter'; cv.scT = rand(CONV.scatterLo, CONV.scatterHi); log('CONVOY scatter [' + cv.group + ']');
-          for (i = 0; i < vs.length; i++) { v = vs[i]; var side = (i & 1 ? 1 : -1) * (Math.random() < 0.8 ? 1 : -1); v.offWant = v.aaa ? side * 7 : side * rand(25, 55); }
+          for (i = 0; i < vs.length; i++) { v = vs[i]; var side = (i & 1 ? 1 : -1) * (Math.random() < 0.8 ? 1 : -1); v.offWant = (v.aaa ? side * 7 : side * rand(25, 55)) * VS; }
         }
       } else if (cv.state === 'scatter') {
         cv.scT -= h;
@@ -26359,7 +26388,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
             if (ahead) {
               var sp_ = ahead.alive ? (ahead.spdNow != null ? ahead.spdNow : cv.speed) : 0;
               // a burning wreck ahead: drive around it (small offset) instead of stopping behind it
-              if (!ahead.alive && gap < C.convoySpacing * 1.5 && cv.state !== 'scatter') { v.offWant = (i & 1 ? 1 : -1) * 7; sp_ = cv.speed * 0.6; }
+              if (!ahead.alive && gap < C.convoySpacing * 1.5 && cv.state !== 'scatter') { v.offWant = (i & 1 ? 1 : -1) * 7 * VS; sp_ = cv.speed * 0.6; }
               else if (cv.state !== 'scatter' && !ahead.alive && gap > C.convoySpacing * 2) v.offWant = 0;
               want = Math.min(want * 1.3, Math.max(0, sp_ + (gap - C.convoySpacing) * 0.4));   // may run 30 % faster to close up
             }
@@ -26380,7 +26409,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
           if (v.aaa) updateAAA(v, h, v.vis.turret, v.vis.elev, v.yaw);
         } else if (v.huskT > 0) {
           v.huskT -= h; v.smokeT -= h;
-          if (v.smokeT <= 0) { v.smokeT = 0.15; tA.copy(v.pos); tA.y += 3; fxPuff(tA, 9, 5, 0.07); var s = 6 + Math.random() * 5; v.vis.fire.scale.set(s, s * 1.3, 1); }
+          if (v.smokeT <= 0) { v.smokeT = 0.15; tA.copy(v.pos); tA.y += 3 * VS; fxPuff(tA, 9 * VS, 5, 0.07); var s = 6 + Math.random() * 5; v.vis.fire.scale.set(s, s * 1.3, 1); }
           if (v.huskT <= 0) v.vis.fire.visible = false;
         }
       }
@@ -26473,7 +26502,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       if (!v.alive) return;
       v.alive = false; v.detect = false;
       if (desig === v) clearLock();
-      fxImpact('vehicle', v.aim, { air: false }); play('explode');
+      fxImpact('vehicle', v.aim, { air: false, scale: VS }); play('explode');
       truckHusk(v);
       var p_ = awardKill(v, how, owner);
       emitKill(v, how, p_, owner);
@@ -26612,6 +26641,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       samAssets();
       if (!foamMat) foamMat = new THREE.SpriteMaterial({ color: 0xf4f8fa, transparent: true, opacity: 0.55, depthWrite: false });
       var B = BOAT[variant], M = samMats, g = new THREE.Group(), body = new THREE.Group(); g.add(body); g.rotation.order = 'YXZ';
+      body.scale.setScalar(SS);                      // FL.SHIP_SCALE: hull, guns, radar, SAM, fire (wake: below)
       var L = B.len, W = variant === 'frigate' ? 9.5 : 5, i;
       var EM = FL.ENEMY_MODELS;
       if (EM) {     // detailed hull / superstructure / mast / radar / gun / wake from enemies.js
@@ -26628,7 +26658,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
           for (i = 0; i < 4; i++) { var tb0 = cyl(se0, EM.material('shipSup'), (i & 1 ? 0.6 : -0.6), (i & 2 ? 1.2 : 0), -1.5, 0.4, 4.5); tb0.rotation.x = Math.PI / 2; }
           v0.sam = sm0; v0.samElev = se0;
         }
-        EM.wake(g, L, W);
+        EM.wake(g, L * SS, W * SS);
         for (i = 0; i < 14; i++) { var fs0 = new THREE.Sprite(foamMat); fs0.visible = false; scene.add(fs0); v0.foam.push({ s: fs0, life: 0, max: 1 }); }
         var fire0 = new THREE.Sprite(fireMat); fire0.scale.set(14, 18, 1); fire0.position.set(0, 6, 0); fire0.visible = false; body.add(fire0);
         v0.fire = fire0;
@@ -26676,8 +26706,14 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       }
       return best;
     }
-    function randomWater(cx, cz, r) {
-      for (var k = 0; k < 40; k++) { var a = rand(0, TAU), d = rand(r * 0.3, r), x = cx + Math.cos(a) * d, z = cz + Math.sin(a) * d; if (hAt(x, z) < -3 && !solidXYZ(x, 1, z)) return tB.set(x, 0, z); }
+    // open water at (x, z) with room for a hull of half length hl (8 points on that circle are water too)
+    function seaClear(x, z, hl) {
+      if (!(hAt(x, z) < -3) || solidXYZ(x, 1, z)) return false;
+      for (var k = 0; k < 8 && hl > 0; k++) { var a = k / 8 * TAU; if (!(hAt(x + Math.cos(a) * hl, z + Math.sin(a) * hl) < -1)) return false; }
+      return true;
+    }
+    function randomWater(cx, cz, r, hl) {
+      for (var k = 0; k < 40; k++) { var a = rand(0, TAU), d = rand(r * 0.3, r), x = cx + Math.cos(a) * d, z = cz + Math.sin(a) * d; if (seaClear(x, z, k < 30 ? hl || 0 : 0)) return tB.set(x, 0, z); }
       return null;
     }
     function makeBoat(variant, x, z, hdg, group) {
@@ -26693,7 +26729,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       };
       if (bt.route) { bt.goalIdx = bt.route.idx; nextBoatGoal(bt); } else pickWaterGoal(bt);
       boats.push(bt);
-      regTarget(bt, 'sea', C.lockGround, B.r, variant === 'frigate' ? 'FRIGATE' : 'BOAT', group);
+      regTarget(bt, 'sea', C.lockGround, B.r * SS, variant === 'frigate' ? 'FRIGATE' : 'BOAT', group);
       syncBoat(bt, 0);
       return bt;
     }
@@ -26704,7 +26740,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       bt.goalIdx = i; bt.goal.set(L[i][0], 0, -L[i][1]);
     }
     function pickWaterGoal(bt) {
-      var w = randomWater(bt.pos.x, bt.pos.z, 4000);
+      var w = randomWater(bt.pos.x, bt.pos.z, 4000, bt.B.len * SS * 0.5);
       if (w) bt.goal.copy(w); else bt.goal.set(bt.pos.x + rand(-2000, 2000), 0, bt.pos.z + rand(-2000, 2000));
     }
     function updateBoat(bt, h) {
@@ -26713,12 +26749,12 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       if (!bt.alive) {
         if (bt.sinkT > 0) {
           bt.sinkT -= h;
-          bt.pos.y -= h * (bt.B === BOAT.frigate ? 0.7 : 1.1);
+          bt.pos.y -= h * (bt.B === BOAT.frigate ? 0.7 : 1.1) * SS;
           v.body.rotation.x = Math.min(0.5, v.body.rotation.x + h * 0.04); v.body.rotation.z = Math.min(0.35, v.body.rotation.z + h * 0.025);
           v.group.position.y = bt.pos.y;
           bt.smokeT -= h;
-          if (bt.smokeT <= 0 && bt.pos.y > -12) { bt.smokeT = 0.12; tA.copy(bt.pos); tA.y = 4; fxPuff(tA, 14, 7, 0.08); var s = 10 + Math.random() * 6; v.fire.scale.set(s, s * 1.3, 1); }
-          if (bt.pos.y < -10) v.fire.visible = false;
+          if (bt.smokeT <= 0 && bt.pos.y > -12 * SS) { bt.smokeT = 0.12; tA.copy(bt.pos); tA.y = 4 * SS; fxPuff(tA, 14 * SS, 7, 0.08); var s = 10 + Math.random() * 6; v.fire.scale.set(s, s * 1.3, 1); }
+          if (bt.pos.y < -10 * SS) v.fire.visible = false;
           if (bt.sinkT <= 0) v.group.visible = false;
         }
         updateFoam(bt, h, false);
@@ -26729,7 +26765,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
         if (tA.length() < 250) { if (bt.route) nextBoatGoal(bt); else pickWaterGoal(bt); }
         var yawT = Math.atan2(-tA.x, -tA.z);
         // shore avoidance: look ahead 12 s
-        var fx_ = -Math.sin(bt.yaw), fz_ = -Math.cos(bt.yaw), la = bt.speed * 12;
+        var fx_ = -Math.sin(bt.yaw), fz_ = -Math.cos(bt.yaw), la = bt.speed * 12 + bt.B.len * SS * 0.5, bow = bt.B.len * SS * 0.5;
         if (hAt(bt.pos.x + fx_ * la, bt.pos.z + fz_ * la) > -2 || solidXYZ(bt.pos.x + fx_ * la * 0.5, 2, bt.pos.z + fz_ * la * 0.5)) {
           var l2 = hAt(bt.pos.x - fz_ * la, bt.pos.z + fx_ * la), r2 = hAt(bt.pos.x + fz_ * la, bt.pos.z - fx_ * la);
           yawT = bt.yaw + (l2 < r2 ? 0.8 : -0.8);
@@ -26737,11 +26773,11 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
         bt.yaw = approachAngle(bt.yaw, yawT, bt.B.turn * h);
         fx_ = -Math.sin(bt.yaw); fz_ = -Math.cos(bt.yaw);
         var nx = bt.pos.x + fx_ * bt.speed * h, nz = bt.pos.z + fz_ * bt.speed * h;
-        if (hAt(nx, nz) < -1) { bt.pos.x = nx; bt.pos.z = nz; bt.vel.set(fx_ * bt.speed, 0, fz_ * bt.speed); }
+        if (hAt(nx, nz) < -1 && hAt(nx + fx_ * bow, nz + fz_ * bow) < -1) { bt.pos.x = nx; bt.pos.z = nz; bt.vel.set(fx_ * bt.speed, 0, fz_ * bt.speed); }
         else { bt.vel.set(0, 0, 0); bt.yaw += 0.3 * h; }
       }
       syncBoat(bt, h);
-      if (bt.hp < bt.maxHp) { bt.smokeT -= h; if (bt.smokeT <= 0) { bt.smokeT = 0.15; tA.copy(bt.aim); tA.y += 4; fxPuff(tA, 8, 4, 0.2); } }
+      if (bt.hp < bt.maxHp) { bt.smokeT -= h; if (bt.smokeT <= 0) { bt.smokeT = 0.15; tA.copy(bt.aim); tA.y += 4 * SS; fxPuff(tA, 8 * SS, 4, 0.2); } }
       // weapons: bow AAA + frigate SAM
       updateAAA(bt, h, v.turret, v.elev, bt.yaw);
       if (!client && bt.B.sam && bt.detect) {
@@ -26768,7 +26804,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       v.group.position.set(bt.pos.x, bt.pos.y, bt.pos.z);
       v.group.rotation.set(Math.sin(bt.bob * (big ? 0.5 : 0.9)) * (big ? 0.012 : 0.03), bt.yaw, Math.sin(bt.bob * (big ? 0.37 : 0.7)) * (big ? 0.02 : 0.05));
       bt.q.setFromEuler(v.group.rotation);
-      bt.aim.set(bt.pos.x, bt.pos.y + (big ? 5 : 2.5), bt.pos.z);
+      bt.aim.set(bt.pos.x, bt.pos.y + (big ? 5 : 2.5) * SS, bt.pos.z);
       v.radar.rotation.y += h * 2.2;
     }
     function updateFoam(bt, h, emit_) {
@@ -26777,9 +26813,9 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       if (emit_ && bt.foamT <= 0 && v.group.visible) {
         bt.foamT = 0.35;
         var f = v.foam[v.foamI]; v.foamI = (v.foamI + 1) % v.foam.length;
-        var fx_ = -Math.sin(bt.yaw), fz_ = -Math.cos(bt.yaw), L = bt.B.len;
+        var fx_ = -Math.sin(bt.yaw), fz_ = -Math.cos(bt.yaw), L = bt.B.len * SS;
         f.s.position.set(bt.pos.x - fx_ * L * 0.45, 0.6, bt.pos.z - fz_ * L * 0.45); f.life = f.max = 4.5; f.s.visible = true;
-        f.base = bt.B === BOAT.frigate ? 12 : 6;
+        f.base = (bt.B === BOAT.frigate ? 12 : 6) * SS;
       }
       for (i = 0; i < v.foam.length; i++) {
         var q = v.foam[i]; if (q.life <= 0) continue;
@@ -26792,7 +26828,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       if (!bt.alive) return;
       bt.alive = false; bt.detect = false;
       if (desig === bt) clearLock();
-      fxImpact(bt.B === BOAT.frigate ? 'ship' : 'boat', bt.aim, { air: true }); play('explode');
+      fxImpact(bt.B === BOAT.frigate ? 'ship' : 'boat', bt.aim, { air: true, scale: SS }); play('explode');
       boatHusk(bt);
       var p_ = awardKill(bt, how, owner);
       emitKill(bt, how, p_, owner);
@@ -26970,11 +27006,15 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       try { ent.model = def.build ? def.build(ent.variant, o) : null; } catch (e) { if (window.console) console.error(e); ent.model = null; }
       if (!ent.model || !ent.model.group) ent.model = { group: new THREE.Group() };
       scene.add(ent.model.group);
+      // unit size (FL.unitScale: ships / vehicles): the whole model group, its fire sprite and the hit size. Host and co-op
+      // clients both build through here with the same kind + variant, so the scale needs no network field.
+      var usc = FL.unitScale(def, ent.variant); ent.scl = usc;
+      if (usc !== 1) ent.model.group.scale.multiplyScalar(usc);
       var fire = new THREE.Sprite(fireMat); fire.scale.set(10, 10, 1); fire.visible = false; ent.model.group.add(fire); ent._fire = fire;
       // boss sub-targets (carrier engines / turrets): +5 m hit radius so rounds, missiles and blasts count within 5 m of the part
-      regTarget(ent, cat, def.lockRange || regDefaultLock(cat), (def.radius || (cat === 'air' ? 10 : 14)) + (def.subTarget ? 5 : 0), def.label || kind.toUpperCase(), o.group);
+      regTarget(ent, cat, def.lockRange || regDefaultLock(cat), (def.radius || (cat === 'air' ? 10 : 14)) * usc + (def.subTarget ? 5 : 0), def.label || kind.toUpperCase(), o.group);
       // long parts (carrier engine nacelles ~36 m): gun hits use a capsule along local Z (half length, radius) + 5 m tolerance
-      var capL = def.hitLen != null ? +def.hitLen : (kind === 'carrier_engine' ? 17 : 0), capR = def.hitRad != null ? +def.hitRad : (kind === 'carrier_engine' ? 6 : 0);
+      var capL = (def.hitLen != null ? +def.hitLen : (kind === 'carrier_engine' ? 17 : 0)) * usc, capR = (def.hitRad != null ? +def.hitRad : (kind === 'carrier_engine' ? 6 : 0)) * usc;
       if (capL > 0) { ent.capL = capL; ent.capR = capR + (def.subTarget ? 5 : 0); ent.hitR = Math.max(ent.hitR, Math.min(capL, capR + 12)); }
       ent.cat = cat;
       if (parent) parent.children.push(ent);
@@ -27018,7 +27058,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       if (!ent.alive) return;
       ent.alive = false; ent.detect = false;
       if (desig === ent) clearLock();
-      fxImpact(ent.cat === 'air' ? 'aircraft' : ent.cat === 'sea' ? 'ship' : 'sam', ent.pos, { air: ent.cat === 'air', vel: ent.vel || null });
+      fxImpact(ent.cat === 'air' ? 'aircraft' : ent.cat === 'sea' ? 'ship' : 'sam', ent.pos, { air: ent.cat === 'air', vel: ent.vel || null, scale: ent.scl || 1 });
       play('explode');
       if (ent.model.onDeath) { try { ent.model.onDeath(ent, fx); } catch (e) { /* ignore */ } }
       if (ent.reg.onDeath) { try { ent.reg.onDeath(ent, fx); } catch (e) { /* ignore */ } }
@@ -27044,9 +27084,10 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     function updateRegHusk(ent, h) {
       if (ent.alive || ent.wreckT <= 0) return;
       ent.wreckT -= h;
-      if (ent.cat === 'sea') { ent.pos.y -= h * 0.9; ent.model.group.position.y = ent.pos.y; }
+      var hs = ent.scl || 1;
+      if (ent.cat === 'sea') { ent.pos.y -= h * 0.9 * hs; ent.model.group.position.y = ent.pos.y; }
       ent.data._smk = (ent.data._smk || 0) - h;
-      if (ent.data._smk <= 0) { ent.data._smk = 0.12; tA.copy(ent.pos); tA.y += 5; fxPuff(tA, 14, 6, 0.07); }
+      if (ent.data._smk <= 0) { ent.data._smk = 0.12; tA.copy(ent.pos); tA.y += 5 * hs; fxPuff(tA, 14 * hs, 6, 0.07); }
       if (ent.wreckT <= 0) { ent._fire.visible = false; if (ent.cat === 'sea') ent.model.group.visible = false; }
     }
     function disposeReg(ent) {
@@ -28642,7 +28683,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       } else if (kind === 'boat') {
         for (i = 0; i < n; i++) {
           var wx = x0 + i * 400, wz = z0 + (i % 2) * 300;
-          if (!isWater(wx, wz)) { var wp = randomWater(wx, wz, 6000); if (wp) { wx = wp.x; wz = wp.z; } }
+          var bhl = (BOAT[o.variant] || BOAT.patrol).len * SS * 0.5;     // whole hull in the water (ships are FL.SHIP_SCALE big)
+          if (!isWater(wx, wz) || !seaClear(wx, wz, bhl)) { var wp = randomWater(wx, wz, 900, bhl) || randomWater(wx, wz, 6000, bhl); if (wp) { wx = wp.x; wz = wp.z; } }
           t = makeBoat(o.variant || 'patrol', wx, wz, hdg, g); ids.push(t.id);
         }
       } else if (regDef(kind)) {
@@ -29096,7 +29138,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     function clientTruck(d) {
       var vis = buildVehicle(d.aa);
       var v = { kind: 'truck', sub: d.aa ? 'aaa' : 'truck', aaa: d.aa, alive: true, hp: d.hp, vis: vis, q: new THREE.Quaternion(), pos: new THREE.Vector3(d.p[0], d.p[1], d.p[2]),
-        aim: new THREE.Vector3(d.p[0], d.p[1] + 2, d.p[2]), vel: new THREE.Vector3(), yaw: 0, detect: false, huskT: 0, smokeT: 0, burstT: 0, pauseT: 0, fireAcc: 0, shot: 0 };
+        aim: new THREE.Vector3(d.p[0], d.p[1] + 2 * VS, d.p[2]), vel: new THREE.Vector3(), yaw: 0, detect: false, huskT: 0, smokeT: 0, burstT: 0, pauseT: 0, fireAcc: 0, shot: 0 };
       vis.group.position.copy(v.pos);
       clientTrucks.push(v);
       regTarget(v, 'ground', C.truckLock, C.truckHitR, d.lb || 'TRUCK', d.g);
@@ -29286,7 +29328,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
         var v = clientTrucks[i];
         if (!v.alive && v.huskT > 0) {
           v.huskT -= dt; v.smokeT -= dt;
-          if (v.smokeT <= 0) { v.smokeT = 0.15; tA.copy(v.pos); tA.y += 3; fxPuff(tA, 9, 5, 0.07); }
+          if (v.smokeT <= 0) { v.smokeT = 0.15; tA.copy(v.pos); tA.y += 3 * VS; fxPuff(tA, 9 * VS, 5, 0.07); }
           if (v.huskT <= 0) v.vis.fire.visible = false;
         }
       }
@@ -37533,13 +37575,18 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     var kit = KIT(), d = kit.ensure(ent), w = ctx.world;
     d.cat = 'cargo'; d.spd = 6 + Math.random() * 2;
     var hd = opts.heading != null ? +opts.heading : Math.random() * 360; d.yaw = (Math.abs(hd) > 6.3 ? hd * DEG : hd * DEG);
-    var x = opts.e != null ? opts.e : ent.pos.x, z = opts.n != null ? -opts.n : ent.pos.z;
-    if (w && !(w.sampleH(x, -z) < -10)) { var ns = root.FL.navalSpot(w, x, -z, 0); if (ns) { x = ns.e; z = -ns.n; } }
+    var x = opts.e != null ? opts.e : ent.pos.x, z = opts.n != null ? -opts.n : ent.pos.z, hl = 62 * (ent.scl || 1);   // half hull (scaled) in the water
+    function room(px, pz) { if (!(w.sampleH(px, -pz) < -10)) return false; for (var q = 0; q < 8; q++) if (!(w.sampleH(px + Math.cos(q * 0.785) * hl, -(pz + Math.sin(q * 0.785) * hl)) < -3)) return false; return true; }
+    if (w && !room(x, z)) {
+      var fnd = false;
+      for (var t = 0; t < 40 && !fnd; t++) { var ra = Math.random() * 6.283, rr = 150 + t * 40, tx = x + Math.cos(ra) * rr, tz = z + Math.sin(ra) * rr; if (room(tx, tz)) { x = tx; z = tz; fnd = true; } }
+      if (!fnd) { var ns = root.FL.navalSpot(w, x, -z, 0); if (ns) { x = ns.e; z = -ns.n; } }
+    }
     ent.pos.set(x, 0, z); ent.vel.set(0, 0, 0); ent.q.setFromAxisAngle(UPV, -d.yaw); kit.syncGroup(ent);
   }
   function cargoThink(ent, dt, ctx) {
     var kit = KIT(), d = ent.data; if (!d.cat) cargoSpawn(ent, {}, ctx);
-    var w = ctx.world, fx = Math.sin(d.yaw), fz = -Math.cos(d.yaw), la = d.spd * 30;
+    var w = ctx.world, fx = Math.sin(d.yaw), fz = -Math.cos(d.yaw), la = d.spd * 30 + 60 * (ent.scl || 1);   // look past the (scaled) bow
     if (w) {
       var hA = w.sampleH(ent.pos.x + fx * la, -(ent.pos.z + fz * la));
       if (hA > -10 || (w.solidAt && w.solidAt(ent.pos.x + fx * la * 0.5, 10, ent.pos.z + fz * la * 0.5))) {   // land ahead: turn to the deeper side
@@ -37548,7 +37595,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
         d.yaw += (hl < hr ? -1 : 1) * 0.05 * dt;
       }
       var nx = ent.pos.x + fx * d.spd * dt, nz = ent.pos.z + fz * d.spd * dt;
-      if (w.sampleH(nx, -nz) < -4) { ent.pos.x = nx; ent.pos.z = nz; ent.vel.set(fx * d.spd, 0, fz * d.spd); } else { ent.vel.set(0, 0, 0); d.yaw += 0.08 * dt; }
+      var bw = 60 * (ent.scl || 1);
+      if (w.sampleH(nx, -nz) < -4 && w.sampleH(nx + fx * bw, -(nz + fz * bw)) < -1) { ent.pos.x = nx; ent.pos.z = nz; ent.vel.set(fx * d.spd, 0, fz * d.spd); } else { ent.vel.set(0, 0, 0); d.yaw += 0.08 * dt; }
     }
     ent.pos.y = 0; ent.q.setFromAxisAngle(UPV, -d.yaw); kit.syncGroup(ent);
   }
@@ -37561,9 +37609,10 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     return { group: g, fire: fire,
       update: function (dt) { t0 += dt; body.rotation.z = Math.sin(t0 * 0.5) * 0.012; body.rotation.x = Math.sin(t0 * 0.37) * 0.006; },
       onDeath: function (ent) {
-        if (kit && kit.charGroup) kit.charGroup(g); if (kit && kit.boom) kit.boom(null, ent.pos, 2.4, false);
+        var s = (ent && ent.scl) || 1;
+        if (kit && kit.charGroup) kit.charGroup(g); if (kit && kit.boom) kit.boom(null, ent.pos, 2.4 * s, false);
         var t = 0, side = Math.random() < 0.5 ? -1 : 1;
-        return function (dt2) { t += dt2; g.position.y -= dt2 * (0.25 + t * 0.01); body.rotation.z += side * dt2 * 0.01; body.rotation.x -= dt2 * 0.004; if (fire) fire.visible = t < 30; if (kit && kit.puff && Math.random() < dt2 * 4) kit.puff(null, nv1.copy(g.position).setY(8), 18, 8, 0.1); return t < 45; };
+        return function (dt2) { t += dt2; g.position.y -= dt2 * (0.25 + t * 0.01) * s; body.rotation.z += side * dt2 * 0.01; body.rotation.x -= dt2 * 0.004; if (fire) fire.visible = t < 30; if (kit && kit.puff && Math.random() < dt2 * 4) kit.puff(null, nv1.copy(g.position).setY(8 * s), 18 * s, 8, 0.1); return t < 45; };
       },
       dispose: function () {} };
   }
@@ -37571,7 +37620,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     var KS = root.FL.ENEMY_KINDS, U = root.FL.ENEMY_UTIL;
     if (!KS || !U || !U.kit || !T || KS.cargoship) return;
     KS.cargoship = { kind: 'cargoship', category: 'sea', label: 'Cargo ship', hp: 380, points: 900, lockRange: 14000, radius: 16, hitLen: 55, hitRad: 11, radarRange: 0,
-      killMsg: 'CARGO SHIP SUNK', needsBombs: false, build: buildCargo, spawn: cargoSpawn, think: cargoThink };
+      killMsg: 'CARGO SHIP SUNK', needsBombs: false, scaleAs: 'ship', build: buildCargo, spawn: cargoSpawn, think: cargoThink };
   })();
 
   // ---- start point per map ('runway' | 'carrier' | 'air'), saved in localStorage; default = carrier on maps that have one
@@ -39952,7 +40001,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
  *   'ekranoplan'   Lun-class ground-effect ship at 2x size (148 m, 88 m span). 3-5 m over the sea, 450-540 km/h.
  *                  8 engines (ekr_engine, fall off when killed) -> slower, lower, then it lands and sinks.
  *                  6 missile canisters (ekr_launcher) fire SAM salvos. 2 AA turrets (carrier_aa).
- *   'kirov'        battlecruiser (variant 0, 250 m) / cruiser (variant 1, 0.74x). Parts: main gun, 2 VLS, 4 CIWS, 2 radar masts,
+ *   'kirov'        battlecruiser (variant 0, 250 m x FL.SHIP_SCALE) / cruiser (variant 1, 0.74x). Parts: main gun, 2 VLS, 4 CIWS, 2 radar masts,
  *                  bridge (kirov_part). Stages: fires -> list -> settles -> sinks. Masts down = SAMs half blind.
  *   'tu160_flight' formation parent (invisible) + 3 'tu160' bombers in formation + MiG-29 escorts (group+'_esc').
  *                  data.reached = true at the target.
@@ -40418,6 +40467,9 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     ['ciws', -11, 15, -42, 220, 5, 'CIWS'], ['ciws', 11, 15, -42, 220, 5, 'CIWS'], ['ciws', -10, 15, 64, 220, 5, 'CIWS'], ['ciws', 10, 15, 64, 220, 5, 'CIWS'],
     ['mast', 0, 44, -18, 600, 8, 'Radar mast'], ['mast', 0, 38, 22, 600, 8, 'Radar mast'], ['bridge', 0, 24, -32, 900, 13, 'Bridge']];
   function kScale(v) { return v === 1 ? 0.74 : 1; }
+  // built size = class size x FL.SHIP_SCALE (combat.js). Hull, turrets, masts, part offsets, hit radii, wake, fires and sinking follow it.
+  function kSS() { return FL.SHIP_SCALE || 1; }
+  function kS(v) { return kScale(v) * kSS(); }
   // Kirov (Pyotr Velikiy layout), bow -z: 12 S-300F revolver hatches, 20 Granit cells, bridge with Top Dome, pyramid foremast
   // (Top Pair), funnel, aft tower (Top Plate), aft VLS, Kashtan corners, AK-130 twin at the stern, helideck.
   var K_ST = [[-126, 0.6, 14.6, 0.3, -5, 9], [-120, 4.5, 14.2, 1.2, -6.5, 6], [-110, 8.6, 13.6, 4.2, -7.2, 3.5], [-96, 11.6, 12.8, 8.0, -7.6, 1.5], [-76, 13.4, 12.0, 11.4, -7.8, 0],
@@ -40495,14 +40547,14 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     return a.geo();
   }
   function buildKirov(variant) {
-    var s = kScale(variant | 0), g = new T.Group(); g.name = 'kirov';
+    var s = kS(variant | 0), g = new T.Group(); g.name = 'kirov';
     var inner = new T.Group(); inner.position.y = -KCY; g.add(inner);
     mesh(cached('kirov' + s, function () { return geoKirov(s); }), inner);
     var gun = new T.Group(); gun.position.set(0, 13 * s, 100 * s); inner.add(gun); mesh(cached('kgun' + s, function () { return geoKGun(s); }), gun);
     var rad = new T.Group(); rad.position.set(0, 39.6 * s, 22 * s); inner.add(rad); mesh(cached('krad' + s, function () { return geoKTopPlate(s); }), rad);
     var rad1 = new T.Group(); rad1.position.set(0, 45.2 * s, -18 * s); inner.add(rad1); mesh(cached('kpair' + s, function () { return geoKTopPair(s); }), rad1);
     if (FL.ENEMY_MODELS && FL.ENEMY_MODELS.wake) { try { FL.ENEMY_MODELS.wake(inner, 250 * s, 28 * s); } catch (e) { /* ignore */ } }
-    var fl = fireSet(inner, KP.map(function (p) { return [p[1] * s, (p[2] + 3) * s, p[3] * s, p[0] === 'bridge' ? 26 : p[0] === 'ciws' ? 10 : 18]; }), 16);
+    var fl = fireSet(inner, KP.map(function (p) { return [p[1] * s, (p[2] + 3) * s, p[3] * s, (p[0] === 'bridge' ? 26 : p[0] === 'ciws' ? 10 : 18) * kSS()]; }), 16 * kSS());
     var smk = { t: 0 };
     return {
       group: g,
@@ -40512,27 +40564,29 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
         if (!(dm & (1 << 8))) rad.rotation.y += dt * 1.8;
         if (!(dm & (1 << 7))) rad1.rotation.y += dt * 1.1;
         if (parts && parts[0] && parts[0].data && parts[0].data.aimY != null) gun.rotation.y = parts[0].data.aimY;
-        inner.position.y = -KCY - (n.sk || 0);
+        inner.position.y = -KCY - (n.sk || 0) * kSS();
       },
       onDeath: function () { charMesh(inner); for (var i = 0; i < fl.length; i++) fl[i].visible = true; return null; },
       dispose: function () {}
     };
   }
   function kirovSpawn(ent, opts, ctx) {
-    var kit = KIT(), d = ent.data, w = ctx.world, s = kScale(ent.variant | 0), i;
+    var kit = KIT(), d = ent.data, w = ctx.world, s = kS(ent.variant | 0), i;
+    var hl = Math.max(200, 130 * s);                // half hull length + margin: the whole (scaled) hull stays in deep water
+    function room(x, z) { if (!deep(w, x, z, 16)) return false; for (var q = 0; q < 8; q++) if (!deep(w, x + Math.cos(q * 0.785) * hl, z + Math.sin(q * 0.785) * hl, 8)) return false; return true; }
     d.cat = 'kirov'; d.spd0 = d.spd = opts.speed || 7; d.dir = Math.random() < 0.5 ? 1 : -1; d.ang = Math.random() * TAU; d.R = 0;
     d.cx = opts.e != null ? opts.e : ent.pos.x; d.cz = opts.n != null ? -opts.n : ent.pos.z; d.hdg0 = opts.heading != null ? hdgRad(opts.heading) : Math.random() * TAU;
-    if (w && !deep(w, d.cx, d.cz, 16) && FL.navalSpot) { var ns = FL.navalSpot(w, d.cx, -d.cz, 0); if (ns) { d.cx = ns.e; d.cz = -ns.n; } }
+    if (w && !room(d.cx, d.cz) && FL.navalSpot) { var ns = FL.navalSpot(w, d.cx, -d.cz, 0); if (ns) { d.cx = ns.e; d.cz = -ns.n; } }
     var Rs = [opts.radius || 2600, 1800, 1200, 700];
     for (var ri = 0; ri < Rs.length && !d.R && w; ri++) {
       var good = true;
-      for (var k = 0; k < 24 && good; k++) { var an = k / 24 * TAU; for (var dr = -200; dr <= 200 && good; dr += 200) if (!deep(w, d.cx + Math.cos(an) * (Rs[ri] + dr), d.cz + Math.sin(an) * (Rs[ri] + dr), 14)) good = false; }
+      for (var k = 0; k < 24 && good; k++) { var an = k / 24 * TAU; for (var dr = -hl; dr <= hl && good; dr += hl) if (!deep(w, d.cx + Math.cos(an) * (Rs[ri] + dr), d.cz + Math.sin(an) * (Rs[ri] + dr), 14)) good = false; }
       if (good) d.R = Rs[ri];
     }
     d.net = { dmg: 0, sk: 0, st: 0 }; d.stage = 0; d.roll = 0; d.pitch = 0; d.salvoT = 8 + Math.random() * 4;
     kirovPose(ent, d, 0); kit.syncGroup(ent);
     d.parts = [];
-    for (i = 0; i < KP.length; i++) { var c = mountChild(ctx, 'kirov_part', i, ent, KP[i][1] * s, (KP[i][2] - KCY) * s, KP[i][3] * s); d.parts.push(c); }
+    for (i = 0; i < KP.length; i++) { var c = mountChild(ctx, 'kirov_part', i, ent, KP[i][1] * s, KP[i][2] * s - KCY, KP[i][3] * s); d.parts.push(c); }   // model y = KP y * s above the water; container at KCY
     track(ent);
   }
   function kirovPose(ent, d, dt) {
@@ -40552,14 +40606,15 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     d.net.dmg = dmg; d.radarOK = masts > 0;
     var fr = d.parts.length ? lost / d.parts.length : 0;
     var st = core === 0 ? 3 : fr >= 0.7 ? 2 : fr >= 0.35 ? 1 : 0;
-    if (st > d.stage) { d.stage = st; d.net.st = st; d.stageEv = st; for (i = 0; i < 3; i++) { worldPt(ent, rnd(-10, 10), 4, rnd(-90, 90), tA); boom(tA, rnd(2.5, 4), false); } }
+    var ks = kS(ent.variant | 0);
+    if (st > d.stage) { d.stage = st; d.net.st = st; d.stageEv = st; for (i = 0; i < 3; i++) { worldPt(ent, rnd(-10, 10) * ks, 4 * ks, rnd(-90, 90) * ks, tA); boom(tA, rnd(2.5, 4) * kSS(), false); } }
     var wantRoll = [0, 0.03, 0.08, 0.2][d.stage] * d.dir, wantSk = [0, 0, 1.6, 0][d.stage];
     d.spd = d.spd0 * [1, 0.7, 0.4, 0][d.stage];
     if (d.stage === 3) {
       if (!d.sinkT) { d.sinkT = 0.001; for (i = 0; i < d.parts.length; i++) if (ok(d.parts[i])) stop(d.parts[i], ctx); d.net.dmg = 1023; }
       d.sinkT += dt; d.net.sk = Math.min(40, 1.6 + d.sinkT * d.sinkT * 0.05); d.pitch = Math.min(0.09, d.sinkT * 0.004);
       d.boomT = (d.boomT || 0) - dt;
-      if (d.boomT <= 0) { d.boomT = rnd(0.6, 1.4); worldPt(ent, rnd(-12, 12), 2, rnd(-110, 110), tA); tA.y = Math.max(tA.y, 2); boom(tA, rnd(2.5, 4.5), false); }
+      if (d.boomT <= 0) { d.boomT = rnd(0.6, 1.4); worldPt(ent, rnd(-12, 12) * ks, 2, rnd(-110, 110) * ks, tA); tA.y = Math.max(tA.y, 2); boom(tA, rnd(2.5, 4.5) * kSS(), false); }
       if (d.sinkT > 24) { kit.selfDestruct(ent, ctx, 'crash', true); return; }
     } else d.net.sk += clamp(wantSk - d.net.sk, -dt * 0.2, dt * 0.2);
     d.roll += clamp(wantRoll - d.roll, -dt * 0.02, dt * 0.02);
@@ -40588,7 +40643,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     spawn: function (ent, opts, ctx) {
       KIT().mountSpawn(ent, opts, ctx);
       var P = KP[ent.variant | 0] || KP[0], mo = opts.mount, s = mo ? kScale(mo.variant | 0) : 1;
-      ent.label = P[6]; ent.hp = ent.maxHp = Math.round(P[4] * (s < 1 ? 0.7 : 1)); ent.hitR = P[5] * s + 5; ent.data.type = P[0];
+      ent.label = P[6]; ent.hp = ent.maxHp = Math.round(P[4] * (s < 1 ? 0.7 : 1)); ent.hitR = P[5] * s * kSS() + 5; ent.data.type = P[0];
       ent.points = P[0] === 'gun' || P[0] === 'vls' ? 1500 : P[0] === 'ciws' ? 600 : 1200;
     },
     think: function (ent, dt, ctx) {
@@ -40603,7 +40658,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
         if (d.burstT <= 0) {
           d.burstT = 0.55; d.burst--;
           if (d.tgt && d.tgt.alive !== false && ctx.fireMissile) {
-            worldPt(ent, rnd(-3, 3), 3, rnd(-6, 6), tA);
+            worldPt(ent, rnd(-3, 3) * kSS(), 3 * kSS(), rnd(-6, 6) * kSS(), tA);
             ctx.fireMissile(ent, tA.clone(), d.tgt, { speed: 760, g: blind ? 16 : 24, kind: 'sam' });
             for (var i = 0; i < 5; i++) { tB.copy(tA); tB.x += rnd(-5, 5); tB.z += rnd(-5, 5); puff(tB, rnd(10, 16), rnd(3, 5), 0.85); }
           }
@@ -40714,7 +40769,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     } });
 
   // ================================================================== ICBM column (road convoy to a launch point)
-  var COL_OFF = [0, 46, -40, -78, -116];          // TEL, jeep (ahead), AAA, SAM, AAA
+  var COL_OFF = [0, 46, -40, -78, -116];          // TEL, jeep (ahead), AAA, SAM, AAA (x FL.VEH_SCALE: the units are vehicle-scaled)
   function pathPose(P, u, out) {
     var n = P.x.length; if (n < 2) { out.x = P.x[0]; out.z = P.z[0]; out.h = 0; return out; }
     u = clamp(u, 0, P.len);
@@ -40794,7 +40849,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
         P = { x: [], z: [], cum: [], len: 0 }; var L = Math.hypot(B.x - A.x, B.z - A.z), nn = Math.max(2, Math.ceil(L / 20));
         for (i = 0; i <= nn; i++) { P.x.push(A.x + (B.x - A.x) * i / nn); P.z.push(A.z + (B.z - A.z) * i / nn); P.cum.push(L * i / nn); } P.len = L;
       }
-      d.P = P; d.u = Math.min(140, P.len * 0.1);
+      d.P = P; d.u = Math.min(140 * (FL.VEH_SCALE || 1), P.len * 0.1);
       pathPose(P, d.u, PP); ent.pos.set(PP.x, gAt(w, PP.x, PP.z), PP.z);
       d.tel = ctx.spawnChild ? ctx.spawnChild('icbm_tel', 0, { e: ent.pos.x, n: -ent.pos.z, group: ent.group + '_tel' }, ent) : null;
       if (d.tel) d.tel.data.off = 0;
@@ -40802,7 +40857,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       for (i = 1; i < COL_OFF.length; i++) {
         var v = i === 1 ? 2 : i === 3 ? 1 : 0;
         var c = ctx.spawnChild ? ctx.spawnChild('icbm_escort', v, { e: ent.pos.x, n: -ent.pos.z, group: ent.group + '_esc' }, ent) : null;
-        if (c) { c.data.off = COL_OFF[i]; d.esc.push(c); }
+        if (c) { c.data.off = COL_OFF[i] * (FL.VEH_SCALE || 1); d.esc.push(c); }
       }
       track(ent);
     },
@@ -40823,7 +40878,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
         KIT().syncGroup(c);
       }
     } });
-  def('icbm_tel', { category: 'ground', label: 'ICBM launcher', hp: 900, points: 6000, lockRange: 9000, radius: 9, hitLen: 11, hitRad: 2.4, radarRange: 0, killMsg: 'ICBM LAUNCHER DESTROYED',
+  def('icbm_tel', { category: 'ground', label: 'ICBM launcher', hp: 900, points: 6000, lockRange: 9000, radius: 9, hitLen: 11, hitRad: 2.4, radarRange: 0, killMsg: 'ICBM LAUNCHER DESTROYED', scaleAs: 'veh',
     needsBombs: false, subTarget: true, noWaves: true, build: buildTEL,
     spawn: function (ent, opts, ctx) { ent.data.net = { er: 0 }; },
     think: function (ent, dt, ctx) {
@@ -40833,7 +40888,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       if (par && par.data) {
         d.net.er = par.data.er || 0;
         if (par.data.launched && !d.rk && ctx.scene) {
-          d.rk = mesh(cached('rocket', geoRocket), null); worldPt(ent, 0, 4, 10, d.rk.position); d.rk.position.y += 2; ctx.scene.add(d.rk);
+          var rs = ent.scl || 1;
+          d.rk = mesh(cached('rocket', geoRocket), null); worldPt(ent, 0, 4 * rs, 10 * rs, d.rk.position); d.rk.position.y += 2 * rs; d.rk.scale.setScalar(rs); ctx.scene.add(d.rk);
           d.rkV = 0; d.rkT = 0; d.net.gone = 1; boom(d.rk.position, 3, false);
           d.rkF = sprite(d.rk, glowMat(), 0, -2, 0, 14); d.rkF.visible = true;
         }
@@ -40846,7 +40902,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     } });
   // parents are linked by id in combat (ent.parent); the column registers its children in data.tel / data.esc
   function findParent(ent) { for (var i = LIVE.length - 1; i >= 0; i--) { var p = LIVE[i], d = p.data || {}; if (d.tel === ent || (d.esc && d.esc.indexOf(ent) >= 0)) return p; } return null; }
-  def('icbm_escort', { category: 'ground', label: 'Escort', hp: 120, points: 400, lockRange: 7000, radius: 6, radarRange: 8000, killMsg: 'ESCORT DESTROYED',
+  def('icbm_escort', { category: 'ground', label: 'Escort', hp: 120, points: 400, lockRange: 7000, radius: 6, radarRange: 8000, killMsg: 'ESCORT DESTROYED', scaleAs: 'veh',
     needsBombs: false, subTarget: false, noWaves: true,
     build: function (variant) {
       var v = variant | 0, b = v === 1 ? KS.sam_launcher : v === 0 ? KS.aa_gun : null, m = null;
@@ -41194,6 +41250,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     d.beam.material.opacity = 0.9;
   }
   def('railgun', { category: 'ground', label: 'Rail gun', hp: 600, points: 3000, lockRange: 9000, radius: 6, radarRange: 12000, killMsg: 'RAIL GUN DESTROYED',
+    scaleAs: function (v) { return (v | 0) === 1 ? null : 'veh'; },       // variant 0 rides a (vehicle-scaled) train car; 1 = fortress cannon
     needsBombs: false, subTarget: true, noWaves: true, build: buildRail,
     spawn: function (ent, opts, ctx) {
       KIT().mountSpawn(ent, opts, ctx); var d = ent.data, big = (ent.variant | 0) === 1;
@@ -41237,7 +41294,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       KS.train.spawn(ent, opts, ctx);
       var cars = (ent.data && ent.data.cars) || [], d = ent.data; d.rail = [];
       var idx = cars.length >= 4 ? [1, cars.length - 2] : [Math.min(1, cars.length - 1)];
-      for (var i = 0; i < idx.length; i++) { var car = cars[idx[i]]; if (car) { var r = mountChild(ctx, 'railgun', 0, ent, 0, 0, 0, { mount: car, local: V(0, 3.6, 0) }); if (r) d.rail.push(r); } }
+      for (var i = 0; i < idx.length; i++) { var car = cars[idx[i]]; if (car) { var r = mountChild(ctx, 'railgun', 0, ent, 0, 0, 0, { mount: car, local: V(0, 3.6 * (FL.VEH_SCALE || 1), 0) }); if (r) d.rail.push(r); } }
       for (i = 0; i < cars.length; i++) {             // BZhRK look (see train_car wrapper below)
         var cc = cars[i], cv = cc ? cc.variant | 0 : -1, role = idx.indexOf(i) >= 0 ? 2 : cv === 0 ? 1 : cv === 3 || cv === 4 ? 3 : cv === 1 || cv === 2 ? 4 : 0;
         if (cc && cc.data && role) { cc.data.net = cc.data.net || {}; cc.data.net.bz = role; }
@@ -46100,7 +46157,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793198798', updShown = false;
+  var BUILD = '1793201840', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
