@@ -309,6 +309,10 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
 .flc:not([hidden]) .flc-panel { animation: flkIn .32s var(--ease) both; }
 .flc .flc-tab:hover { color: var(--ink); }
 .flc button.flc-f, .flc button:focus-visible { box-shadow: 0 0 0 6px rgba(255, 190, 85, .14); }
+/* hangar, pause menu and dialogs cover the flight (main.js sets body.flk-cover): no flight HUD, radio, toasts or key hints behind them */
+body.flk-cover #hud, body.flk-cover #pfCv, body.flk-cover #comms, body.flk-cover #tutCard, body.flk-cover #touch, body.flk-cover #help,
+body.flk-cover #pfNote, body.flk-cover #pfRetry, body.flk-cover #wmNote, body.flk-cover .flx-toasts, body.flk-cover .flx-pip,
+body.flk-cover > .xm-pop, body.flk-cover > .xm-ban, body.flk-cover > .xm-card { visibility: hidden !important; }
 @media (max-width: 1000px) { .mm-hero { grid-template-columns: minmax(0, 1fr) minmax(0, 200px); } button.tile { font-size: 21px; min-height: 84px; } }
 @media (max-width: 760px) {
   .mm { grid-template-columns: 1fr; }
@@ -21224,7 +21228,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     function newProfile() {
       var s = starterAc();
       return { v: 3, credits: 2500, xp: 0, level: 1, sp: 0, upg: {}, jetUpg: {}, upgV: 2, skills: {}, skv: SKILL_V, skFix: 2, ownedAc: [s], ac: s, map: null,
-        ownedW: { gsh23: 1, r60: 1, fab500: 1 }, eqs: {}, mastery: {}, paint: {}, mirror: true,
+        ownedW: { gsh23: 1, r60: 1, fab500: 1 }, eqs: {}, mastery: {}, paint: {}, mirror: true, presets: {},
         missions: 0, failed: 0, best: 0, earned: 0, kills: 0, ranks: { S: 0, A: 0, B: 0, C: 0 }, aces: {} };
     }
     function save() {
@@ -22533,6 +22537,88 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       '.flc.flc-3d{place-items:center start;touch-action:none;background:linear-gradient(90deg,rgba(4,10,12,.55),rgba(4,10,12,.12) 52%,rgba(4,10,12,0) 70%)}',
       '.flc.flc-3d .flc-panel{width:min(700px,56%);background:rgba(9,20,22,.8)}',
       '@media (max-aspect-ratio:1/1){.flc.flc-3d{place-items:end center;background:linear-gradient(0deg,rgba(4,10,12,.55),rgba(4,10,12,0) 60%)}.flc.flc-3d .flc-panel{width:100%;height:min(860px,62%)}}',
+      // ---- hangar UX v2: compact head, pylon picker, weapon shop rows, jet grid (dense; no endless scroll)
+      '.flc-head{padding:10px 18px 8px;gap:6px 18px;align-items:center}.flc-head>div:first-child{min-width:0;flex:1 1 260px}',
+      '.flc-kick{font-size:10.5px;margin:0 0 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      '.flc-h{font-size:clamp(18px,2.3vw,26px)}.flc-cr b{font-size:clamp(20px,2.6vw,30px)}.flc-lvl{min-width:110px}.flc-lvl b{font-size:18px}.flc-meta{gap:16px}',
+      '.flc .flc-tab{padding:11px 13px 9px;min-height:0}.flc-body{padding:14px 18px}',
+      '.flo-sub{display:flex;margin:0 0 10px;border:1px solid var(--line);width:max-content;max-width:100%}',
+      '.flc .flo-sub button{border:0;border-radius:0;min-height:32px;padding:8px 14px;font-size:12px;color:var(--dim);white-space:nowrap}.flc .flo-sub button[aria-pressed=true]{background:rgba(147,255,196,.14);color:var(--g)}',
+      '.flo-sec{margin:0 0 6px!important}',
+      '@media (min-aspect-ratio:1001/1000){.flc.flc-3d .flc-panel{width:min(880px,58%)}}',
+      '.flo-pyl{display:grid;grid-template-columns:repeat(auto-fit,minmax(66px,1fr));gap:4px;margin-bottom:10px}',
+      '.flc .flo-pc{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:3px;min-height:48px;padding:6px 7px;text-transform:none;letter-spacing:0;text-align:left;border-color:var(--line);color:var(--ink);background:rgba(4,12,12,.6);min-width:0;touch-action:manipulation}',
+      '.flo-pc *{pointer-events:none}.flo-pc .k{font:10px/1 var(--mono);letter-spacing:.06em;color:var(--g);text-transform:uppercase;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}',
+      '.flo-pc b{font:700 12px/1.1 var(--disp);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.flo-pc i{font:normal 10px/1 var(--mono);color:var(--dim)}',
+      '.flc .flo-pc.empty b{color:var(--dim)}.flc .flo-pc.lock{opacity:.45;border-style:dashed}',
+      '.flc .flo-pc.t-agm{border-left:3px solid #9fd3ff}.flc .flo-pc.t-aam{border-left:3px solid var(--g)}.flc .flo-pc.t-bomb{border-left:3px solid var(--a)}.flc .flo-pc.t-rocket{border-left:3px solid #d6ff7a}.flc .flo-pc.t-tank{border-left:3px solid #c3ccc8}.flc .flo-pc.t-gunpod{border-left:3px solid #ff9f7a}',
+      '.flc .flo-pc.sel{border-color:var(--a);background:rgba(255,190,85,.16);box-shadow:inset 0 0 0 1px var(--a)}.flc .flo-pc.sel .k{color:var(--a)}',
+      '.flc .flc-pm *{pointer-events:none}.flc .flc-pm{touch-action:manipulation}',
+      '.flc .flo .flc-jet .flc-pm{width:30px;height:30px}.flc .flo .flc-jet .flc-pm b{font-size:12px}.flc .flo .flc-jet .flc-pm small{top:-12px;font-size:9.5px}',
+      '.flc-tot.flo-tot{grid-template-columns:repeat(auto-fit,minmax(78px,1fr));gap:4px 10px;padding:7px 10px;margin-bottom:10px}.flo-tot b{font-size:17px;margin-top:3px}.flo-tot small{font-size:10px;margin-top:2px}',
+      '.flc-lo.flo{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:start}',
+      '.flo-l{display:flex;flex-direction:column;gap:8px;min-width:0}.flo-l .flc-sec{margin:0}.flo .flc-jet{max-width:none}.flo-l .flc-msg,.flo-l .flc-cyc{font-size:11px}',
+      '.flo-gun{display:flex;align-items:center;gap:8px;min-width:0}.flo-gun b{color:var(--ink);font:700 13px/1.1 var(--disp);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.flc .flo-sm,.flc .flo-bulk button,.flc .flo-pre button{min-height:30px;padding:6px 8px;font-size:11px;letter-spacing:.04em;border-color:var(--line);color:var(--ink)}',
+      '.flc .flo-bulk button:not(:disabled):hover,.flc .flo-pre button:not(:disabled):hover{border-color:var(--g)}',
+      '.flo-bulk{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}.flo-bulk button:first-child{grid-column:1/-1;color:var(--g)!important;border-color:rgba(147,255,196,.55)!important;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.flo-pre{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}.flo-pre>.flc-lab{grid-column:1/-1;margin-top:2px}',
+      '.flo-ps{display:flex;flex-direction:column;gap:3px;min-width:0}.flc .flo-ps .flo-psl{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-transform:none;letter-spacing:0;text-align:left;min-height:40px}',
+      '.flo-ps .flo-psl b{font:700 12px/1.1 var(--disp);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.flo-ps .flo-psl small{font:10px/1.2 var(--mono);color:var(--dim);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.flo-ps div{display:flex;gap:3px}.flo-ps div button{flex:1}',
+      '.flc-pick.flo-pick{min-width:0;gap:7px;padding:10px 10px 8px;background:rgba(9,20,22,.6)}',
+      '.flc .flo-pkx{display:none;min-height:32px;padding:4px 10px;border-color:var(--line);color:var(--ink)}',
+      '.flk-cats{display:flex;flex-wrap:wrap;gap:3px}',
+      '.flc .flk-cats button{min-height:28px;padding:5px 7px;font:700 11px/1 var(--disp);letter-spacing:.04em;border-color:var(--line);color:var(--dim);text-transform:uppercase}',
+      '.flc .flk-cats button[aria-pressed=true]{border-color:var(--a);color:var(--a);background:rgba(255,190,85,.1)}.flc .flk-cats button.z{opacity:.4}',
+      '.flk-cats i{font:normal 9.5px/1 var(--mono);color:var(--dim);margin-left:4px}.flk-cats kbd{font:9px/1 var(--mono);opacity:.5;margin-right:4px}',
+      '.flk-q{width:100%;min-width:0;font:13px var(--mono);background:#0c1a17;color:var(--ink);border:1px solid var(--line);padding:7px 9px;border-radius:2px;outline:none;user-select:text;-webkit-user-select:text}.flk-q:focus{border-color:var(--a)}',
+      '.flp-list{display:flex;flex-direction:column;gap:3px;overflow-y:auto;max-height:min(50vh,400px);min-height:120px;overscroll-behavior:contain;padding:2px 3px 2px 0}',
+      '.flp-h{font:10.5px/1 var(--mono);letter-spacing:.14em;color:var(--a);text-transform:uppercase;margin:6px 0 2px}',
+      '.flp-r{display:flex;gap:3px;min-width:0}.flp-r[hidden],.fls-r[hidden],.fla-t[hidden],.flp-none[hidden]{display:none!important}',
+      '.flc .flp-b{flex:1;min-width:0;display:grid;grid-template-columns:44px minmax(0,1fr) auto;align-items:center;gap:8px;padding:5px 8px;min-height:38px;text-transform:none;letter-spacing:0;text-align:left;border-color:var(--line);color:var(--ink);background:rgba(4,12,12,.55)}',
+      '.flp-i{display:block;width:44px;height:16px}',
+      '.flp-n{min-width:0;display:flex;flex-direction:column;gap:2px}.flp-n b{font:700 13px/1.1 var(--disp);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.flp-n small{font:10.5px/1.15 var(--mono);color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      '.flp-k{font:10.5px/1.25 var(--mono);color:var(--dim);text-align:right;white-space:nowrap}.flp-k.cr{font:700 13px/1 var(--disp);color:var(--a)}.flp-k.cr.no{color:var(--red)}',
+      '.flc .flp-r.on .flp-b{border-color:var(--a);background:rgba(255,190,85,.12)}.flc .flp-r.on .flp-n b::before{content:"● ";color:var(--a)}',
+      '.flc .flp-all{min-height:38px;padding:4px 8px;font-size:10.5px;border-color:rgba(147,255,196,.45);color:var(--g);white-space:nowrap}',
+      '.flp-none{font:12px/1.4 var(--mono);color:var(--dim);margin:4px 0}',
+      '.flc-hint.flo-keys{display:block;font-size:10.5px;margin:0}',
+      // weapon shop rows
+      '.fls-bar{display:flex;flex-direction:column;gap:6px;margin-bottom:8px}.fls-row{display:flex;gap:8px;align-items:center}.fls-row .flk-q{flex:1}',
+      '.fls-sort{display:flex;align-items:center;gap:6px;flex:none}.fls-sort select{font:12px var(--mono);background:#0c1a17;color:var(--ink);border:1px solid var(--line);padding:6px 6px;border-radius:2px}.fls-sort select:focus-visible{outline:2px solid var(--a)}',
+      '.fls-list{display:flex;flex-direction:column;gap:3px;margin-bottom:10px}',
+      '.fls-r{display:grid;grid-template-columns:56px minmax(0,1fr) auto auto;align-items:center;gap:6px 10px;padding:6px 8px;border:1px solid var(--line);background:rgba(4,12,12,.55);min-width:0}',
+      '.fls-r .flp-i{width:56px;height:20px}.fls-r.on{border-color:var(--g);box-shadow:inset 3px 0 0 var(--g)}.fls-r.lock{opacity:.6}',
+      '.fls-n{min-width:0;display:flex;flex-direction:column;gap:2px}.fls-n b{font:700 13.5px/1.15 var(--disp);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.fls-n b i{font:normal 10px/1 var(--mono);color:var(--g);letter-spacing:.1em;margin-left:4px}',
+      '.fls-n small{font:10.5px/1.25 var(--mono);color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.fls-n em{font:normal 11.5px/1.25 var(--disp);color:var(--dim);opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      '.fls-p{text-align:right;white-space:nowrap}.fls-p .flc-price{font-size:13.5px}.fls-lv{font:11px/1.2 var(--mono);color:var(--a)}',
+      '.flc .fls-r>button{min-height:32px;padding:6px 10px;font-size:11.5px;white-space:nowrap}',
+      // aircraft: details + filters + tile grid
+      '.fla-det{display:grid;grid-template-columns:minmax(0,170px) minmax(0,1fr) minmax(0,150px);grid-template-areas:"th dx act" "th bars act" "sig sig sig";gap:6px 14px;align-items:center;border:1px solid var(--line);background:rgba(4,12,12,.6);padding:10px 12px;margin-bottom:8px}',
+      '.fla-det>.fli-th{grid-area:th;border:0;align-self:center}.fla-dx{grid-area:dx;min-width:0}.fla-bars{grid-area:bars;grid-template-columns:70px 1fr 16px;gap:3px 8px}.fla-act{grid-area:act;display:flex;flex-direction:column;gap:5px;align-items:stretch}.fla-sig{grid-area:sig;min-width:0}',
+      '.fla-dx h3{margin:3px 0 2px;font:800 clamp(16px,2vw,21px)/1.05 var(--disp);text-transform:uppercase}.fla-meta{margin:0;font:11.5px/1.3 var(--mono);color:var(--ink)}',
+      '.fla-desc{margin:3px 0 0;font-size:12px;line-height:1.3;color:var(--dim);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}',
+      '.fla-st{font:700 13px/1.15 var(--disp);color:var(--a)}.fla-det.own .fla-st{color:var(--g)}.flc .fla-act button{padding:10px 10px;font-size:13px}',
+      '.fla-det.lock>.fli-th img{filter:grayscale(.75) brightness(.8)}',
+      '.fla-mast{margin:0 0 8px}.flc .fla-mh{width:100%;text-align:left;min-height:32px;padding:7px 10px;font-size:11.5px;border-color:var(--line);color:var(--dim)}.fla-mast .flc-sec{margin-top:10px}',
+      '.fla-bar .flk-cats button{min-height:26px;padding:4px 7px;font-size:10.5px}',
+      '.fla-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:5px}',
+      '.flc .fla-t{display:flex;flex-direction:column;align-items:stretch;gap:2px;padding:3px 4px 5px;min-height:0;text-transform:none;letter-spacing:0;text-align:left;border-color:var(--line);color:var(--ink);background:rgba(4,12,12,.55);min-width:0}',
+      '.fla-t .fli-th{border:0;margin-bottom:1px}.fla-t b{font:700 11.5px/1.15 var(--disp);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:2.3em}',
+      '.fla-t>span{font:10.5px/1 var(--mono);color:var(--dim)}.fla-t>span.g{color:var(--g)}.fla-t>span.a{color:var(--a)}.fla-t>span.r{color:var(--red)}',
+      '.fla-t.lock .fli-th img{filter:grayscale(.8) brightness(.7)}.fla-t.lock b{color:var(--dim)}',
+      '.flc .fla-t.cur{border-color:rgba(147,255,196,.7)}.flc .fla-t.sel{border-color:var(--a);background:rgba(255,190,85,.1);box-shadow:inset 0 0 0 1px var(--a)}',
+      '@media (min-height:900px) and (min-width:761px){.fla-det{position:sticky;top:-14px;z-index:3;background:rgba(9,20,22,.96)}}',
+      '@media (max-width:1100px){.fla-det{grid-template-columns:minmax(0,130px) minmax(0,1fr);grid-template-areas:"th dx" "bars bars" "act act" "sig sig"}.fla-act{flex-direction:row;flex-wrap:wrap;align-items:center}.fla-act button{margin-left:auto}}',
+      // narrow / phone: the picker is a sheet over the hangar
+      '@media (max-width:760px){.flc-head{padding:8px 12px 6px}.flc-lvl{display:none}.flc-meta{width:auto}.flc-body{padding:10px 12px}',
+      '.flc-lo.flo{grid-template-columns:1fr}.flo .flc-jet{max-width:340px}.flc-pick.flo-pick{display:none}',
+      '.flo.pk-open .flc-pick.flo-pick{display:flex;position:fixed;left:6px;right:6px;bottom:max(6px,env(safe-area-inset-bottom,0px));top:18%;z-index:64;background:#0a171a;box-shadow:0 -10px 40px rgba(0,0,0,.6)}',
+      '.flo.pk-open .flp-list{max-height:none;flex:1;min-height:0}.flc .flo-pkx{display:inline-block}.flo-keys{display:none!important}',
+      '.fls-r{grid-template-columns:44px minmax(0,1fr) auto;grid-template-areas:"i n b" "i p b"}.fls-r .flp-i{grid-area:i;width:44px;height:16px}.fls-n{grid-area:n}.fls-p{grid-area:p;text-align:left}.fls-r>button{grid-area:b}.fls-n em{display:none}',
+      '.fla-det{grid-template-columns:minmax(0,110px) minmax(0,1fr)}.fla-desc{display:none}.fla-grid{grid-template-columns:repeat(auto-fill,minmax(92px,1fr))}}',
+      '@media (max-aspect-ratio:1/1){.flc.flc-3d .flc-panel{height:min(900px,76%)}}',
       '@media (prefers-reduced-motion:reduce){.flc-toast{transition:none}}'
     ].join('\n');
 
@@ -22547,6 +22633,18 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       toast = document.createElement('div'); toast.className = 'flc-toast off'; toast.setAttribute('aria-live', 'polite'); toast.innerHTML = '<b></b><span></span>';
       document.body.appendChild(toast);
       el.addEventListener('click', onClick);
+      el.addEventListener('pointerdown', function (e) {   // pylons react on press (one press = one pylon, even if the finger moves a little)
+        if (e.button) return;
+        var b = e.target.closest && e.target.closest('[data-act="slot"]'); if (!b || b.disabled) return;
+        e.preventDefault(); act('slot', b.getAttribute('data-id'), b);   // render() puts the focus back on this pylon (focusKey)
+      });
+      el.addEventListener('dblclick', function (e) { var b = e.target.closest('[data-act="acview"]'); if (b && P.ownedAc.indexOf(b.getAttribute('data-id')) >= 0 && b.getAttribute('data-id') !== P.ac) act('selac', b.getAttribute('data-id'), null); });
+      el.addEventListener('input', function (e) { if (e.target.classList && e.target.classList.contains('flk-q')) onQ(e.target); });
+      el.addEventListener('change', function (e) {   // sort selects
+        var k = e.target.getAttribute && e.target.getAttribute('data-set'); if (!k) return;
+        if (k === 'shopSort') shopSort = e.target.value; else if (k === 'acSort') acSort = e.target.value;
+        focusKey = e.target.getAttribute('data-key'); render();
+      });
       el.addEventListener('focusin', function (e) { var b = e.target.closest('[data-key]'); if (b) { focusKey = b.getAttribute('data-key'); if (b.dataset.skill) showSkill(b.dataset.skill); } });
       el.addEventListener('mouseover', function (e) { var b = e.target.closest('[data-skill]'); if (b) showSkill(b.dataset.skill); });
       root.addEventListener('keydown', onKey, true);
@@ -22562,7 +22660,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
 
     function openHangar() {
       ensureDom(); if (!el) return;
-      hangarOpen = true; el.hidden = false; upgAc = null;
+      hangarOpen = true; el.hidden = false; upgAc = null; acSel = null; pickOpen = false;
       try { if (combat.setGun) combat.setGun(false); } catch (e) {}
       render(); focusFirst();
       padPrev = readPadButtons(); cancelAnimationFrame(rafId); rafId = requestAnimationFrame(padLoop);
@@ -22602,7 +22700,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       if (FL.hangarIcons) { try { FL.hangarIcons.hydrate(b, render); } catch (e) { console.warn('hangarIcons', e); } }   // jet / weapon pictures
       b.scrollTop = sc;
       if (tab === 'skills') { drawLines(); showSkill(focusKey && focusKey.indexOf('sk-') === 0 ? focusKey.slice(3) : null); }
-      if (focusKey) { var f = el.querySelector('[data-key="' + focusKey + '"]'); if (f) { try { f.focus({ preventScroll: true }); } catch (e) { f.focus(); } } }
+      if (focusKey) { var f = el.querySelector('[data-key="' + focusKey + '"]'); if (f) { try { f.focus({ preventScroll: true }); } catch (e) { f.focus(); } if (f.tagName === 'INPUT' && f.setSelectionRange) { try { f.setSelectionRange(f.value.length, f.value.length); } catch (e) {} } } }
     }
     function priceHtml(p, can) { return '<span class="flc-price' + (can ? '' : ' no') + '">' + (p ? fmtN(p) + ' cr' : 'Free') + '</span>'; }
 
@@ -22682,86 +22780,330 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       if (st.kind === 'belly') return 'Centre: bombs, pods, tanks';
       return 'Does not fit';
     }
+    // ---------------------------------------------------------------- loadout: pylon picker, fill / copy / clear, presets, weapon shop
+    // Pattern from War Thunder / DCS payload editors: click a pylon, get ONLY the stores that fit it (owned first), category tabs + search.
+    var loSub = 'fit', pickOpen = false, pkCat = 'all', pkQ = '', shopCat = 'all', shopQ = '', shopSort = 'level', shopSt = 'all';
+    var WCATS = [['all', 'All'], ['gun', 'Guns'], ['aam', 'AAM'], ['agm', 'AGM'], ['rocket', 'Rockets'], ['bomb', 'Bombs'], ['special', 'Special'], ['tank', 'Fuel']];
+    function wCat(w) {
+      if (!w) return '';
+      if (w.special || w.type === 'beam' || w.type === 'rail' || w.achievement) return 'special';
+      if (w.type === 'gun' || isPod(w)) return 'gun';
+      if (w.type === 'tank') return 'tank';
+      if (isAAMw(w)) return 'aam';
+      if (w.type === 'missile') return 'agm';
+      return w.type === 'rocket' || w.type === 'bomb' ? w.type : 'special';
+    }
+    function allWeapons() { return WEAPON_LIST.concat(extraWeapons()).filter(function (w) { return !w.builtIn; }); }   // built-in weapons come with their jet
+    function isGunW(w) { return !!w && w.type === 'gun' && !isPod(w); }
+    function wGated(w) { return w.achievement ? !(FL.hasMedal && FL.hasMedal(w.achievement)) : P.level < (w.unlockLevel || 1); }
+    function wQ(w) { return (w.name + ' ' + (w.short || '') + ' ' + w.id + ' ' + (TYPE_CODE[storeType(w)] || w.type) + ' ' + (w.guidance || '') + ' ' + wCat(w)).toLowerCase(); }
+    function qHit(txt, q) { q = String(q || '').toLowerCase().trim(); if (!q) return true; return q.split(/\s+/).every(function (t) { return txt.indexOf(t) >= 0; }); }
+    function wStats(w) {   // one dense line of key numbers
+      var km = function (m) { return (m / 1000).toFixed(m < 10000 ? 1 : 0) + ' km'; }, gd = w.guidance && w.guidance !== 'none' ? w.guidance.toUpperCase() : 'UNGUIDED';
+      if (w.type === 'gun' || isPod(w)) return w.rate + '/s · dmg ' + w.damage + ' · ' + (w.ammo || 0) + ' rds';
+      if (w.type === 'tank') return '+' + (w.boostAdd || 0) + ' s afterburner';
+      if (w.type === 'bomb') return 'dmg ' + w.damage + ' · blast ' + w.blast + ' m · ' + gd;
+      if (w.type === 'rocket') return 'dmg ' + w.damage + ' · ' + km(w.range) + ' · ' + (w.ammo || 1) + ' per pod';
+      return km(w.range) + ' · ' + gd + (w.g ? ' · ' + w.g + ' g' : '') + ' · dmg ' + w.damage;
+    }
+    function wDmg(w) { return (w.damage || 0) * (w.type === 'gun' || isPod(w) ? (w.rate || 1) : (w.salvo || 1)); }
+    function wIco(w) { return FL.weaponIcon ? FL.weaponIcon(w, { cls: 'flp-i' }) : '<i class="flp-i"></i>'; }
+    function fitOpen(w, sts) { return sts.open.filter(function (st) { return !whyNot(st, w); }); }
+    function catBar(act, cur, cnt) {
+      return '<div class="flk-cats" role="tablist" aria-label="Weapon type">' + WCATS.map(function (c, i) {
+        var n = cnt ? cnt[c[0]] || 0 : null;
+        return '<button role="tab" data-act="' + act + '" data-id="' + c[0] + '" data-key="' + act + '-' + c[0] + '" aria-pressed="' + (cur === c[0]) + '"' + (n === 0 && c[0] !== 'all' ? ' class="z"' : '') + ' title="Key ' + i + '">' +
+          '<kbd>' + i + '</kbd>' + c[1] + (n != null ? '<i>' + n + '</i>' : '') + '</button>';
+      }).join('') + '</div>';
+    }
+    function qBox(id, val, ph) { return '<input class="flk-q" type="search" data-q-for="' + id + '" data-key="q-' + id + '" value="' + esc(val) + '" placeholder="' + esc(ph) + '" aria-label="' + esc(ph) + '" autocomplete="off" spellcheck="false">'; }
+    // ---- bulk actions
+    function fillAllPyl(id) {   // one store on every open pylon where it fits
+      var w = FL.WEAPONS[id], sts = stations({ pylonsAdd: pylonsAdd() }), eq = eqOf(P.ac), n = 0;
+      if (!w || !P.ownedW[id] || isGunW(w)) return false;
+      fitOpen(w, sts).forEach(function (st) { eq.pyl[st.id] = id; n++; });
+      loMsg = n ? shortName(w) + ' on ' + n + ' pylon' + (n > 1 ? 's' : '') + '.' : shortName(w) + ' does not fit an open pylon.';
+      if (n) applyAll(); return n > 0;
+    }
+    function copySide(from) {   // 'L': left side to the right side, 'R': right to left (stores that do not fit stay off)
+      var sts = stations({ pylonsAdd: pylonsAdd() }), eq = eqOf(P.ac), sd = from === 'R' ? 1 : -1, n = 0, no = 0;
+      sts.open.forEach(function (st) {
+        if (st.side !== sd) return;
+        var mid = (sd < 0 ? 'R' : 'L') + st.index, ms = sts.byId[mid]; if (!ms || !ms.open) return;
+        var id = eq.pyl[st.id], w = id ? FL.WEAPONS[id] : null;
+        if (!w) { delete eq.pyl[mid]; n++; } else if (!whyNot(ms, w)) { eq.pyl[mid] = id; n++; } else no++;
+      });
+      loMsg = 'Copied ' + (sd < 0 ? 'left to right' : 'right to left') + '.' + (no ? ' ' + no + ' store(s) do not fit.' : '');
+      applyAll(); return n > 0;
+    }
+    function clearAllPyl() { var eq = eqOf(P.ac); eq.pyl = {}; loMsg = 'All pylons empty.'; applyAll(); return true; }
+    // ---- presets: 3 saved loadouts per jet (in the profile save) + quick presets from the weapons you own
+    function presetsOf(acId) {
+      if (!P.presets || typeof P.presets !== 'object' || Array.isArray(P.presets)) P.presets = {};
+      var a = P.presets[acId]; if (!Array.isArray(a)) a = P.presets[acId] = [null, null, null];
+      while (a.length < 3) a.push(null);
+      return a;
+    }
+    function loSummary(pyl) {
+      var c = {}, o = [];
+      for (var k in pyl) { var w = FL.WEAPONS[pyl[k]]; if (!w) continue; var nm = shortName(w); if (!c[nm]) { c[nm] = 0; o.push(nm); } c[nm]++; }
+      return o.length ? o.map(function (nm) { return nm + ' ×' + c[nm]; }).join(' · ') : 'Empty';
+    }
+    function presetName(p, i) { return p && p.n ? p.n : 'Slot ' + (i + 1); }
+    function savePreset(i) {
+      var eq = eqOf(P.ac), ps = presetsOf(P.ac), old = ps[i], pyl = {};
+      for (var k in eq.pyl) if (eq.pyl[k]) pyl[k] = eq.pyl[k];
+      ps[i] = { n: old && old.n ? old.n : '', gun: eq.gun, pyl: pyl };
+      save(); loMsg = 'Saved in ' + presetName(ps[i], i) + ': ' + loSummary(pyl) + '.'; return true;
+    }
+    function applyPyl(pyl, gun) {   // put a whole loadout on the jet: what you own and what fits; the rest stays empty
+      var sts = stations({ pylonsAdd: pylonsAdd() }), eq = eqOf(P.ac), miss = 0;
+      sts.open.forEach(function (st) { delete eq.pyl[st.id]; });
+      for (var k in pyl) {
+        var st = sts.byId[k], w = FL.WEAPONS[pyl[k]];
+        if (st && st.open && w && P.ownedW[w.id] && !whyNot(st, w)) eq.pyl[k] = w.id; else miss++;
+      }
+      var gw = gun ? FL.WEAPONS[gun] : null;
+      if (gw && P.ownedW[gun] && isGunW(gw) && (!gw.jet || gw.jet.indexOf(P.ac) >= 0)) eq.gun = gun;
+      applyAll(); return miss;
+    }
+    function loadPreset(i) {
+      var p = presetsOf(P.ac)[i];
+      if (!p) { loMsg = presetName(null, i) + ' is empty. Push Save to keep the loadout you have now.'; return false; }
+      var miss = applyPyl(p.pyl || {}, p.gun);
+      loMsg = 'Loaded ' + presetName(p, i) + '.' + (miss ? ' ' + miss + ' store(s) do not fit now.' : ''); return true;
+    }
+    function namePreset(i) {
+      var p = presetsOf(P.ac)[i]; if (!p) return false;
+      var n = null; try { n = root.prompt ? root.prompt('Name for this loadout', p.n || '') : null; } catch (e) { n = null; }
+      if (n == null) return false;
+      p.n = String(n).replace(/[<>]/g, '').trim().slice(0, 22); save(); return true;
+    }
+    function bestOwned(st, pred, val) {
+      var best = null, bv = -1e18;
+      allWeapons().forEach(function (w) { if (!P.ownedW[w.id] || isGunW(w) || !pred(w) || whyNot(st, w)) return; var v = val(w); if (v > bv) { bv = v; best = w; } });
+      return best;
+    }
+    var QUICK = [['air', 'Air-to-air'], ['ground', 'Ground attack'], ['pods', 'Gun pods everywhere']];
+    function quickPreset(kind) {
+      var sts = stations({ pylonsAdd: pylonsAdd() }), pyl = {}, pairCat = {};
+      var val = function (w) { return (w.price || 0) + (w.unlockLevel || 0) * 1000; };
+      var aam = function (w) { return isAAMw(w) && !w.special; }, tank = function (w) { return w.type === 'tank'; };
+      var gnd = { agm: function (w) { return w.type === 'missile' && !isAAMw(w) && !w.special; }, bomb: function (w) { return w.type === 'bomb' && !w.special; }, rocket: function (w) { return w.type === 'rocket'; } };
+      var pairs = []; sts.open.forEach(function (st) { if (st.side < 0 && st.kind !== 'tip' && pairs.indexOf(st.index) < 0) pairs.push(st.index); });
+      var gc = ['agm', 'bomb', 'rocket'], gi = 0;
+      pairs.forEach(function (ix, j) { pairCat[ix] = j === 0 && pairs.length > 2 ? 'aam' : gc[gi++ % gc.length]; });   // ground: outer pair keeps AAMs when the jet has 3+ wing pairs
+      sts.open.forEach(function (st) {
+        var w = null;
+        if (kind === 'air') w = bestOwned(st, aam, val) || (st.side === 0 ? bestOwned(st, tank, val) : null);
+        else if (kind === 'pods') w = bestOwned(st, isPod, val) || bestOwned(st, aam, val);
+        else {
+          if (st.kind === 'tip') w = bestOwned(st, aam, val);
+          else if (st.side === 0) w = bestOwned(st, gnd.bomb, wDmg) || bestOwned(st, gnd.agm, wDmg) || bestOwned(st, tank, val);
+          else {
+            var pc = pairCat[st.index] || 'bomb';
+            w = pc === 'aam' ? bestOwned(st, aam, val) : bestOwned(st, gnd[pc], wDmg);
+            if (!w) w = bestOwned(st, gnd.agm, wDmg) || bestOwned(st, gnd.bomb, wDmg) || bestOwned(st, gnd.rocket, wDmg);
+          }
+        }
+        if (w) pyl[st.id] = w.id;
+      });
+      var lab = QUICK.filter(function (q) { return q[0] === kind; })[0];
+      if (kind === 'pods' && !allWeapons().some(function (w) { return isPod(w) && P.ownedW[w.id]; })) { loMsg = 'You have no gun pod. Buy one in the Weapon shop (Guns).'; return false; }
+      if (!Object.keys(pyl).length) { loMsg = 'You have no weapon for this preset. Buy some in the Weapon shop.'; return false; }
+      applyPyl(pyl, null);
+      loMsg = (lab ? lab[1] : kind) + ': ' + loSummary(pyl) + '.'; return true;
+    }
+    function closePick() {
+      pickOpen = false;
+      focusKey = 'slot-' + selSlot; render();
+    }
+    function setCat(i) {   // keys 0-7 / LT RT: weapon type tab of the picker or the shop
+      if (i < 0 || i >= WCATS.length) return;
+      var id = WCATS[i][0];
+      if (loSub === 'shop') { shopCat = id; focusKey = 'shcat-' + id; } else { pkCat = id; focusKey = 'pkcat-' + id; }
+      render();
+    }
+    function cycleCat(d) { var cur = loSub === 'shop' ? shopCat : pkCat, i = WCATS.map(function (c) { return c[0]; }).indexOf(cur); setCat((i + d + WCATS.length) % WCATS.length); }
+    // search boxes filter the rows live (no re-render, the caret stays)
+    function onQ(inp) {
+      var f = inp.getAttribute('data-q-for'), v = inp.value;
+      if (f === 'pk') pkQ = v; else if (f === 'shop') shopQ = v; else if (f === 'ac') acQ = v;
+      var box = el.querySelector('[data-qbox="' + f + '"]'); if (!box) return;
+      var rows = box.querySelectorAll('[data-q]'), n = 0;
+      for (var i = 0; i < rows.length; i++) { var hit = qHit(rows[i].getAttribute('data-q'), v); rows[i].hidden = !hit; if (hit) n++; }
+      var none = box.querySelector(':scope > .flp-none'); if (none) none.hidden = n > 0;
+    }
+
     function htmlLoadout() {
       var s = curStats(), sts = stations(s), lo = loadoutCalc(s, sts), eq = eqOf(P.ac), h = '';
       var spec = acSpec(P.ac), delta = !!DELTA[P.ac] || !!(spec && spec.delta);
       if (!sts.byId[selSlot] && /^s\d+$/.test(selSlot)) selSlot = (sts.open[slotIdx(selSlot)] || sts.open[0] || {}).id;
       if (!sts.byId[selSlot]) selSlot = sts.open[0] ? sts.open[0].id : 'L1';
-      var sel = sts.byId[selSlot], gunE = lo[0], hp = Math.round(s.handling01 * 100);
+      var sel = sts.byId[selSlot], gunE = lo[0], hp = Math.round(s.handling01 * 100), allW = allWeapons();
+      var nOwn = allW.filter(function (w) { return P.ownedW[w.id]; }).length;
+      h += '<div class="flo-sub" role="tablist" aria-label="Loadout or shop">' + [['fit', 'Loadout'], ['shop', 'Weapon shop · ' + nOwn + '/' + allW.length + ' owned']].map(function (o) {
+        return '<button role="tab" data-act="losub" data-id="' + o[0] + '" data-key="losub-' + o[0] + '" aria-pressed="' + (loSub === o[0]) + '">' + o[1] + '</button>';
+      }).join('') + '</div>';
+      if (loSub === 'shop') return h + htmlShop(sts, eq, sel);
       // totals
       var tot = function (lab, v, sm, ok) { return '<div><span class="flc-lab">' + lab + '</span><b' + (ok ? ' class="ok"' : '') + '>' + v + '</b>' + (sm ? '<small>' + sm + '</small>' : '') + '</div>'; };
-      h += '<div class="flc-tot">' + tot('Missiles', s.missiles, s.reserveAAM > 0 && s.missiles ? 'AAM · ' + s.reserveAAM + ' in reserve' : 'air-to-air', true) +
+      h += '<div class="flc-tot flo-tot">' + tot('Missiles', s.missiles, s.reserveAAM > 0 && s.missiles ? 'AAM · ' + s.reserveAAM + ' in reserve' : 'air-to-air', true) +
         tot('Ground msl', s.agms, 'air-to-ground') + tot('Bombs', s.bombs, s.bombRack + s.bombRackAdd > 1 ? 'up to ' + clamp(Math.round(s.bombRack + s.bombRackAdd), 1, 4) + ' per pylon' : '1 per pylon') +
         tot('Rockets', s.rockets, '') + tot('Weight', kg(s.storesMass), s.overKg > 0 ? '<span style="color:#ffb347">OVERLOAD: ' + kg(s.overKg) + ' over max payload. Slow turns.</span>' : 'stores + gun ammo') +
         tot('Drag', '+' + Math.round(s.storesDrag * 100) + '%', 'top speed ' + Math.round(100 / Math.sqrt(1 + s.storesDrag)) + '%') +
         tot('Handling', hp + '%', hp < 40 ? 'Heavy. Slow turns.' : hp < 70 ? 'Medium' : 'Good') + '</div>';
-      h += '<div class="flc-sec">' + esc(spec ? spec.name : P.ac) + ' · ' + sts.open.length + ' of ' + sts.all.length + ' pylons open' +
+      h += '<div class="flc-sec flo-sec">' + esc(spec ? spec.name : P.ac) + ' · ' + sts.open.length + ' of ' + sts.all.length + ' pylons open' +
         (sts.open.length < sts.all.length ? ' · buy Hardpoints to open more' : '') + '</div>';
-      // jet top view with pylon markers
-      // real top view of this jet (hangaricons.js) when every pylon has a known point, else the generic drawing
-      var HI = FL.hangarIcons, TV = HI ? HI.topView(P.ac) : null, tvp = null;
-      if (TV) { var tpts = sts.all.map(function (st) { var q = TV.pos(st.id); return q ? { id: st.id, x: q.x, y: q.y } : null; }); if (tpts.length && tpts.every(Boolean)) tvp = HI.spread(tpts, 360, 302, 17); }
-      h += '<div class="flc-lo"><div class="flc-jet' + (tvp ? ' fli-real' : '') + '" data-fli-top="' + esc(P.ac) + '">' + (tvp ? '<img src="' + TV.url + '" alt="">' + HI.leaders(tvp) : jetSvg(delta));
+      // jet top view with pylon markers: the real top view of this jet (hangaricons.js) when every pylon has a known point, else the generic drawing
+      var HI = FL.hangarIcons, TV = HI ? HI.topView(P.ac) : null, tvp = null, real = false;
+      var mk = function (st) { var e = lo.filter(function (x) { return x.slot === st.id; })[0]; return e || null; };
+      // 1) pylon chips, left to right as on the jet: the main way to select a pylon (big targets, store name on each)
+      var order = sts.all.filter(function (st) { return st.side < 0; }).sort(function (a, b) { return a.index - b.index; })
+        .concat(sts.all.filter(function (st) { return st.side === 0; }), sts.all.filter(function (st) { return st.side > 0; }).sort(function (a, b) { return b.index - a.index; }));
+      h += '<div class="flo-pyl" role="group" aria-label="Pylons, left to right">' + order.map(function (st) {
+        var e = st.open ? mk(st) : null, w = st.open ? FL.WEAPONS[eq.pyl[st.id]] : null;
+        var v = !st.open ? 'Closed' : e && w ? shortName(w) : 'Empty', n = e ? (e.type === 'rocket' || e.type === 'gunpod' ? e.ammo : '×' + e.count) : '';
+        return '<button class="flo-pc' + (st.id === selSlot ? ' sel' : '') + (!st.open ? ' lock' : !e ? ' empty' : '') + (e ? ' t-' + e.type : '') + '" data-act="slot" data-id="' + st.id + '" data-key="pyl-' + st.id + '" aria-pressed="' + (st.id === selSlot) + '" title="Pylon ' + st.id + ' (' + KIND_NAME[st.kind] + '): ' + esc(v) + '">' +
+          '<span class="k">' + st.id + ' · ' + KIND_NAME[st.kind] + '</span><b>' + esc(v) + '</b>' + (n ? '<i>' + n + '</i>' : '') + '</button>';
+      }).join('') + '</div>';
+      h += '<div class="flc-lo flo' + (pickOpen ? ' pk-open' : '') + '"><div class="flo-l">';
+      // 2) top view with markers; markers are spread so they never overlap (the chips above are the main control)
+      var pts = null;
+      if (TV) { var tpts = sts.all.map(function (st) { var q = TV.pos(st.id); return q ? { id: st.id, x: q.x, y: q.y } : null; }); if (tpts.length && tpts.every(Boolean)) { pts = tpts; real = true; } }
+      if (!pts) pts = sts.all.map(function (st) { var p = stXY(st, delta); return { id: st.id, x: p.x / 2, y: (p.y - 32) / 1.68 }; });
+      if (HI) tvp = HI.spread(pts, 360, 302, 21); else { tvp = {}; pts.forEach(function (q) { tvp[q.id] = { x: q.x, y: q.y }; }); }
+      h += '<div class="flc-jet' + (real ? ' fli-real' : '') + '" data-fli-top="' + esc(P.ac) + '">' + (real ? '<img src="' + TV.url + '" alt="">' + HI.leaders(tvp) : jetSvg(delta) + (HI ? HI.leaders(tvp) : ''));
       sts.all.forEach(function (st) {
-        var p = tvp ? null : stXY(st, delta), w = st.open ? FL.WEAPONS[eq.pyl[st.id]] : null, e = lo.filter(function (x) { return x.slot === st.id; })[0];
+        var w = st.open ? FL.WEAPONS[eq.pyl[st.id]] : null, e = st.open ? mk(st) : null;
         var t = e ? e.type : '', ico = e && HI ? FL.weaponIcon(e.id, { vertical: true, cls: 'fli-pv' }) : '', cls = 'flc-pm' + (t ? ' t-' + t : '') + (!st.open ? ' lock' : !e ? ' empty' : '') + (st.id === selSlot ? ' sel' : '') + (ico ? ' has-i' : '');
         var inner = !st.open ? '<b>+</b>' : e ? ico + '<b>' + (e.type === 'rocket' || e.type === 'gunpod' ? e.ammo : e.count) + '</b><i>' + esc(TYPE_CODE[t] || '') + '</i>' : '<b>—</b>';
         var lab = 'Pylon ' + st.id + ' (' + KIND_NAME[st.kind] + '): ' + (!st.open ? 'closed' : e ? esc(w.name) + ' ×' + e.count : 'empty');
-        var pos = tvp ? 'left:' + tvp[st.id].x + '%;top:' + tvp[st.id].y + '%' : 'left:' + (p.x / 2) + '%;top:' + ((p.y - 32) / 1.68).toFixed(2) + '%';
+        var pos = 'left:' + tvp[st.id].x + '%;top:' + tvp[st.id].y + '%';
         h += '<button class="' + cls + '" style="' + pos + '" data-act="slot" data-id="' + st.id + '" data-key="slot-' + st.id + '" aria-label="' + lab + '" title="' + lab + '">' +
           '<small>' + st.id + '</small>' + inner + '</button>';
       });
       h += '</div>';
-      // picker for the selected pylon
-      var mirId = sel && sel.side ? (sel.side < 0 ? 'R' : 'L') + sel.index : null;
-      h += '<div class="flc-pick"><div class="flc-pickh"><span>Pylon <b>' + esc(selSlot) + '</b> · ' + (sel ? KIND_NAME[sel.kind] : '') + '</span>' +
-        (mirId ? '<button class="flc-mir' + (P.mirror ? ' on' : '') + '" data-act="mirror" data-key="mirror" aria-pressed="' + !!P.mirror + '">Mirror to ' + mirId + ': ' + (P.mirror ? 'on' : 'off') + '</button>' : '') + '</div>';
-      h += '<p class="flc-hint" style="display:block">' + (sel ? (sel.open ? KIND_TXT[sel.kind] : 'This pylon is closed. Buy Hardpoints to open it.') : '') + '</p>';
-      if (sel && sel.open) {
-        h += '<div class="flc-chips">';
-        WEAPON_LIST.concat(extraWeapons()).filter(function (w) { return (w.type !== 'gun' || isPod(w)) && P.ownedW[w.id]; }).forEach(function (w) {
-          var on = eq.pyl[selSlot] === w.id, why = whyNot(sel, w), inf = why ? null : pickInfo(sel, w, s);
-          h += '<button class="flc-chip' + (on ? ' on' : '') + (why ? ' no' : '') + '" data-act="pick" data-id="' + w.id + '" data-key="pick-' + w.id + '"' + (why ? ' disabled' : '') + (on ? ' aria-pressed="true"' : '') + '>' +
-            (FL.weaponIcon ? FL.weaponIcon(w, { cls: 'fli-wi' }) : '') + '<b>' + esc(shortName(w)) + '</b>' + (why ? '<em>' + why + '</em>' : '<span>' + (TYPE_CODE[storeType(w)] || '') + ' · ' + inf.txt + ' · ' + kg(inf.kg) + '</span>') + '</button>';
-        });
-        h += '<button class="flc-chip' + (eq.pyl[selSlot] ? '' : ' on') + '" data-act="pick" data-id="" data-key="pick-none"><b>Empty</b><span>0 kg</span></button></div>';
-      }
+      h += '<div class="flo-gun"><span class="flc-lab">Gun</span><b>' + esc(gunE.spec.name) + '</b><button class="flo-sm" data-act="pkgun" data-key="pkgun">Change</button></div>';
+      var cw = eq.pyl[selSlot] && sel && sel.open ? FL.WEAPONS[eq.pyl[selSlot]] : null, cwN = cw ? fitOpen(cw, sts).length : 0;
+      h += '<div class="flo-bulk" role="group" aria-label="All pylons">' +
+        '<button data-act="fillall" data-id="' + (cw ? cw.id : '') + '" data-key="fillall"' + (cw && cwN > 1 ? '' : ' disabled') + ' title="Put the store of pylon ' + esc(selSlot) + ' on every open pylon where it fits">' + (cw ? 'All ' + cwN + ' pylons: ' + esc(shortName(cw)) : 'Fill all: select a store') + '</button>' +
+        '<button data-act="copyside" data-id="L" data-key="copyL" title="Copy the left wing stores to the right wing">Copy L → R</button>' +
+        '<button data-act="copyside" data-id="R" data-key="copyR" title="Copy the right wing stores to the left wing">Copy R → L</button>' +
+        '<button data-act="clearall" data-key="clearall">Clear all</button></div>';
+      h += '<div class="flo-pre" role="group" aria-label="Quick loadouts"><span class="flc-lab">Quick loadouts · from weapons you own</span>' + QUICK.map(function (q) {
+        return '<button data-act="qpre" data-id="' + q[0] + '" data-key="qpre-' + q[0] + '">' + q[1] + '</button>';
+      }).join('') + '</div>';
+      var ps = presetsOf(P.ac);
+      h += '<div class="flo-pre" role="group" aria-label="Saved loadouts"><span class="flc-lab">Saved loadouts · ' + esc(spec ? spec.name : P.ac) + '</span>' + ps.map(function (p, i) {
+        var sum = p ? loSummary(p.pyl || {}) : 'Empty';
+        return '<div class="flo-ps"><button class="flo-psl" data-act="psload" data-id="' + i + '" data-key="psl-' + i + '"' + (p ? '' : ' disabled') + ' title="' + esc(sum) + '"><b>' + esc(presetName(p, i)) + '</b><small>' + esc(sum) + '</small></button>' +
+          '<div><button data-act="pssave" data-id="' + i + '" data-key="pss-' + i + '" title="Keep the loadout you have now in this slot">Save</button>' +
+          (p ? '<button data-act="psname" data-id="' + i + '" data-key="psn-' + i + '">Name</button>' : '') + '</div></div>';
+      }).join('') + '</div>';
       h += '<p class="flc-msg" role="status">' + esc(loMsg) + '</p>';
       var cyc = cycleOf(lo).map(function (c) { return esc(shortName(c.spec)) + ' ×' + c.ammo; }).join(' → ');
-      h += '<p class="flc-cyc"><span>In flight, Y cycles</span> ' + cyc + '</p>';
-      h += '<p class="flc-cyc"><span>Gun</span> ' + esc(gunE.spec.name) + ' · burst ' + s.gunBurst.toFixed(1) + ' s · assist ' + Math.round(s.aimAssist * 100) + '%</p></div></div>';
-      // catalog
-      var groups = [['gun', 'Guns'], ['missile', 'Missiles'], ['rocket', 'Rockets and pods'], ['bomb', 'Bombs'], ['special', 'Special weapons'], ['tank', 'Fuel']];
-      var allW = WEAPON_LIST.concat(extraWeapons()).filter(function (w) { return !w.builtIn; });   // built-in weapons come with their jet
-      if (FL.hangarIcons && FL.hangarIcons.legendHtml) h += FL.hangarIcons.legendHtml();
-      groups.forEach(function (g) {
-        var list = allW.filter(function (w) { return g[0] === 'special' ? (w.type === 'beam' || w.type === 'rail') : g[0] === 'rocket' ? (w.type === 'rocket' || isPod(w)) : g[0] === 'gun' ? (w.type === 'gun' && !isPod(w)) : w.type === g[0]; });
-        if (!list.length) return;
-        h += '<div class="flc-sec">' + g[1] + '</div><div class="flc-grid">';
-        list.forEach(function (w) {
-          var achLock = !!(w.achievement && !(FL.hasMedal && FL.hasMedal(w.achievement)));   // achievement weapons (extras.js): medal instead of level
-          var own = !!P.ownedW[w.id], gated = w.achievement ? achLock : P.level < (w.unlockLevel || 1), eqd = eq.gun === w.id || Object.keys(eq.pyl).some(function (k) { return eq.pyl[k] === w.id && sts.byId[k] && sts.byId[k].open; });
-          var tags = w.type === 'tank' ? ['centre only'] : [w.guidance && w.guidance !== 'none' ? w.guidance.toUpperCase() : 'UNGUIDED'].concat(w.targets || []);
-          if (w.aspect === 'rear') tags.push('rear aspect');
-          if (w.needsBombsOK) tags.push('hardened');
-          if (isAAMw(w) && w.weight <= 120) tags.push('wingtip OK');
-          var per = w.type === 'gun' ? w.weight + ' kg/rd' : kg(w.weight) + (w.type === 'rocket' ? ' each' : '');
-          var info = w.type === 'gun' ? w.rate + '/s · dmg ' + w.damage + ' · ' + per : w.type === 'bomb' ? 'dmg ' + w.damage + ' · blast ' + w.blast + ' m · ' + per
-            : w.type === 'tank' ? '+' + (w.boostAdd || 0) + ' s afterburner · ' + per
-            : (w.range / 1000).toFixed(w.range < 10000 ? 1 : 0) + ' km · ' + w.speed + ' m/s' + (w.g ? ' · ' + w.g + ' g' : '') + ' · ' + per;
-          var btn, canSel = sel && sel.open && !whyNot(sel, w);
-          if (!own) btn = '<button data-act="buyw" data-id="' + w.id + '" data-key="w-' + w.id + '"' + (gated || P.credits < (w.price || 0) ? ' aria-disabled="true"' : '') + '>' + (gated ? (achLock ? 'Medal: ' + esc(FL.medalName ? FL.medalName(w.achievement) : w.achievement) : 'Level ' + w.unlockLevel + (FL.rankInfo ? ' · ' + FL.rankInfo(w.unlockLevel).abbr : '')) : 'Buy') + '</button>';
-          else if (w.type === 'gun' && !isPod(w)) btn = '<button data-act="eqw" data-id="' + w.id + '" data-key="w-' + w.id + '"' + (eq.gun === w.id ? ' disabled' : '') + '>' + (eq.gun === w.id ? 'Equipped' : 'Equip') + '</button>';
-          else {
-            var here = eq.pyl[selSlot] === w.id;
-            btn = '<button data-act="pick" data-id="' + w.id + '" data-key="w-' + w.id + '"' + (here || !canSel ? ' disabled' : '') + '>' + (here ? 'On ' + selSlot : !canSel ? 'Not on ' + selSlot : 'Load on ' + selSlot + (P.mirror && mirId ? '+' + mirId : '')) + '</button>';
-          }
-          h += '<div class="flc-card' + (eqd ? ' on' : '') + '">' + (FL.weaponIcon ? FL.weaponIcon(w, { cls: 'fli-w fli-wc' }) : '') + '<h3>' + esc(w.name) + '<small>' + esc((TYPE_CODE[storeType(w)] || w.type).toUpperCase()) + '</small></h3><div class="flc-tags">' +
-            tags.map(function (t) { return '<span>' + esc(t) + '</span>'; }).join('') + '</div><p>' + esc(w.desc || '') + '</p><div class="flc-fx">' + info + '</div><div class="flc-row">' +
-            (own ? '<span class="flc-price max">Owned</span>' : priceHtml(w.price || 0, P.credits >= (w.price || 0))) + btn + '</div></div>';
-        });
-        h += '</div>';
+      h += '<p class="flc-cyc"><span>In flight, Y cycles</span> ' + (cyc || '—') + '</p>';
+      h += '<p class="flc-cyc"><span>Gun</span> ' + esc(gunE.spec.name) + ' · burst ' + s.gunBurst.toFixed(1) + ' s · assist ' + Math.round(s.aimAssist * 100) + '%</p>';
+      h += '</div>' + htmlPicker(s, sts, eq, sel) + '</div>';
+      return h;
+    }
+    // the picker for the selected pylon: only stores that fit, owned first, then the ones you can buy now
+    function htmlPicker(s, sts, eq, sel) {
+      var mirId = sel && sel.side ? (sel.side < 0 ? 'R' : 'L') + sel.index : null, h = '';
+      h += '<div class="flc-pick flo-pick" id="flcPick" role="region" aria-label="Stores for pylon ' + esc(selSlot) + '"><div class="flc-pickh"><span>' + (pkCat === 'gun' ? 'Gun · pylon ' : 'Pylon ') + '<b>' + esc(selSlot) + '</b> · ' + (sel ? KIND_NAME[sel.kind] : '') + '</span>' +
+        (mirId ? '<button class="flc-mir' + (P.mirror ? ' on' : '') + '" data-act="mirror" data-key="mirror" aria-pressed="' + !!P.mirror + '" title="A store you put on one side also goes on the other side">Mirror to ' + mirId + ': ' + (P.mirror ? 'on' : 'off') + '</button>' : '') +
+        '<button class="flo-pkx" data-act="pkclose" data-key="pkclose" aria-label="Close">✕</button></div>';
+      if (!sel || !sel.open) {
+        return h + '<p class="flc-hint" style="display:block">' + (sel ? 'This pylon is closed. Buy Hardpoints to open it.' : '') + '</p><button class="flo-sm" data-act="tab" data-id="upgrades" data-key="tab-upgrades">Go to Upgrades</button></div>';
+      }
+      var all = allWeapons(), fitsHere = function (w) { return !isGunW(w) && !whyNot(sel, w); };
+      var cnt = { all: 0 };
+      all.forEach(function (w) {
+        var c = wCat(w), ok = isGunW(w) ? P.ownedW[w.id] && (!w.jet || w.jet.indexOf(P.ac) >= 0) : fitsHere(w) && (P.ownedW[w.id] || !wGated(w));
+        if (!ok) return; cnt[c] = (cnt[c] || 0) + 1; if (!isGunW(w)) cnt.all++;
       });
+      h += catBar('pkcat', pkCat, cnt) + qBox('pk', pkQ, 'Search: name, IR, radar…');
+      var inCat = function (w) { return pkCat === 'all' ? !isGunW(w) : wCat(w) === pkCat; };
+      var list = all.filter(inCat), own = [], buy = [], lock = 0, noFit = 0, rows = '';
+      list.forEach(function (w) {
+        if (isGunW(w)) { if (P.ownedW[w.id] && (!w.jet || w.jet.indexOf(P.ac) >= 0)) own.push(w); else if (!P.ownedW[w.id] && !wGated(w) && !w.jet) buy.push(w); return; }
+        if (!fitsHere(w)) { if (P.ownedW[w.id]) noFit++; return; }
+        if (P.ownedW[w.id]) own.push(w); else if (!wGated(w)) buy.push(w); else lock++;
+      });
+      var srt = function (a, b) { return (a.unlockLevel || 0) - (b.unlockLevel || 0) || (a.price || 0) - (b.price || 0); };
+      own.sort(function (a, b) { return WCATS.map(function (c) { return c[0]; }).indexOf(wCat(a)) - WCATS.map(function (c) { return c[0]; }).indexOf(wCat(b)) || srt(b, a); });
+      buy.sort(srt);
+      var hid = function (w) { return qHit(wQ(w), pkQ) ? '' : ' hidden'; };
+      if (pkCat !== 'gun') rows += '<div class="flp-r' + (eq.pyl[selSlot] ? '' : ' on') + '" data-q="empty none clear"' + (qHit('empty none clear', pkQ) ? '' : ' hidden') + '><button class="flp-b flp-e" data-act="pick" data-id="" data-key="pick-none"' + (eq.pyl[selSlot] ? '' : ' aria-pressed="true"') + '><span class="flp-i"></span><span class="flp-n"><b>Empty</b><small>Nothing on ' + esc(selSlot) + '</small></span><span class="flp-k">0 kg</span></button></div>';
+      if (own.length) rows += '<div class="flp-h">' + (pkCat === 'gun' ? 'Owned · internal gun on top, pods on the pylon' : 'Owned · fits ' + esc(selSlot)) + '</div>';
+      own.forEach(function (w) {
+        if (isGunW(w)) {
+          var on = eq.gun === w.id;
+          rows += '<div class="flp-r' + (on ? ' on' : '') + '" data-q="' + esc(wQ(w)) + '"' + hid(w) + '><button class="flp-b" data-act="eqw" data-id="' + w.id + '" data-key="pgun-' + w.id + '"' + (on ? ' aria-pressed="true"' : '') + '>' + wIco(w) +
+            '<span class="flp-n"><b>' + esc(w.name) + '</b><small>Internal gun · ' + esc(wStats(w)) + '</small></span><span class="flp-k">' + (on ? 'Equipped' : 'Equip') + '</span></button></div>';
+          return;
+        }
+        var on2 = eq.pyl[selSlot] === w.id, inf = pickInfo(sel, w, s), nf = fitOpen(w, sts).length;
+        rows += '<div class="flp-r' + (on2 ? ' on' : '') + '" data-q="' + esc(wQ(w)) + '"' + hid(w) + '><button class="flp-b" data-act="pick" data-id="' + w.id + '" data-key="pick-' + w.id + '"' + (on2 ? ' aria-pressed="true"' : '') + ' title="' + esc(w.desc || w.name) + '">' + wIco(w) +
+          '<span class="flp-n"><b>' + esc(shortName(w)) + '</b><small>' + (TYPE_CODE[storeType(w)] || '') + ' · ' + esc(wStats(w)) + '</small></span><span class="flp-k">' + esc(inf.txt) + '<br>' + kg(inf.kg) + '</span></button>' +
+          (nf > 1 ? '<button class="flp-all" data-act="pickall" data-id="' + w.id + '" data-key="pall-' + w.id + '" title="Put ' + esc(shortName(w)) + ' on all ' + nf + ' open pylons where it fits">All ' + nf + '</button>' : '') + '</div>';
+      });
+      if (buy.length) rows += '<div class="flp-h">Buy now · loads on ' + esc(selSlot) + '</div>';
+      buy.forEach(function (w) {
+        var can = P.credits >= (w.price || 0);
+        rows += '<div class="flp-r" data-q="' + esc(wQ(w)) + '"' + hid(w) + '><button class="flp-b flp-buy" data-act="pbuy" data-id="' + w.id + '" data-key="pbuy-' + w.id + '"' + (can ? '' : ' aria-disabled="true"') + ' title="' + esc(w.desc || w.name) + '">' + wIco(w) +
+          '<span class="flp-n"><b>' + esc(shortName(w)) + '</b><small>' + (isGunW(w) ? 'Internal gun' : TYPE_CODE[storeType(w)] || '') + ' · ' + esc(wStats(w)) + '</small></span><span class="flp-k cr' + (can ? '' : ' no') + '">' + (w.price ? fmtN(w.price) + ' cr' : 'Free') + '</span></button></div>';
+      });
+      var vis = rows.indexOf('data-q=') >= 0;
+      rows += '<p class="flp-none"' + (vis ? ' hidden' : '') + '>No store here. Try All or another tab.</p>';
+      if (lock || noFit) rows += '<p class="flp-none">' + (lock ? lock + ' more need a higher level or a medal (Weapon shop). ' : '') + (noFit ? noFit + ' of your stores do not fit pylon ' + esc(selSlot) + '.' : '') + '</p>';
+      h += '<div class="flp-list" data-qbox="pk">' + rows + '</div>';
+      h += '<p class="flc-hint flo-keys">Keys: <b>1–7</b> type · <b>0</b> all · type to search · <b>Esc</b> back</p></div>';
+      return h;
+    }
+    // the weapon shop: same tabs + search, sort and owned / can buy / locked filter; dense rows, no big cards
+    var SHOP_SORT = [['level', 'Level'], ['price', 'Price'], ['damage', 'Damage'], ['name', 'Name']];
+    var SHOP_ST = [['all', 'All'], ['own', 'Owned'], ['buy', 'Can buy'], ['lock', 'Locked']];
+    function htmlShop(sts, eq, sel) {
+      var all = allWeapons(), mirId = sel && sel.side ? (sel.side < 0 ? 'R' : 'L') + sel.index : null;
+      var stOf = function (w) { return P.ownedW[w.id] ? 'own' : wGated(w) ? 'lock' : 'buy'; };
+      var cnt = { all: 0 };
+      all.forEach(function (w) { if (shopSt !== 'all' && stOf(w) !== shopSt) return; var c = wCat(w); cnt[c] = (cnt[c] || 0) + 1; cnt.all++; });
+      var h = '<div class="fls-bar">' + catBar('shcat', shopCat, cnt) + '<div class="fls-row">' + qBox('shop', shopQ, 'Search all weapons') +
+        '<label class="fls-sort"><span class="flc-lab">Sort</span><select data-set="shopSort" data-key="shsort" aria-label="Sort">' + SHOP_SORT.map(function (o) { return '<option value="' + o[0] + '"' + (shopSort === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></label></div>' +
+        '<div class="flk-cats fls-st" role="group" aria-label="Show">' + SHOP_ST.map(function (o) {
+          return '<button data-act="shst" data-id="' + o[0] + '" data-key="shst-' + o[0] + '" aria-pressed="' + (shopSt === o[0]) + '">' + o[1] + '</button>';
+        }).join('') + '</div></div>';
+      var list = all.filter(function (w) { return (shopCat === 'all' || wCat(w) === shopCat) && (shopSt === 'all' || stOf(w) === shopSt); });
+      var cmp = {
+        level: function (a, b) { return (a.unlockLevel || 0) - (b.unlockLevel || 0) || (a.price || 0) - (b.price || 0); },
+        price: function (a, b) { return (a.price || 0) - (b.price || 0) || (a.unlockLevel || 0) - (b.unlockLevel || 0); },
+        damage: function (a, b) { return wDmg(b) - wDmg(a); },
+        name: function (a, b) { return a.name < b.name ? -1 : a.name > b.name ? 1 : 0; }
+      }[shopSort] || null;
+      if (cmp) list.sort(cmp);
+      var rows = list.map(function (w) {
+        var achLock = !!(w.achievement && !(FL.hasMedal && FL.hasMedal(w.achievement)));
+        var own = !!P.ownedW[w.id], gated = wGated(w), eqd = eq.gun === w.id || Object.keys(eq.pyl).some(function (k) { return eq.pyl[k] === w.id && sts.byId[k] && sts.byId[k].open; });
+        var btn, canSel = sel && sel.open && !whyNot(sel, w);
+        if (!own) btn = '<button data-act="buyw" data-id="' + w.id + '" data-key="w-' + w.id + '"' + (gated || P.credits < (w.price || 0) ? ' aria-disabled="true"' : '') + '>' + (gated ? (achLock ? 'Medal' : 'Level ' + w.unlockLevel) : 'Buy') + '</button>';
+        else if (isGunW(w)) btn = '<button data-act="eqw" data-id="' + w.id + '" data-key="w-' + w.id + '"' + (eq.gun === w.id ? ' disabled' : '') + '>' + (eq.gun === w.id ? 'Equipped' : 'Equip') + '</button>';
+        else {
+          var here = eq.pyl[selSlot] === w.id;
+          btn = '<button data-act="pick" data-id="' + w.id + '" data-key="w-' + w.id + '"' + (here || !canSel ? ' disabled' : '') + '>' + (here ? 'On ' + selSlot : !canSel ? 'Not ' + selSlot : 'Load ' + selSlot + (P.mirror && mirId ? '+' + mirId : '')) + '</button>';
+        }
+        var tags = [w.type === 'tank' ? 'centre only' : null, w.aspect === 'rear' ? 'rear aspect' : null, w.needsBombsOK ? 'hardened' : null, isAAMw(w) && w.weight <= 120 ? 'wingtip OK' : null,
+          w.jet ? 'only ' + w.jet.map(function (id) { var a = acSpec(id); return a ? (a.name || id).split(' ').slice(-2).join(' ') : id; }).slice(0, 2).join(', ') : null].filter(Boolean);
+        var per = w.type === 'gun' ? w.weight + ' kg/rd' : isPod(w) ? kg(w.podMass || 500) : kg(w.weight) + (w.type === 'rocket' ? ' each' : '');
+        var price = own ? '<span class="flc-price max">' + (eqd ? 'On jet' : 'Owned') + '</span>' : gated ? '<span class="fls-lv">' + (achLock ? 'Medal: ' + esc(FL.medalName ? FL.medalName(w.achievement) : w.achievement) : 'Level ' + w.unlockLevel + (FL.rankInfo ? ' · ' + FL.rankInfo(w.unlockLevel).abbr : '')) + '</span>' : priceHtml(w.price || 0, P.credits >= (w.price || 0));
+        return '<div class="fls-r ' + stOf(w) + (eqd ? ' on' : '') + '" data-q="' + esc(wQ(w)) + '"' + (qHit(wQ(w), shopQ) ? '' : ' hidden') + ' title="' + esc(w.desc || '') + '">' + wIco(w) +
+          '<div class="fls-n"><b>' + esc(w.name) + ' <i>' + esc(TYPE_CODE[storeType(w)] || (isGunW(w) ? 'GUN' : w.type.toUpperCase())) + '</i></b><small>' + esc(wStats(w)) + ' · ' + per + (tags.length ? ' · ' + esc(tags.join(' · ')) : '') + '</small>' +
+          (w.desc ? '<em>' + esc(w.desc) + '</em>' : '') + '</div><div class="fls-p">' + price + '</div>' + btn + '</div>';
+      }).join('');
+      var shown = list.filter(function (w) { return qHit(wQ(w), shopQ); }).length;
+      h += '<div class="fls-list" data-qbox="shop">' + rows + '<p class="flp-none"' + (shown ? ' hidden' : '') + '>No weapon here. Try All, or clear the search.</p></div>';
+      if (FL.hangarIcons && FL.hangarIcons.legendHtml) h += FL.hangarIcons.legendHtml();
       return h;
     }
     // weapons other agents add to FL.WEAPONS (for example gun pods) after this file loaded
@@ -22819,34 +23161,72 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       }).join('') + '</div>';
       return h;
     }
+    // ---------------------------------------------------------------- aircraft: dense jet grid + filters + details of the selected jet
+    var acSel = null, acMastOpen = false, acQ = '', acSt = 'all', acRole = 'all', acNat = 'all', acSort = 'tier';
+    var AC_ROLES = [['all', 'All'], ['fighter', 'Fighter'], ['attack', 'Attack'], ['stealth', 'Stealth'], ['carrier', 'Carrier'], ['vtol', 'VTOL'], ['concept', 'Concept'], ['trainer', 'Trainer']];
+    var NATION = { RU: 'Russia', US: 'USA', SE: 'Sweden', UK: 'UK', DE: 'Germany', FR: 'France', CN: 'China', NU: 'Concept', USSR: 'USSR' };
+    var AC_SORT = [['tier', 'Tier'], ['price', 'Price'], ['level', 'Level'], ['speed', 'Speed'], ['name', 'Name']];
+    function acRoles(a) {
+      var r = (a.role || '') + ' ' + (a.name || ''), o = [];
+      if (/stealth|5th-gen|6th-gen/i.test(r)) o.push('stealth');
+      if (a.carrier) o.push('carrier');
+      if (/v\/stol|stovl|vtol/i.test(r) || a.vtol) o.push('vtol');
+      if (/concept|demonstrator|prototype/i.test(r)) o.push('concept');
+      if (/trainer/i.test(r)) o.push('trainer');
+      if (/attack|strike|close air|bomber|gunship|strafer|multirole|omnirole|swing-role/i.test(r)) o.push('attack');
+      if (/fighter|interceptor|superiority|dominance|defender|multirole|omnirole|swing-role|aggressor/i.test(r) || !o.length) o.push('fighter');
+      return o;
+    }
+    function acSpeed(a) { return a.topSpeedKmh || (a.machMax ? a.machMax * 1060 : 0); }
+    function acStateOf(a, inf) { return P.ownedAc.indexOf(a.id) >= 0 ? 'own' : P.level < inf.level ? 'lock' : 'buy'; }
+    function acQtxt(a) { return ((a.name || '') + ' ' + a.id + ' ' + (a.nation || '') + ' ' + (NATION[a.nation] || '') + ' ' + (a.role || '') + ' ' + acRoles(a).join(' ') + ' ' + (a.year || '')).toLowerCase(); }
     function htmlAircraft() {
-      var list = acList(), bars = acBars(list);
-      var HI = FL.hangarIcons;
-      return (HI ? HI.previewHtml(P.ac, 'Flying now') : '') + htmlMastery(P.ac) + '<div class="flc-sec">Jets' + (HI ? ' · point at a jet to see it big' : '') + '</div><div class="flc-grid">' + list.map(function (a, i) {
-        var inf = acInfo(a, i), own = P.ownedAc.indexOf(a.id) >= 0, cur = P.ac === a.id, gated = P.level < inf.level, s = a.stats || derive(a);
-        var sc10 = score10(a, list);
-        var sb = ['speed', 'agility', 'firepower', 'toughness'].map(function (k) {
-          var v = sc10[k], seg = '';
-          for (var q = 1; q <= 10; q++) seg += '<b' + (q <= v ? ' class="on"' : '') + '></b>';
-          return '<span>' + esc(k) + '</span><i class="n10" title="' + v + ' of 10">' + seg + '</i><em>' + v + '</em>';
-        }).join('');
-        var btn = cur ? '<button disabled data-key="ac-' + a.id + '">Selected</button>' : own ? '<button data-act="selac" data-id="' + a.id + '" data-key="ac-' + a.id + '">Select</button>'
-          : '<button data-act="buyac" data-id="' + a.id + '" data-key="ac-' + a.id + '"' + (gated || P.credits < inf.price ? ' aria-disabled="true"' : '') + '>' + (gated ? 'Level ' + inf.level : 'Buy') + '</button>';
-        var lockTxt = !own && gated ? 'Unlocks at ' + (FL.rankTitle ? FL.rankTitle(inf.level) + ' (L' + inf.level + ')' : 'level ' + inf.level) + ' · ' + fmtN(inf.price) + ' cr' : '';
-        var ml = masteryLevel(a.id), mp = masteryProgress(a.id), ms = milestones(a.id), nx = null;
-        for (var lv = ml + 1; lv <= 10 && !nx; lv++) if (ms[lv]) nx = ms[lv];
-        var lay = buildLayout(a, inf.hardpoints), pmax = 0; lay.groups.forEach(function (g) { pmax += g.st.length; });
-        var mh = '<div class="flc-mast"><div class="flc-ring' + (ml >= 10 ? ' max' : '') + '" style="--p:' + Math.round(mp * 100) + '" title="Mastery ' + ml + '"><b>' + ml + '</b></div>' +
-          '<dl><dt>Mastery</dt><dd>' + ml + ' / 10</dd><dt>Next</dt><dd>' + (nx ? esc(short(nx.name, 18)) : 'done') + '</dd><dt>Specials</dt><dd>' + esc(short(ms[5].name, 18)) + '</dd><dd></dd><dd>' + esc(short(ms[10].name, 18)) + '</dd></dl></div>';
-        var stTxt = own ? (cur ? 'Flying now' : 'Owned') : gated ? lockTxt : fmtN(inf.price) + ' cr';
-        if (own) { var uc = jetUpgCount(a.id), upct = uc.max ? Math.round(100 * uc.n / uc.max) : 0;   // per-jet upgrade progress
-          mh += '<div class="flc-upb" title="Upgrades on this jet"><span class="flc-lab">Upgrades ' + uc.n + ' / ' + uc.max + '</span><div class="flc-bar"><i class="' + (uc.n >= uc.max ? 'full' : '') + '" style="width:' + upct + '%"></i></div></div>'; }
-        return '<div class="flc-card' + (cur ? ' on' : '') + (!own && gated ? ' lockd' : '') + '" data-fli-ac="' + esc(a.id) + '" data-fli-st="' + esc(stTxt) + '">' + (HI ? HI.thumbHtml(a.id) : '') +
-          '<h3>' + esc(a.name || a.id) + '<small>' + esc(a.nation || '') + ' · ' + inf.hardpoints + '–' + pmax + ' pylons</small></h3>' +
-          (a.desc || a.blurb ? '<p>' + esc(a.desc || a.blurb) + '</p>' : '') + (FL.jetSigCard ? FL.jetSigCard(a) : '') + mh + (sb ? '<div class="flc-stat">' + sb + '</div>' : '') +
-          (lockTxt ? '<p class="flc-lockr" style="margin:6px 0 0;font:12px/1.3 var(--mono,monospace);letter-spacing:.04em;color:#ffbe55">' + esc(lockTxt) + '</p>' : '') +
-          '<div class="flc-row">' + (own ? '<span class="flc-price max">' + (cur ? 'Flying' : 'Owned') + '</span>' : priceHtml(inf.price, P.credits >= inf.price)) + btn + '</div></div>';
-      }).join('') + '</div>';
+      var list = acList(), HI = FL.hangarIcons;
+      if (!acSel || !acSpec(acSel)) acSel = P.ac;
+      var infos = {}; list.forEach(function (a, i) { infos[a.id] = acInfo(a, i); });
+      // ---- details of the selected jet (the 3D hangar shows it too)
+      var a = acSpec(acSel), ai = acIdx(acSel), inf = infos[acSel], own = P.ownedAc.indexOf(acSel) >= 0, cur = P.ac === acSel, gated = P.level < inf.level;
+      var sc10 = score10(a, list), lay = buildLayout(a, inf.hardpoints), pmax = 0; lay.groups.forEach(function (g) { pmax += g.st.length; });
+      var bars = ['speed', 'agility', 'firepower', 'toughness'].map(function (k) {
+        var v = sc10[k], seg = ''; for (var q = 1; q <= 10; q++) seg += '<b' + (q <= v ? ' class="on"' : '') + '></b>';
+        return '<span>' + esc(k) + '</span><i class="n10" title="' + v + ' of 10">' + seg + '</i><em>' + v + '</em>';
+      }).join('');
+      var btn = cur ? '<button disabled data-key="ac-' + a.id + '">Flying now</button>' : own ? '<button class="flc-pri fla-go" data-act="selac" data-id="' + a.id + '" data-key="ac-' + a.id + '">Fly this jet</button>'
+        : '<button class="fla-go" data-act="buyac" data-id="' + a.id + '" data-key="ac-' + a.id + '"' + (gated || P.credits < inf.price ? ' aria-disabled="true"' : '') + '>' + (gated ? 'Level ' + inf.level : 'Buy · ' + fmtN(inf.price) + ' cr') + '</button>';
+      var stTxt = own ? (cur ? 'Flying now' : 'Owned') : gated ? 'Unlocks at ' + (FL.rankTitle ? FL.rankTitle(inf.level) + ' (L' + inf.level + ')' : 'level ' + inf.level) : (P.credits >= inf.price ? 'You can buy it' : 'Need ' + fmtN(inf.price - P.credits) + ' cr more');
+      var ml = masteryLevel(a.id), meta = [a.topSpeedKmh ? Math.round(a.topSpeedKmh) + ' km/h' : a.machMax ? 'Mach ' + a.machMax : null, a.maxG ? a.maxG + ' g' : null, inf.hardpoints + '–' + pmax + ' pylons', a.gunName || null].filter(Boolean).join(' · ');
+      var h = '<div class="fla-det' + (own ? ' own' : gated ? ' lock' : '') + '">' + (HI ? HI.thumbHtml(a.id) : '') + '<div class="fla-dx"><span class="flc-lab">' + esc([NATION[a.nation] || a.nation, a.year, a.role].filter(Boolean).join(' · ')) + '</span>' +
+        '<h3>' + esc(a.name || a.id) + '</h3><p class="fla-meta">' + esc(meta) + '</p>' + (a.desc || a.blurb ? '<p class="fla-desc">' + esc(a.desc || a.blurb) + '</p>' : '') + '</div>' +
+        '<div class="flc-stat fla-bars">' + bars + '</div><div class="fla-act"><span class="fla-st">' + esc(stTxt) + '</span>' +
+        (own ? (function () { var uc = jetUpgCount(a.id); return '<span class="flc-lab">Mastery ' + ml + '/10 · upgrades ' + uc.n + '/' + uc.max + '</span>'; })() : '<span class="flc-lab">Tier ' + acTier(a.id) + ' · ' + (a.price ? fmtN(inf.price) + ' cr' : 'free') + '</span>') + btn + '</div>' +
+        (FL.jetSigCard ? '<div class="fla-sig">' + FL.jetSigCard(a) + '</div>' : '') + '</div>';
+      if (cur) h += '<div class="fla-mast"><button class="fla-mh" data-act="acmast" data-key="acmast" aria-expanded="' + acMastOpen + '">Mastery and paint · level ' + ml + ' of 10 · paint: ' + esc((PAINTS.filter(function (p) { return p[0] === paintOf(a.id); })[0] || ['', 'Factory'])[1]) + (acMastOpen ? ' ▴' : ' ▾') + '</button>' + (acMastOpen ? htmlMastery(P.ac) : '') + '</div>';
+      // ---- filters
+      var nats = []; list.forEach(function (x) { if (x.nation && nats.indexOf(x.nation) < 0) nats.push(x.nation); });
+      var chips = function (act, arr, curV) { return arr.map(function (o) { return '<button data-act="' + act + '" data-id="' + o[0] + '" data-key="' + act + '-' + o[0] + '" aria-pressed="' + (curV === o[0]) + '">' + esc(o[1]) + '</button>'; }).join(''); };
+      var stCnt = { all: list.length, own: 0, buy: 0, lock: 0 }; list.forEach(function (x) { stCnt[acStateOf(x, infos[x.id])]++; });
+      h += '<div class="fls-bar fla-bar"><div class="fls-row">' + qBox('ac', acQ, 'Search jets: name, nation, role') +
+        '<label class="fls-sort"><span class="flc-lab">Sort</span><select data-set="acSort" data-key="acsort" aria-label="Sort jets">' + AC_SORT.map(function (o) { return '<option value="' + o[0] + '"' + (acSort === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></label></div>' +
+        '<div class="flk-cats" role="group" aria-label="Show">' + chips('acst', [['all', 'All ' + stCnt.all], ['own', 'Owned ' + stCnt.own], ['buy', 'Can buy ' + stCnt.buy], ['lock', 'Locked ' + stCnt.lock]], acSt) + '</div>' +
+        '<div class="flk-cats" role="group" aria-label="Role">' + chips('acrole', AC_ROLES, acRole) + '</div>' +
+        '<div class="flk-cats" role="group" aria-label="Nation">' + chips('acnat', [['all', 'All nations']].concat(nats.map(function (n) { return [n, NATION[n] || n]; })), acNat) + '</div></div>';
+      // ---- grid
+      var show = list.filter(function (x) {
+        return (acSt === 'all' || acStateOf(x, infos[x.id]) === acSt) && (acRole === 'all' || acRoles(x).indexOf(acRole) >= 0) && (acNat === 'all' || x.nation === acNat);
+      });
+      var cmp = {
+        price: function (x, y) { return infos[x.id].price - infos[y.id].price; }, level: function (x, y) { return infos[x.id].level - infos[y.id].level || infos[x.id].price - infos[y.id].price; },
+        speed: function (x, y) { return acSpeed(y) - acSpeed(x); }, name: function (x, y) { return (x.name || x.id) < (y.name || y.id) ? -1 : 1; }
+      }[acSort];
+      if (cmp) show.sort(cmp);
+      var n = 0;
+      h += '<div class="fla-grid" data-qbox="ac">' + show.map(function (x) {
+        var fi = infos[x.id], st = acStateOf(x, fi), cu = x.id === P.ac, hit = qHit(acQtxt(x), acQ); if (hit) n++;
+        var line = cu ? '<span class="g">Flying</span>' : st === 'own' ? '<span class="g">Owned</span>' : st === 'lock' ? '<span>Level ' + fi.level + '</span>' : '<span class="' + (P.credits >= fi.price ? 'a' : 'r') + '">' + (fi.price >= 1e6 ? (fi.price / 1e6).toFixed(fi.price % 1e6 ? 1 : 0) + 'M' : Math.round(fi.price / 1000) + 'k') + ' cr</span>';
+        return '<button class="fla-t ' + st + (cu ? ' cur' : '') + (x.id === acSel ? ' sel' : '') + '" data-act="acview" data-id="' + esc(x.id) + '" data-key="acv-' + esc(x.id) + '" data-q="' + esc(acQtxt(x)) + '" aria-pressed="' + (x.id === acSel) + '"' + (hit ? '' : ' hidden') + ' title="' + esc(x.name || x.id) + '">' +
+          (HI ? HI.thumbHtml(x.id) : '') + '<b>' + esc(x.name || x.id) + '</b>' + line + '</button>';
+      }).join('') + '<p class="flp-none"' + (n ? ' hidden' : '') + '>No jet here. Push All, or clear the search.</p></div>';
+      return h;
     }
     function htmlMaps() {
       var w = W0(), cur = w.mapId || P.map || 'lax';
@@ -22948,7 +23328,33 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       else if (a === 'upgac') { upgAc = id; render(); return; }
       else if (a === 'buyw') { ok = buyWeapon(id); buy = true; }
       else if (a === 'eqw') { ok = equipWeapon(id, selSlot); }
-      else if (a === 'slot') { selSlot = id; loMsg = ''; render(); return; }
+      else if (a === 'slot') {
+        selSlot = id; loMsg = ''; pickOpen = true;
+        if (pkCat === 'gun' || pkCat === 'tank') pkCat = 'all';   // a new pylon: show every store that fits it
+        render();
+        var narrow = root.matchMedia && root.matchMedia('(max-width:760px)').matches;   // phone: the picker is a sheet, go into it
+        if (narrow) { var fr = el.querySelector('#flcPick .flp-b'); if (fr) { fr.focus({ preventScroll: true }); focusKey = fr.getAttribute('data-key'); } }
+        return;
+      }
+      else if (a === 'pkclose') { closePick(); return; }
+      else if (a === 'pkgun') { pkCat = 'gun'; pickOpen = true; focusKey = 'pkcat-gun'; render(); return; }
+      else if (a === 'losub') { loSub = id === 'shop' ? 'shop' : 'fit'; render(); return; }
+      else if (a === 'pkcat' || a === 'shcat') { if (a === 'pkcat') pkCat = id; else shopCat = id; render(); return; }
+      else if (a === 'shst') { shopSt = id; render(); return; }
+      else if (a === 'pickall') { ok = fillAllPyl(id); }
+      else if (a === 'fillall') { ok = id ? fillAllPyl(id) : false; }
+      else if (a === 'copyside') { ok = copySide(id); }
+      else if (a === 'clearall') { ok = clearAllPyl(); }
+      else if (a === 'qpre') { ok = quickPreset(id); }
+      else if (a === 'psload') { ok = loadPreset(+id); }
+      else if (a === 'pssave') { ok = savePreset(+id); }
+      else if (a === 'psname') { namePreset(+id); render(); return; }
+      else if (a === 'pbuy') { ok = buyWeapon(id); buy = true; if (ok) { var bw = FL.WEAPONS[id]; if (bw && !isGunW(bw)) setPylon(selSlot, id); } }
+      else if (a === 'acview') { acSel = id; render(); return; }
+      else if (a === 'acmast') { acMastOpen = !acMastOpen; render(); return; }
+      else if (a === 'acst') { acSt = id; render(); return; }
+      else if (a === 'acrole') { acRole = id; render(); return; }
+      else if (a === 'acnat') { acNat = id; render(); return; }
       else if (a === 'clear' || a === 'pick') { ok = setPylon(selSlot, a === 'pick' ? (id || null) : null); }
       else if (a === 'mirror') { P.mirror = !P.mirror; save(); }
       else if (a === 'buyac') { ok = buyAircraft(id); buy = true; }
@@ -23119,13 +23525,29 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     }
     function onKey(e) {
       if (!hangarOpen) return;
-      var c = e.code, used = true;
+      var c = e.code, used = true, t = e.target, k = e.key || '', mod = e.ctrlKey || e.metaKey || e.altKey;
+      if (t && el.contains(t) && /^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName)) {   // typing in a search box / sort list: the browser does it, no flight keys
+        e.stopImmediatePropagation();
+        if (c === 'Escape') { e.preventDefault(); if (tab === 'loadout' && loSub === 'fit' && pickOpen) closePick(); else { t.blur(); focusFirst(); } }
+        else if (t.tagName === 'INPUT' && (c === 'ArrowDown' || c === 'Enter' || c === 'NumpadEnter')) {
+          e.preventDefault(); var box = el.querySelector('[data-qbox="' + t.getAttribute('data-q-for') + '"]'), r = null;
+          if (box) { var rs = box.querySelectorAll('[data-q]'); for (var i = 0; i < rs.length && !r; i++) if (!rs[i].hidden) r = rs[i].tagName === 'BUTTON' ? rs[i] : rs[i].querySelector('button:not(:disabled)'); }
+          if (r) { r.focus(); r.scrollIntoView({ block: 'nearest' }); }
+        }
+        return;
+      }
+      var qi = el.querySelector('#flcBody input.flk-q');
       if (c === 'ArrowLeft') moveFocus(-1, 0); else if (c === 'ArrowRight') moveFocus(1, 0);
       else if (c === 'ArrowUp') moveFocus(0, -1); else if (c === 'ArrowDown') moveFocus(0, 1);
       else if (c === 'KeyQ' || c === 'PageUp') cycleTab(-1); else if (c === 'KeyE' || c === 'PageDown') cycleTab(1);
-      else if (c === 'Escape' || c === 'Backspace') closeHangar();
+      else if (c === 'Escape' || c === 'Backspace') { if (tab === 'loadout' && loSub === 'fit' && pickOpen) closePick(); else closeHangar(); }
       else if (c === 'Enter' || c === 'Space') { var a = document.activeElement; if (a && el.contains(a) && a.click) a.click(); }
       else if (c === 'Tab') used = false;
+      else if (tab === 'loadout' && !mod && /^(Digit|Numpad)[0-7]$/.test(c)) setCat(+c.slice(-1));   // 1-7 weapon type tabs, 0 all
+      else if (qi && !mod && (k === '/' || (k.length === 1 && /[a-z0-9\-]/i.test(k)))) {   // type to search
+        qi.focus(); if (k !== '/') { qi.value += k; onQ(qi); }
+        try { qi.setSelectionRange(qi.value.length, qi.value.length); } catch (er) {}
+      }
       else used = true;    // swallow flight keys while the hangar is open
       e.stopImmediatePropagation();
       if (used) e.preventDefault();
@@ -23152,9 +23574,11 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
         else { rep.t -= dt; if (rep.t <= 0) { rep.t = 0.11; step(dir); } }
       } else rep.k = null;
       if (E(0)) { var a = document.activeElement; if (a && el.contains(a) && !a.disabled) a.click(); else focusFirst(); }
-      if (E(1) || E(9)) closeHangar();
+      if (E(1) && tab === 'loadout' && loSub === 'fit' && pickOpen && root.matchMedia && root.matchMedia('(max-width:760px)').matches) closePick();   // phone sheet: B closes the picker
+      else if (E(1) || E(9)) closeHangar();
       if (E(4)) cycleTab(-1); if (E(5)) cycleTab(1);
       if (tab === 'skills') { if (E(6)) cycleBranch(-1); if (E(7)) cycleBranch(1); }
+      if (tab === 'loadout') { if (E(6)) cycleCat(-1); if (E(7)) cycleCat(1); }   // LT / RT: weapon type tab
       if (E(2) && tab === 'skills') { var f = document.activeElement; if (f && f.dataset && f.dataset.skill) act('skill', f.dataset.skill, f); }
       padPrev = gp.buttons.map(function (b) { return b.pressed; });
     }
@@ -23206,6 +23630,16 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       learnSkill: function (id) { var r = learnSkill(id); if (hangarOpen) render(); return r; },
       respec: respec,
       setTab: function (t) { tab = t; if (hangarOpen) { focusKey = null; render(); } },
+      // hangar UX: jet shown in the 3D hangar (Aircraft tab = the jet you look at), loadout presets, picker / shop state (tests)
+      viewAc: function () { return hangarOpen && tab === 'aircraft' && acSel && acSpec(acSel) ? acSel : P.ac; },
+      viewAircraft: function (id) { if (acSpec(id)) acSel = id; if (hangarOpen) render(); },
+      savePreset: function (i) { var r = savePreset(i | 0); if (hangarOpen) render(); return r; },
+      loadPreset: function (i) { var r = loadPreset(i | 0); if (hangarOpen) render(); return r; },
+      presets: function (acId) { return presetsOf(acId || P.ac).slice(); },
+      quickLoadout: function (kind) { var r = quickPreset(kind); if (hangarOpen) render(); return r; },
+      fillAllPylons: function (id) { var r = fillAllPyl(id); if (hangarOpen) render(); return r; },
+      copySide: function (from) { var r = copySide(from); if (hangarOpen) render(); return r; },
+      setLoadoutView: function (v, cat) { loSub = v === 'shop' ? 'shop' : 'fit'; if (cat) { if (loSub === 'shop') shopCat = cat; else pkCat = cat; } if (hangarOpen) render(); },
       setSkillBranch: function (b) { skillBranch = b; if (hangarOpen) render(); },
       profile: function () { return P; },
       mastery: function (id) { id = id || P.ac; return { level: masteryLevel(id), progress: masteryProgress(id), xp: masteryXp(id), stats: mastery(id), milestones: milestones(id).filter(Boolean), paint: paintOf(id), paints: paintsOf(id) }; },
@@ -35746,7 +36180,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     noteLast[text] = clock;
     var d = root.document; if (!d || !d.body || !d.createElement) return;
     if (!noteEl) {
-      noteEl = d.createElement('div');
+      noteEl = d.createElement('div'); noteEl.id = 'wmNote';
       noteEl.style.cssText = 'position:fixed;left:50%;top:17%;transform:translateX(-50%);z-index:40;pointer-events:none;font:700 13px/1.2 system-ui,sans-serif;' +
         'letter-spacing:.14em;color:#5cb8ff;background:rgba(0,14,34,.6);padding:6px 12px;border-radius:4px;text-shadow:0 1px 2px #000;display:none';
       d.body.appendChild(noteEl);
@@ -37830,6 +38264,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
 
     // ---- jet
     function curAc() {
+      try { if (campaign && campaign.viewAc) { const v = campaign.viewAc(); if (v) return v; } } catch (e) {}   // Aircraft tab: the jet you look at
       try { const p = campaign && campaign.profile ? campaign.profile() : null; if (p && p.ac) return p.ac; } catch (e) {}
       return 'su27';
     }
@@ -37872,7 +38307,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       }
       if (dirtyStores) {
         dirtyStores = false;
-        try { if (jet.api.setStores) jet.api.setStores(campaign && campaign.pylonStores ? campaign.pylonStores() : null); } catch (e) { console.warn('hangar3d stores', e); }
+        let own = true; try { const p = campaign && campaign.profile ? campaign.profile() : null; own = !p || p.ac === jetId; } catch (e) {}
+        try { if (jet.api.setStores) jet.api.setStores(own && campaign && campaign.pylonStores ? campaign.pylonStores() : null); } catch (e) { console.warn('hangar3d stores', e); }   // a jet you only look at: its default stores
         measure(jet); placeProps(jet);
       }
       if (dirtyPaint) {
@@ -37924,6 +38360,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     const ORBIT_KEYS = { ArrowLeft: 1, ArrowRight: 1, ArrowUp: 1, ArrowDown: 1 };
     function onKey(e) {   // registered on window (capture) before campaign.js's own key handler, so Shift+Arrows can be taken here
       if (!active) return;
+      if (e.target && e.target.closest && e.target.closest('input,select,textarea')) return;   // typing in the hangar search box ("R-73")
       const zoomKey = e.code === 'Equal' || e.code === 'Minus' || e.code === 'NumpadAdd' || e.code === 'NumpadSubtract';
       if ((ORBIT_KEYS[e.code] && e.shiftKey) || zoomKey) { keys[e.code] = e.type === 'keydown'; e.preventDefault(); e.stopImmediatePropagation(); orb.idle = 0; }
       else if (e.type === 'keyup' && keys[e.code]) keys[e.code] = false;
@@ -42895,7 +43332,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     hx.setTransform(dpr, 0, 0, dpr, 0, 0);
     hx.clearRect(0, 0, W, H);
     tutTick(dt);
-    if (!started || !booted) return;
+    if (!started || !booted || hudCover) return;   // hangar / menu open: no flight HUD behind it
     var u = hu = clamp(Math.min(W, H) / 760, 0.72, 1.7);
     var key = W + 'x' + H + '@' + dpr;
     if (key !== hudKey) { hudKey = key; SPR = {}; HS.vign = null; }
@@ -44446,7 +44883,12 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
   }
 
   // ---------------------------------------------------------------- loop
-  var last = performance.now(), acc = 0, hudAcc = 0;
+  var last = performance.now(), acc = 0, hudAcc = 0, hudCover = false;
+  // the hangar, the pause menu and full-screen dialogs cover the flight: hide the canvas HUD and the flight DOM overlays (shell.html body.flk-cover)
+  function coverTick() {
+    var m = $('menu'), cv = !!(started && ((m && !m.hidden) || (campaign && campaign.hangarOpen) || (FL.uiModalOpen && FL.uiModalOpen())));
+    if (cv !== hudCover) { hudCover = cv; document.body.classList.toggle('flk-cover', cv); }
+  }
   function frame(now) {
     requestAnimationFrame(frame);
     var dt = Math.min(0.05, Math.max(0, (now - last) / 1000)); last = now;
@@ -44454,6 +44896,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     PF.t = performance.now(); PF.cur.fill(0);
     var rdt = dt; if (extras) { extras.update(rdt); dt *= extras.timeScale(); }
     if (!(extras && extras.photoOn)) poll(rdt);
+    coverTick();
     var live = started && !paused && !(campaign && campaign.hangarOpen);
     // co-op: the shared world and the net link keep running while this player is paused or in the hangar
     if (!live && started && net && net.connected) { try { combat.update(dt); if (campaign) campaign.update(dt); } catch (e) { glog('coop bg update: ' + e.message); } }
@@ -44677,7 +45120,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     refreshMs = Math.min(refreshMs, sorted[Math.floor(sorted.length * 0.1)]); // fastest typical frame ≈ display refresh
     var med = sorted[Math.floor(sorted.length * 0.5)];
     // goal ~90 fps: on 144-240 Hz screens do not trade resolution for fps above that (refresh-capped below it)
-    var target = Math.max(refreshMs, 1000 / 90) * 1.1;
+    // auto steps only defend ~60 fps: chasing 90 on mid GPUs (GTX 980, Firefox) dropped to fast + 60% res, and each quality step is a recompile hitch
+    var target = Math.max(refreshMs, 1000 / 60) * 1.1;
     var old = resScale;
     if (resMode !== 'auto') return;
     // ladder: resolution down to 75% -> cheaper quality (ultra -> high -> high w/o MSAA -> fast) -> resolution down to 60%
@@ -44853,7 +45297,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793188524', updShown = false;
+  var BUILD = '1793191030', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
