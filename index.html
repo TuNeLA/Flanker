@@ -1670,8 +1670,28 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
     return mat;
   }
 
+  // ================================================================ graphics tier for world shaders + budgets (set by main.js setQuality)
+  // tier 2 = ultra / high (full look), 1 = high after the auto step down (MSAA off), 0 = fast (laptops / integrated GPUs).
+  // Shaders read GFX.tier as FL_Q define + program cache key; budgets (terrain LOD, veg, city range) read GFX live.
+  const GFX_TIERS = [
+    { tier: 0, lodK: 1.7, full: 1500, vegRN: 2, vegRF: 0.6, vegCap: 0.55, distK: 0.6 },
+    { tier: 1, lodK: 1.2, full: 2200, vegRN: 3, vegRF: 0.85, vegCap: 0.85, distK: 0.85 },
+    { tier: 2, lodK: 1, full: 2500, vegRN: 3, vegRF: 1, vegCap: 1, distK: 1 }];
+  const GFX = Object.assign({ q: 'high', mats: [] }, GFX_TIERS[2]);
+  FL.GFX = GFX;
+  FL.gfxTierOf = function (q, degrade) { return q === 'fast' ? 0 : q === 'high' && degrade >= 1 ? 1 : 2; };
+  // returns true when the tier changed (tier-dependent world materials are flagged for a recompile)
+  FL.setWorldQuality = function (q, degrade) {
+    const t = FL.gfxTierOf(q, degrade || 0); GFX.q = q;
+    if (t === GFX.tier) return false;
+    Object.assign(GFX, GFX_TIERS[t]);
+    for (const m of GFX.mats) m.needsUpdate = true;
+    return true;
+  };
+  const gfxDefine = () => '#define FL_Q ' + GFX.tier + '\n';
+
   // ================================================================ textures for nature maps
-  const natureDetailTex = memoTex('natureDetailTex', function natureDetailTex_(renderer) {
+  const natureDetailTex =memoTex('natureDetailTex', function natureDetailTex_(renderer) {
     const S = 256, c = canvas(S, S), ctx = c.getContext('2d'), img = ctx.createImageData(S, S), D = img.data;
     const nA = upNoise(S, 64, 32, 3, 7), nB = upNoise(S, 32, 8, 2, 3);
     for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
@@ -1747,7 +1767,7 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
       sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float urban;\nvarying float vUrban;\nvarying vec3 vWN;')
         .replace('#include <uv_vertex>', '#include <uv_vertex>\n#ifdef USE_UV\n vUv = (vec2(position.x, -position.z) + 48000.0) * (230.0 / 96000.0);\n#endif')
         .replace('#include <begin_vertex>', '#include <begin_vertex>\nvUrban = urban;\nvWN = normalize(mat3(modelMatrix) * objectNormal);');
-      if (P.alpine) sh.fragmentShader = '#define FL_ALPINE\n' + sh.fragmentShader;
+      if (P.alpine) sh.fragmentShader = '#define FL_ALPINE\n' + gfxDefine() + sh.fragmentShader;
       sh.fragmentShader = sh.fragmentShader.replace('#include <common>', [
         '#include <common>', 'varying float vUrban; varying vec3 vWN;',
         '#ifdef FL_ALPINE', 'uniform sampler2D uAlpTex; uniform vec3 uAlpL; uniform vec3 uAlpM; uniform vec3 uAlpD; uniform vec3 uAlpR; uniform vec3 uAlpV; uniform vec4 uAlpP;', '#endif',
@@ -1791,11 +1811,19 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
           '  vec3 an3_ = texture2D(uAlpTex, aq_ * (1.0 / 360.0) + vec2(0.29, 0.83)).rgb;',
           '  vec3 aw_ = pow(abs(vWN), vec3(4.0)); float sw_ = max(aw_.x + aw_.z, 1e-3);',
           '  vec3 ast_ = (texture2D(uAlpTex, vec2(vFW.z * (1.0 / 150.0), vFW.y * (1.0 / 2600.0)) + vec2(0.5, 0.13)).rgb * aw_.x + texture2D(uAlpTex, vec2(vFW.x * (1.0 / 150.0), vFW.y * (1.0 / 2600.0)) + vec2(0.07, 0.5)).rgb * aw_.z) / sw_;',
+          '#if FL_Q > 0',
           '  vec3 ast2_ = (texture2D(uAlpTex, vec2(vFW.z * (1.0 / 410.0), vFW.y * (1.0 / 5200.0)) + vec2(0.21, 0.77)).rgb * aw_.x + texture2D(uAlpTex, vec2(vFW.x * (1.0 / 410.0), vFW.y * (1.0 / 5200.0)) + vec2(0.83, 0.29)).rgb * aw_.z) / sw_;',
+          '#else',
+          '  vec3 ast2_ = ast_;   // fast tier: one streak octave',
+          '#endif',
           '  float avf_ = smoothstep(0.32, 0.62, 1.0 - abs(vWN.y));',
           '  ast_ = mix(vec3(0.5, 0.0, 0.5), ast_ * 0.6 + ast2_ * 0.4, avf_);',
           '  float rS2_ = 1.0 / 163.0;',
+          '#if FL_Q > 0',
           '  float rkC_ = texture2D(uRockMap, vec2(vFW.z * rS2_ + 0.31, vFW.y * rS2_ * 1.3)).r * an.x + texture2D(uRockMap, aqr_ * rS2_).r * an.y + texture2D(uRockMap, vec2(vFW.x * rS2_ + 0.57, vFW.y * rS2_ * 1.3)).r * an.z;',
+          '#else',
+          '  float rkC_ = rkA;   // fast tier: no second rock-texture scale',
+          '#endif',
           '  float amac_ = an1_.r * 0.5 + an2_.r * 0.32 + an3_.r * 0.18;',
           '  vec3 ark_ = mix(uAlpM, uAlpL, smoothstep(0.3, 0.75, amac_));',
           '  ark_ = mix(ark_, uAlpD, smoothstep(0.5, 0.8, an2_.b * 0.7 + an1_.b * 0.3) * 0.75);',
@@ -1838,8 +1866,9 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
           '  normal = normalize(normal + (viewMatrix * vec4(Nb_ - Nw_, 0.0)).xyz);',
           '#endif'].join('\n'));
     };
-    mat.customProgramCacheKey = function () { return 'fl-terrain2' + (P.alpine ? '-alp' : ''); };
+    mat.customProgramCacheKey = function () { return 'fl-terrain2' + (P.alpine ? '-alp-q' + GFX.tier : ''); };
     mat.userData.flFog = true;
+    if (P.alpine) (ctx.gfxMats || (ctx.gfxMats = [])).push(mat);   // tier-dependent program
     return mat;
   }
 
@@ -2031,7 +2060,7 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
         const de = ce < c.e0 ? c.e0 - ce : ce > c.e1 ? ce - c.e1 : 0, dn = cn < c.n0 ? c.n0 - cn : cn > c.n1 ? cn - c.n1 : 0;
         const d = Math.sqrt(de * de + dn * dn + Math.max(cy - 3000, 0) * Math.max(cy - 3000, 0) * 0.25);
         let li = 0;
-        if (!all0 && d > 2500) { const target = d * LODK; for (let k = c.steps.length - 1; k > 0; k--) if (c.steps[k] * c.cell <= target) { li = k; break; } }
+        if (!all0 && d > GFX.full) { const target = d * LODK * GFX.lodK; for (let k = c.steps.length - 1; k > 0; k--) if (c.steps[k] * c.cell <= target) { li = k; break; } }
         if (li !== c.lod) { c.lod = li; changed = true; }
       }
       if (!changed) return false;
@@ -3072,7 +3101,8 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
     }
     function rebuild(ci, cj, high) {
       const cn = K.map(() => 0), cf = K.map(() => 0); total = 0;
-      const RFx = high ? Math.min(RF, 10) : RF;
+      // graphics tier (GFX): fewer near-model rings, shorter far-model range and lower instance caps on fast
+      const RN = GFX.vegRN, RFq = Math.max(RN + 2, Math.round(RF * GFX.vegRF)), RFx = high ? Math.min(RFq, 10) : RFq, cK = GFX.vegCap;
       for (let dj = -RFx; dj <= RFx; dj++) for (let di = -RFx; di <= RFx; di++) {
         const r2 = di * di + dj * dj; if (r2 > (RFx + 0.5) * (RFx + 0.5)) continue;
         const near = r2 <= (RN + 0.5) * (RN + 0.5) && !high;
@@ -3081,8 +3111,8 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
           if (!near && !k.far) continue;
           if (!t) t = tile(ci + di, cj + dj);
           const L = t[k.ki];
-          if (near) { const A = k.im.instanceMatrix.array; for (let q = 0; q < L.length && cn[k.ki] < k.cap; q += 5) put(A, (cn[k.ki]++) * 16, L[q], L[q + 1], L[q + 2], L[q + 3], L[q + 4]); }
-          else { const A = k.far.instanceMatrix.array, st = 5 * (k.def.farThin || 1); for (let q = 0; q < L.length && cf[k.ki] < k.fcap; q += st) put(A, (cf[k.ki]++) * 16, L[q], L[q + 1], L[q + 2], L[q + 3], L[q + 4]); }
+          if (near) { const A = k.im.instanceMatrix.array, cap = Math.round(k.cap * cK); for (let q = 0; q < L.length && cn[k.ki] < cap; q += 5) put(A, (cn[k.ki]++) * 16, L[q], L[q + 1], L[q + 2], L[q + 3], L[q + 4]); }
+          else { const A = k.far.instanceMatrix.array, st = 5 * (k.def.farThin || 1), fcap = Math.round(k.fcap * cK); for (let q = 0; q < L.length && cf[k.ki] < fcap; q += st) put(A, (cf[k.ki]++) * 16, L[q], L[q + 1], L[q + 2], L[q + 3], L[q + 4]); }
         }
       }
       for (const k of K) {
@@ -3090,10 +3120,11 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
         if (k.far) { k.far.count = cf[k.ki]; k.far.instanceMatrix.needsUpdate = true; total += cf[k.ki]; }
       }
     }
-    let lastHigh = false;
+    let lastHigh = false, lastTier = GFX.tier;
     return {
       update: function (cam) {
         const ci = Math.floor(cam.x / TS), cj = Math.floor(-cam.z / TS), high = cam.y - Math.max(sampleH(cam.x, -cam.z), 0) > 350;
+        if (lastTier !== GFX.tier) { lastTier = GFX.tier; lastI = 1e9; }   // quality changed: rebuild with the new budget
         if (ci === lastI && cj === lastJ && high === lastHigh) return;
         if (high && lastHigh && Math.abs(ci - lastI) <= 2 && Math.abs(cj - lastJ) <= 2) return;
         lastI = ci; lastJ = cj; lastHigh = high; rebuild(ci, cj, high);
@@ -3383,12 +3414,14 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
         for (const t of cacheTex) t.needsUpdate = true;
         sc.fog = new THREE.FogExp2(SK.fogHex, SK.fogD);
         SK.makeEnv();
+        GFX.mats = ctx.gfxMats || [];
         time = 0; white = 0; disposed = false; lastSort.set(1e9, 0, 0); lastSortP.set(1e9, 0, 0);
         SK.skyMaterial.uniforms.uWhite.value = 0; world.cameraCloud = 0; world.buildMs = Math.round(performance.now() - t0); world.stats.revived = true;
         return world;
       }
     };
     let cacheTex = [];
+    GFX.mats = ctx.gfxMats || [];   // tier-dependent materials of the live world (FL.setWorldQuality flags them)
     WORLDCACHE.set(mapId, { renderer: renderer, world: world });
     while (WORLDCACHE.size > CACHE_MAX) { const k = WORLDCACHE.keys().next().value; const w = WORLDCACHE.get(k).world; WORLDCACHE.delete(k); if (w === world) WORLDCACHE.set(k, { renderer: renderer, world: w }); else w._revive = null; }
     world.buildMs = Math.round(performance.now() - T0);
@@ -4989,19 +5022,27 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
       const A = 'col = mix(col, rock, rockK);';
       const CODE = [
         '{ // canyon: fine triplanar rock detail, talus scree, Vishnu schist, per-pixel plateau ground',
+        '#if FL_Q > 0',
         '  float rkC_ = texture2D(uRockMap, vec2(vFW.z, vFW.y * 1.3) * 0.23).r * an.x + texture2D(uRockMap, vFW.xz * 0.23).r * an.y + texture2D(uRockMap, vec2(vFW.x, vFW.y * 1.3) * 0.23).r * an.z;',
+        '  float fol_ = texture2D(uRockMap, vec2(vFW.x * 0.7 + vFW.z * 0.7, vFW.y * 0.25) / 60.0).r;',
+        '#else',
+        '  float rkC_ = 0.5, fol_ = rkA;   // fast tier: no fine triplanar detail',
+        '#endif',
         '  float nf_ = smoothstep(250.0, 1400.0, camD);',
         '  rock *= mix(0.8 + 0.4 * rkC_, 1.0, nf_);',
         '  float talus_ = 1.0 - smoothstep(0.3, 0.55, steep);',
         '  rock = mix(rock, rock * (0.74 + 0.4 * rkC_ * (1.0 - nf_) + 0.2 * nf_), talus_ * 0.5);',
         '  float sch_ = (1.0 - smoothstep(1072.0, 1092.0, vFW.y + (rkA - 0.5) * 24.0)) * step(' + (RIVER + 4).toFixed(1) + ', vFW.y);',
-        '  float fol_ = texture2D(uRockMap, vec2(vFW.x * 0.7 + vFW.z * 0.7, vFW.y * 0.25) / 60.0).r;',
         '  vec3 sc_ = mix(uSchist, uGranite, smoothstep(0.6, 0.68, fol_ + (rkA - 0.5) * 0.2)) * (0.7 + 0.6 * rkB) * mix(0.8 + 0.4 * rkC_, 1.0, nf_);',
         '  rock = mix(rock, sc_, sch_);',
         '  // cavity / edge term from the height map: dark cliff feet and gullies, bright rims (cliffs get no vertex colour)',
         '  vec2 hu_ = (vec2(vFW.x, -vFW.z) + 48000.0) / 96000.0; float hs1_ = 200.0 / 96000.0, hs2_ = 650.0 / 96000.0;',
         '  float a1_ = (texture2D(uHMap, hu_ + vec2(hs1_, 0.0)).r + texture2D(uHMap, hu_ - vec2(hs1_, 0.0)).r + texture2D(uHMap, hu_ + vec2(0.0, hs1_)).r + texture2D(uHMap, hu_ - vec2(0.0, hs1_)).r) * 0.25 * uHM.y + uHM.x;',
+        '#if FL_Q > 0',
         '  float a2_ = (texture2D(uHMap, hu_ + vec2(hs2_, hs2_)).r + texture2D(uHMap, hu_ - vec2(hs2_, hs2_)).r + texture2D(uHMap, hu_ + vec2(-hs2_, hs2_)).r + texture2D(uHMap, hu_ - vec2(-hs2_, hs2_)).r) * 0.25 * uHM.y + uHM.x;',
+        '#else',
+        '  float a2_ = a1_;   // fast tier: one cavity ring',
+        '#endif',
         '  float ao_ = 1.0 - clamp((a1_ - vFW.y) / 230.0, -0.1, 0.3) - clamp((a2_ - vFW.y) / 900.0, 0.0, 0.22);',
         '  rock *= ao_; col *= ao_;',
         '  vec2 wp_ = vec2(vFW.x, -vFW.z);',
@@ -5030,19 +5071,22 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
         '  col = mix(col, g_, smoothstep(0.86, 0.95, upF));',
         '}'].join('\n');
       const B = '#include <lights_fragment_end>';
-      const SHADOW = [B,
+      // ray march steps per graphics tier (GFX.tier 0 fast / 1 high stepped down / 2 high+ultra): all reach ~6.3-6.5 km,
+      // enough for the 1450 m deep canyon at sun elevations down to ~13 deg; fewer steps = coarser sampling of thin ridges
+      const SHS = [[10, 1.5, 40], [14, 1.33, 30], [24, 1.22, 25]];
+      const SHADOW = (q) => [B,
         '{ // canyon: sun shadows cast by the terrain (height map ray march), follows the weather sun',
         '  vec3 Ls_ = normalize(uSunW);',
         '  if (Ls_.y > 0.005) {',
         '    float t_ = 30.0, sv_ = 1.0;',
         '    vec3 p_ = vFW + normalize(vWN) * 8.0;',
-        '    for (int i = 0; i < 24; i++) {',
+        '    for (int i = 0; i < ' + SHS[q][0] + '; i++) {',
         '      vec3 q_ = p_ + Ls_ * t_;',
         '      if (q_.y > uHM.x + uHM.y) break;',
         '      float hh_ = texture2D(uHMap, (vec2(q_.x, -q_.z) + 48000.0) / 96000.0).r * uHM.y + uHM.x;',
         '      sv_ = min(sv_, clamp((q_.y - hh_ + 12.0) / (t_ * 0.045 + 6.0), 0.0, 1.0));',
         '      if (sv_ < 0.01) break;',
-        '      t_ = t_ * 1.22 + 25.0;',
+        '      t_ = t_ * ' + SHS[q][1].toFixed(2) + ' + ' + SHS[q][2].toFixed(1) + ';',
         '    }',
         '    reflectedLight.directDiffuse *= sv_; reflectedLight.directSpecular *= sv_;',
         '  }',
@@ -5052,11 +5096,12 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
         const fs = sh.fragmentShader;
         if (fs.indexOf(A) < 0 || fs.indexOf(B) < 0 || !['float camD', 'float rkA', 'float rkB', 'float steep', 'vec3 an ', 'float upF', 'vec3 rock', 'varying vec3 vWN'].every((k) => fs.indexOf(k) >= 0)) { mat.userData.canyonFx = false; return; } // shared shader changed: keep the plain look
         Object.assign(sh.uniforms, U);
-        sh.fragmentShader = fs.replace('#include <common>', '#include <common>\nuniform sampler2D uGMask; uniform sampler2D uCanopy; uniform sampler2D uHMap; uniform vec3 uSunW; uniform vec3 uHM; uniform float uCovG; uniform float uPlatH; uniform vec3 uPine; uniform vec3 uPine2; uniform vec3 uSage; uniform vec3 uSoilR; uniform vec3 uSoilP; uniform vec3 uLitter; uniform vec3 uMeadow; uniform vec3 uSchist; uniform vec3 uGranite;')
-          .replace(A, CODE + '\n  ' + A).replace(B, SHADOW);
+        sh.fragmentShader = gfxDefine() + fs.replace('#include <common>', '#include <common>\nuniform sampler2D uGMask; uniform sampler2D uCanopy; uniform sampler2D uHMap; uniform vec3 uSunW; uniform vec3 uHM; uniform float uCovG; uniform float uPlatH; uniform vec3 uPine; uniform vec3 uPine2; uniform vec3 uSage; uniform vec3 uSoilR; uniform vec3 uSoilP; uniform vec3 uLitter; uniform vec3 uMeadow; uniform vec3 uSchist; uniform vec3 uGranite;')
+          .replace(A, CODE + '\n  ' + A).replace(B, SHADOW(GFX.tier));
         mat.userData.canyonFx = true;
       };
-      mat.customProgramCacheKey = function () { return 'fl-terrain2-canyon'; };
+      mat.customProgramCacheKey = function () { return 'fl-terrain2-canyon-q' + GFX.tier; };
+      (ctx.gfxMats || (ctx.gfxMats = [])).push(mat);   // tier-dependent program
       mat.needsUpdate = true;
     }
     // ---- villages on the rim plateau + roads (A* refuses cliffs and the canyon, so roads stay on the plateau)
@@ -5535,7 +5580,7 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
       return {
         solids: makeSolidsGrid(F, 500), seaLanes: lanes,
         update: function (dt, cam) {
-          const ce = cam.position.x, cn = -cam.position.z, hiR = cam.position.y > 2500 ? 0 : 2200;
+          const ce = cam.position.x, cn = -cam.position.z, hiR = cam.position.y > 2500 ? 0 : 2200 * GFX.distK;
           for (const m of meshes) { const d = Math.max(Math.abs(m.e - ce), Math.abs(m.n - cn)) - CELL / 2; const near = d < (m.near ? hiR + 400 : hiR); if (near !== m.near) { m.near = near; m.hi.visible = near; } }
         },
         debug: { towers: TW.length, cells: meshes.length, junks: nj, arches: arches.map((a) => ({ name: a.name, e: Math.round(a.e), n: Math.round(a.n), under: Math.round(a.under) })),
@@ -6564,7 +6609,7 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
       return {
         solids: makeSolidsGrid(F, 800), towers: towers, seaLanes: lanes,
         update: function (dt, cam) {
-          const ce = cam.position.x, cn = -cam.position.z, hiR = cam.position.y > 2500 ? 1500 : 3200;
+          const ce = cam.position.x, cn = -cam.position.z, hiR = (cam.position.y > 2500 ? 1500 : 3200) * GFX.distK;   // city block range scales with the graphics tier
           for (const m of meshes) { const d = Math.max(Math.abs(m.e - ce), Math.abs(m.n - cn)) - (m.h2 || CELL / 2); const near = d < (m.near ? hiR * m.k + 400 : hiR * m.k); if (near !== m.near) { m.near = near; m.hi.visible = near; if (m.lo) m.lo.visible = !near; } }
         },
         debug: { buildings: nb, blocks: nbk, favela: nf, towers: towers.length, cells: meshes.length,
@@ -14704,6 +14749,704 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
 
 </script>
 <script>
+/* ---- aircraft_b3.js ---- */
+/* aircraft_b3.js — Flanker: roster batch 3 jets (ROSTER.md section 5): AV-8B Harrier II, F-35B, SR-71A, and the concepts
+   X-2 Lindorm, XFA-01 Valravn, AC-X Kraken, F/X-6 Skuld (+ the Skuld loyal-wingman drone 'skuld_d', not for sale).
+   Loads AFTER aircraft_b2.js. Same build path: FL.acBuildKit + FL.registerAircraft(id, def, spec, { stations, muzzle }).
+   Moving parts (api.setAux(name, 0..1)), driven by jetsig.js and sent to co-op mates (FL.SIG_AUX):
+   'nozzle' (Harrier 4 nozzles 0 -> 98 deg, F-35B 3-bearing swivel nozzle 0 -> 95 deg), 'lift' (F-35B lift-fan doors, aux inlet,
+   roll posts; the fan nozzle shows), 'spike' (SR-71 inlet spikes move aft 0.66 m with Mach), 'd21' (1 = the D-21 drone is launched),
+   'morph' (Lindorm wing 25 -> 45 -> 65 deg), 'tipf' (Lindorm wingtips fold down 65 deg), 'laser' (Valravn turret rises from the spine),
+   'turret' / 'tpitch' (Kraken 40 mm turret: azimuth -180..+30 deg, elevation -85..+15 deg), 'hive' (Kraken drone hive doors), 'bay'.
+   Skuld split drag rudders follow yaw + airbrake (local only). Concept jets carry a fictional roundel (no real nation, brand or logo).
+   Axes: nose -Z, up +Y, right +X, origin near the CG, wheel bottoms at y = -2.4 with gear down. Real lengths, spans and stations. */
+(function () {
+  'use strict';
+  const FL = (window.FL = window.FL || {});
+  const B = FL.acBuildKit;
+  if (!B || !FL.registerAircraft) { console.warn('aircraft_b3: aircraft.js registration hook missing'); return; }
+  const { T, loft, wingPair, fin, planform, intake, plateYZ, paint, box, cylZ, sphere, latheZ, mirrorX, merge, decal, store, canopy, cantFin, clamp01, DEG, TIT } = B;
+  const PI = Math.PI, D = B.DEFS;
+  const side = (o) => (o > 0 ? 'right' : 'left');
+  const pitot = (M, x, y, z, len, r) => M.push(paint(cylZ(r || 0.03, 0.012, len || 0.9, 6, false).translate(x, y, z - (len || 0.9)), 0.7, 0.7, 0.72));
+  const ring = (M, x, y, z, r, len) => M.push(paint(cylZ(r, r * 0.97, len, 18, true).translate(x, y, z), ...TIT));
+  const bayPanel = (z0, z1, x0, x1, y) => [z0, z1, x0, x1, 'under', y];
+  function hookMv(P, y, z, len) {
+    P.movers.push({ geo: merge([box(0.07, 0.07, len, 0, 0, len / 2), box(0.13, 0.1, 0.16, 0, -0.03, len)], false, false), pivot: [0, y, z], kind: 'aux', aux: 'hook', rot: [0.7, 0, 0], local: true });
+  }
+  // ventral bay doors hinged on their outer edges (same as aircraft_b2.js)
+  function bayDoors(P, z0, z1, hw, y, aux, o) {
+    o = o || {};
+    const L = z1 - z0, zc = (z0 + z1) / 2, inner = o.inner || 0, w = hw - inner;
+    for (const s of [1, -1]) {
+      P.metal.push(paint(box(w - 0.03, 0.02, L - 0.05, s * (inner + w / 2), y + 0.012, zc), 0.08, 0.085, 0.09));
+      P.movers.push({ geo: box(w, 0.025, L, -s * w / 2, 0, 0), pivot: [s * hw, y, zc], kind: 'aux', aux, side: s, rot: [0, 0, s * (o.ang || 1.45)], local: true });
+    }
+  }
+  // fictional "Nordic Union" roundel for the concept jets: navy disc, white ring, gold four-point compass star
+  const nationNU = (x) => {
+    x.fillStyle = '#14233d'; x.beginPath(); x.arc(256, 256, 246, 0, 6.3); x.fill();
+    x.fillStyle = '#e9edf0'; x.beginPath(); x.arc(256, 256, 204, 0, 6.3); x.fill();
+    x.fillStyle = '#14233d'; x.beginPath(); x.arc(256, 256, 178, 0, 6.3); x.fill();
+    x.fillStyle = '#d7a93a'; x.beginPath();
+    for (let i = 0; i < 8; i++) { const a = -PI / 2 + (i * PI) / 4, r = i % 2 ? 44 : 166; i ? x.lineTo(256 + Math.cos(a) * r, 256 + Math.sin(a) * r) : x.moveTo(256 + Math.cos(a) * r, 256 + Math.sin(a) * r); }
+    x.closePath(); x.fill();
+    x.fillStyle = '#e9edf0'; x.beginPath(); x.arc(256, 256, 22, 0, 6.3); x.fill();
+  };
+  Object.assign(B.MSPEC, {
+    d21: { L: 6.5, r: 0.32, nose: 'cone', w: [1.1, 2.6], t: [0.5, 0.6], col: [0.1, 0.1, 0.11] },
+  });
+
+  // ===================================================================================================== AV-8B Harrier II (USMC AV-8B+)
+  // 14.12 m, span 9.25 m, height 3.55 m. Shoulder wing (12 deg anhedral) with LERX, big side intakes, Pegasus with 4 rotating nozzles
+  // (front = cold fan air, rear = hot), bicycle main gear on the centre line + outriggers in the wing, GAU-12 + ammo in 2 ventral pods.
+  const HAR = {
+    b3: { noz: [0, 1, 2, 3], nozMax: 98, extraAux: ['nozzle'], idle: 'nozzle' },
+    surf: [{ a: 0.05, b: 0.55, c: 0.26, kind: 'flap' }, { a: 0.6, b: 0.95, c: 0.26, kind: 'aileron' }],
+    wingWarp: (x, y) => y - 0.21 * Math.max(0, Math.abs(x) - 0.7),
+    gearSpec: [
+      { x: 0, y: -0.42, z: -3.1, r: 0.25, w: 0.15, nose: true, fold: [1, 0, 0], ang: PI / 2, lift: 0.1, sr: 0.065 },
+      { x: 0, y: -0.62, z: 1.95, r: 0.36, w: 0.2, wheels: 2, fold: [1, 0, 0], ang: -PI / 2, lift: 0.15, sr: 0.085 },
+      { x: 3.3, y: 0.04, z: 2.05, r: 0.17, w: 0.1, fold: [1, 0, 0], ang: -PI / 2, lift: 0.05, sr: 0.045, doors: 'none' },
+    ],
+    cockpitStyle: 'us_glass', canTop: 1.12,
+    fins: [[0, 1.1, 5.8]],
+    nation: 'US', lowVis: true, seed: 81, len: [-7.0, 7.15], hs: 4.7, radomeZ: -5.9,
+    frames: [-5.6, -3.4, -1.0, 1.4, 3.6, 5.6],
+    // USMC tactical paint: dark ghost grey over a lighter grey, low-visibility markings, VMA-311 "WL"
+    liv: { pattern: 'patches', base: '#7b8288', under: '#90979c', radome: '#6a7176',
+      patches: [{ c: '#686f75', p: [[-5.5, -0.3], [-5.5, 0.4], [6.5, 0.7], [6.5, -0.3]] }, { c: '#6a7177', p: [[-0.6, 0.8], [1.6, 4.6], [2.8, 4.6], [3.0, 0.8]] }] },
+    marks: { badge: 'us', sq: 'VMA-311', badgeCol: '#9a8c55', fin: 'tail', tail: 'WL', serial: 'MARINES 165566', tailCol: '#4c5257' },
+    code: { text: '04', color: '#4c5257', stroke: null },
+    engines: [{ x: -0.98, y: -0.18, z: -0.55, r: 0.3, len: 0.5, plain: true }, { x: 0.98, y: -0.18, z: -0.55, r: 0.3, len: 0.5, plain: true },
+      { x: -0.92, y: -0.22, z: 0.95, r: 0.29, len: 0.48, plain: true }, { x: 0.92, y: -0.22, z: 0.95, r: 0.29, len: 0.48, plain: true }],
+    noAB: true,
+    gear: [{ x: 0, y: -0.42, z: -3.1, r: 0.25, nose: 1 }, { x: 0, y: -0.62, z: 1.95, r: 0.36 }, { x: 3.3, y: 0.04, z: 2.05, r: 0.17 }, { x: -3.3, y: 0.04, z: 2.05, r: 0.17 }],
+    wingtips: [[-4.62, -0.1, 2.5], [4.62, -0.1, 2.5]], navs: [[-4.55, -0.07, 1.95], [4.55, -0.07, 1.95]],
+    build(P) {
+      P.body.push(loft([
+        [-6.95, -0.06, 0.01, 0.01, 0.01, 2], [-6.6, -0.05, 0.19, 0.19, 0.17, 2], [-5.9, -0.01, 0.36, 0.38, 0.32, 2], [-5.0, 0.05, 0.48, 0.52, 0.44, 2.2],
+        [-4.0, 0.08, 0.56, 0.58, 0.52, 2.3], [-3.0, 0.08, 0.6, 0.62, 0.6, 2.4], [-1.5, 0.08, 0.66, 0.68, 0.64, 2.6], [0.0, 0.08, 0.7, 0.72, 0.65, 2.6],
+        [1.5, 0.1, 0.62, 0.7, 0.6, 2.5], [3.0, 0.18, 0.44, 0.58, 0.44, 2.3], [4.5, 0.3, 0.32, 0.44, 0.32, 2.1], [6.0, 0.4, 0.2, 0.3, 0.2, 2], [6.9, 0.46, 0.1, 0.12, 0.1, 2], [7.12, 0.46, 0.01, 0.01, 0.01, 2],
+      ], 28, 3, 0));
+      // big semicircular side intakes (they feed the one Pegasus) + the nozzle fairings on the sides
+      const IT = [[-3.45, 0.0, 0.4, 0.52, 0.52, 2, 0.18], [-2.95, 0.0, 0.45, 0.56, 0.56, 2.2], [-1.4, 0.0, 0.48, 0.58, 0.58, 2.4], [0.4, 0.02, 0.42, 0.52, 0.52, 2.4], [1.5, 0.06, 0.08, 0.2, 0.2, 2]];
+      for (const sx of [-1, 1]) {
+        P.body.push(loft(IT, 18, 3, sx * 0.76));
+        intake(P, IT[0], sx * 0.76, { lip: 0.05, depth: 2.2, shrink: 0.82, lipCol: [0.6, 0.62, 0.63] });
+        P.body.push(loft([[-1.1, -0.18, 0.05, 0.05, 0.05, 2], [-0.8, -0.18, 0.2, 0.3, 0.32, 2], [1.4, -0.2, 0.2, 0.3, 0.32, 2], [1.7, -0.2, 0.05, 0.05, 0.05, 2]], 12, 2, sx * 0.86));
+      }
+      // shoulder wing + LERX (anhedral: def.wingWarp)
+      P.body.push(...wingPair([[0.7, -0.85], [4.62, 1.85], [4.62, 2.85], [0.7, 2.85]], 0.2, 0.05, 0.72, (ax) => 1 - 0.5 * clamp01((ax - 0.7) / 3.9)));
+      const lx = planform([[0.55, -2.7], [0.95, -1.6], [1.15, -0.7], [0.55, -0.7]], 0.06, 0.02, 0.62); P.body.push(lx, mirrorX(lx));
+      // outrigger pods at mid span
+      for (const sx of [-1, 1]) P.body.push(loft([[1.2, 0.0, 0.02, 0.02, 0.02, 2], [1.5, 0.0, 0.12, 0.12, 0.14, 2], [2.6, 0.0, 0.12, 0.12, 0.14, 2], [2.9, 0.0, 0.02, 0.02, 0.02, 2]], 10, 2, sx * 3.3));
+      // single fin, anhedral all-moving stabs
+      P.body.push(fin([[3.8, 0.42], [6.4, 0.42], [6.95, 1.75], [5.95, 1.75]], 0.1, 0.04, 0, 0.45));
+      for (const s of [1, -1]) {
+        let st = planform([[0, -0.85], [1.85, 0.25], [1.85, 0.75], [0, 1.0]], 0.07, 0.03, 0).rotateZ(-10 * DEG);   // 10 deg anhedral
+        if (s < 0) st = mirrorX(st);
+        P.movers.push({ geo: st, pivot: [s * 0.3, 0.42, 5.75], kind: 'stab', side: s, local: true });
+      }
+      // GAU-12 (left) and its ammunition pod (right) under the fuselage, with lift-improvement strakes
+      for (const sx of [-1, 1]) {
+        P.body.push(loft([[-1.6, -0.72, 0.02, 0.02, 0.02, 2], [-1.3, -0.72, 0.15, 0.16, 0.16, 2], [1.1, -0.72, 0.16, 0.17, 0.17, 2], [1.5, -0.7, 0.03, 0.03, 0.03, 2]], 12, 2, sx * 0.4));
+        P.metal.push(plateYZ([[-1.2, -0.86], [1.2, -0.86], [1.2, -1.02], [-1.0, -1.02]], sx * 0.58, 0.03, [0.42, 0.44, 0.46]));
+      }
+      P.metal.push(paint(cylZ(0.03, 0.03, 0.5, 6, false).translate(-0.4, -0.74, -2.1), 0.08, 0.08, 0.09));   // GAU-12 muzzle
+      canopy(P, [[-5.25, 0.48, 0.05, 0.05, 0.05], [-4.95, 0.53, 0.32, 0.3, 0.1], [-4.35, 0.58, 0.42, 0.5, 0.1], [-3.65, 0.6, 0.42, 0.47, 0.1], [-3.05, 0.6, 0.35, 0.34, 0.1], [-2.65, 0.58, 0.05, 0.05, 0.05]]);
+      const M = P.metal;
+      pitot(M, 0, -0.06, -6.95, 0.5);
+      M.push(paint(sphere(0.08, 0, 0.26, -6.1), 0.12, 0.16, 0.22));   // angle-rate bombing set window
+      M.push(paint(cylZ(0.05, 0.04, 0.35, 8).translate(0, 0.46, 6.9), 0.25, 0.25, 0.26));   // tail puffer
+      for (const sx of [-1, 1]) { store(P.stores, 'aim9x', sx * 3.85, -0.05, 2.0, 0.25); store(P.stores, 'agm65', sx * 2.95, -0.1, 1.6, 0.3); }
+      for (const sx of [-1, 1]) P.decals.push(decal(0, 0.75, 0.75, 'top', sx * 3.2, 0.4, 1.9), decal(0, 0.75, 0.75, 'bottom', sx * 3.2, 0.25, 1.9));
+      for (const o of [-1, 1]) P.decals.push(decal(0, 0.6, 0.6, side(o), o * 0.62, 0.18, 2.6));
+      for (const o of [-1, 1]) P.decals.push(decal(3, 1.1, 1.1, side(o), o * 0.065, 1.15, 5.9));
+      for (const o of [-1, 1]) P.decals.push(decal(1, 0.55, 0.28, side(o), o * 0.42, 0.06, -5.6));
+      for (const o of [-1, 1]) P.decals.push(decal(2, 0.36, 0.36, side(o), o * 1.15, 0.05, -1.9));
+    },
+  };
+  FL.registerAircraft('harrier', HAR, {
+    tier: 4, price: 125000, unlockLevel: 10, roughness: 0.3, hardpoints: 4, pylonLayout: 'w w c w', engineSound: 'single',
+    name: 'BAe / McDonnell Douglas AV-8B Harrier II', nation: 'US', year: 1985, role: 'V/STOL attacker',
+    blurb: 'The jump jet: four nozzles turn the thrust down. Press the special when slow to hover; land on any flat spot or on the carrier deck. At speed a tap is VIFF: a hard brake that makes a chaser overshoot.',
+    // real: Pegasus F402-RR-408 105.9 kN (no afterburner; boost = full power), wing 22.6 m2, ~9.5 t combat, 1,083 km/h, 7 stations, 4,200 kg (hover 2,000), GAU-12
+    mass: 9500, wingArea: 22.6, thrustMil: 96000, thrustAB: 105900, arcadeThrust: 1.45,
+    rollRate: 220, pitchRate: 95, yawRate: 45, drift: 0.9, maxG: 8, missiles: 4, gun: 'gau12', gunName: 'GAU-12/U Equalizer 25 mm',
+    cd0: 0.026, machMax: 0.95, topSpeedKmh: 1083, ceiling: 15000, climbRate: 75,
+    stats: { speed: 2, agility: 3, firepower: 3, toughness: 3 },
+  }, { stations: [['R1', 2.05, 1.3, 'wing'], ['R2', 2.95, 1.6, 'wing'], ['C', 0, -0.4, 'belly', 0.12], ['R3', 3.85, 2.05, 'wing']], muzzle: [-0.4, -0.74, -2.6] });
+
+  // ===================================================================================================== F-35B Lightning II (STOVL)
+  // 15.6 m, span 10.7 m, height 4.36 m. Chined stealth body with DSI intakes, trapezoid wing, canted twin fins, all-moving stabs.
+  // STOVL: lift fan behind the cockpit (top door hinged aft, auxiliary inlet doors, bottom vane doors), F135 3-bearing swivel nozzle
+  // (0 -> 95 deg down), roll-post doors under the wings. Two bays (2 stations each), 6 wing stations, GAU-22 belly pod.
+  const F35 = {
+    b2x: { bayAux: ['bay'] },
+    b3: { noz: [0], nozMax: 95, fan: 1, extraAux: ['nozzle'], idle: 'stovl' },
+    surf: [{ a: 0.05, b: 0.55, c: 0.22, kind: 'flaperon' }, { a: 0.58, b: 0.94, c: 0.22, kind: 'aileron' }],
+    gearSpec: [
+      { x: 0, y: -0.38, z: -5.3, r: 0.28, w: 0.17, nose: true, fold: [1, 0, 0], ang: PI / 2, lift: 0.12, sr: 0.07 },
+      { x: 1.45, y: -0.5, z: 1.9, r: 0.42, w: 0.24, fold: [0, 0, 1], ang: -PI / 2, shrink: 0.3, sr: 0.09, doors: 'inner' },
+    ],
+    cockpitStyle: 'us_glass', canTop: 1.1, goldCanopy: true,
+    fins: [[1.55, 1.3, 5.8], [-1.55, 1.3, 5.8]],
+    nation: 'US', lowVis: true, seed: 35, len: [-7.85, 7.85], hs: 5.4, radomeZ: -6.2, flat: true,
+    frames: [-6.2, -4.4, -1.8, 0.6, 3.2, 5.6],
+    panels: [bayPanel(-0.6, 3.2, -0.95, 0.95, -0.56), bayPanel(-2.7, -1.3, -0.6, 0.6, -0.6), bayPanel(-2.7, -1.0, -0.55, 0.55, 0.66)],
+    // USMC VMFA-121 "VK": radar-absorbent grey, darker edges
+    liv: { pattern: 'patches', base: '#7d8387', under: '#848a8e', radome: '#73797d',
+      patches: [{ c: '#696f73', fin: true, p: [[-6.0, -0.2], [-6.0, 0.4], [7.6, 0.7], [7.6, -0.2]] }, { c: '#6d7377', p: [[-0.6, 1.4], [2.0, 5.3], [3.4, 5.3], [4.6, 1.4]] }] },
+    marks: { badge: 'us', sq: 'VMFA-121', badgeCol: '#6c7378', fin: 'tail', tail: 'VK', serial: 'MARINES 168726', tailCol: '#5a6064' },
+    code: { text: '01', color: '#5a6064', stroke: null },
+    engines: [{ x: 0, y: 0.02, z: 6.55, r: 0.52, len: 0.75 }, { x: 0, y: -0.42, z: -1.95, r: 0.58, len: 0.16, plain: true }],
+    gear: [{ x: 0, y: -0.38, z: -5.3, r: 0.28, nose: 1 }, { x: 1.45, y: -0.5, z: 1.9, r: 0.42 }, { x: -1.45, y: -0.5, z: 1.9, r: 0.42 }],
+    wingtips: [[-5.35, 0.02, 3.0], [5.35, 0.02, 3.0]], navs: [[-5.3, 0.06, 2.5], [5.3, 0.06, 2.5]],
+    build(P) {
+      P.body.push(loft([
+        [-7.8, -0.1, 0.01, 0.01, 0.01, 2], [-7.4, -0.09, 0.21, 0.16, 0.13, 2, 0, 0.5, 0.8], [-6.5, -0.05, 0.46, 0.33, 0.27, 2, 0, 0.55, 0.85], [-5.4, 0.0, 0.64, 0.45, 0.36, 2.1, 0, 0.55, 0.85],
+        [-4.2, 0.02, 0.8, 0.56, 0.42, 2.3, 0, 0.6, 0.85], [-2.8, 0.02, 1.12, 0.64, 0.5, 2.6, 0, 0.65, 0.85], [-1.0, 0.0, 1.42, 0.66, 0.55, 3, 0, 0.7, 0.85],
+        [1.0, 0.0, 1.48, 0.62, 0.55, 3.2, 0, 0.75, 0.85], [3.0, 0.0, 1.38, 0.56, 0.5, 3.2, 0, 0.75, 0.85], [5.0, 0.0, 1.08, 0.5, 0.45, 3, 0, 0.7, 0.8],
+        [6.1, 0.02, 0.7, 0.5, 0.5, 2.4], [6.6, 0.02, 0.6, 0.5, 0.5, 2.2],
+      ], 16, 3, 0, true));
+      const nac = [[-4.0, -0.18, 0.4, 0.38, 0.38, 3, 0.4, 0.2, 0.6], [-3.4, -0.18, 0.44, 0.42, 0.42, 3, 0.1, 0.2, 0.5], [-1.0, -0.12, 0.46, 0.44, 0.44, 2.8, 0], [2.0, -0.08, 0.42, 0.4, 0.4, 2.6, 0], [3.6, -0.04, 0.1, 0.2, 0.2, 2, 0]];
+      for (const sx of [-1, 1]) {
+        P.body.push(loft(nac, 12, 3, sx * 1.12, true)); intake(P, nac[0], sx * 1.12, { lip: 0.03, depth: 2.2, shrink: 0.8, lipCol: [0.48, 0.5, 0.52] });
+        P.metal.push(paint(sphere(0.18, 0, 0, 0).scale(1, 1.3, 2.0).translate(sx * 0.9, -0.16, -3.75), 0.42, 0.45, 0.47));   // DSI bump
+      }
+      P.body.push(...wingPair([[1.35, -0.6], [5.35, 2.1], [5.35, 3.72], [1.35, 4.62]], 0.13, 0.04, 0.0, (ax) => 1 - 0.5 * clamp01((ax - 1.35) / 4)));
+      for (const sx of [-1, 1]) P.body.push(cantFin(fin([[4.0, 0.42], [6.55, 0.42], [7.3, 2.25], [6.3, 2.25]], 0.09, 0.035, sx * 1.42, 0.45), sx * 1.42, 0.42, -sx * 25 * DEG));
+      for (const s of [1, -1]) {
+        let st = planform([[0, -1.1], [2.3, 0.45], [2.3, 1.25], [0, 1.3]], 0.07, 0.03, 0);
+        if (s < 0) st = mirrorX(st);
+        P.movers.push({ geo: st, pivot: [s * 1.3, 0.0, 6.55], kind: 'stab', side: s, local: true });
+      }
+      // lift fan: blades seen through the open doors; top door hinged at its aft edge, 2 auxiliary inlet doors, bottom vane doors
+      P.metal.push(paint(cylZ(0.62, 0.62, 0.5, 20, true).rotateX(PI / 2).translate(0, 0.28, -1.95), 0.12, 0.12, 0.13));
+      for (let k = 0; k < 12; k++) P.metal.push(paint(box(0.06, 0.02, 0.56, 0, 0, 0.28).rotateY((k / 12) * PI * 2).translate(0, 0.25, -1.95), 0.32, 0.33, 0.35));
+      P.metal.push(paint(sphere(0.16, 0, 0.25, -1.95), 0.2, 0.2, 0.21));
+      P.movers.push({ geo: box(1.12, 0.03, 1.7, 0, 0, -0.85), pivot: [0, 0.68, -1.05], kind: 'aux', aux: 'lift', rot: [1.2, 0, 0], local: true });
+      for (const s of [1, -1]) P.movers.push({ geo: box(0.32, 0.025, 0.55, -s * 0.16, 0, 0), pivot: [s * 0.5, 0.66, -0.55], kind: 'aux', aux: 'lift', side: s, rot: [0, 0, -s * 1.1], local: true });
+      bayDoors(P, -2.7, -1.3, 0.62, -0.6, 'lift', { ang: 1.2 });
+      for (const s of [1, -1]) P.movers.push({ geo: box(0.3, 0.02, 0.42, 0, 0, 0.21), pivot: [s * 3.05, -0.06, 2.3], kind: 'aux', aux: 'lift', side: s, rot: [0.9, 0, 0], local: true });   // roll-post doors
+      // weapon bays (doors hinged on the outer edges, both sides of the gun pod) + GAU-22 pod
+      bayDoors(P, -0.6, 3.2, 0.95, -0.56, 'bay', { inner: 0.22 });
+      P.body.push(loft([[-1.6, -0.66, 0.02, 0.02, 0.02, 2], [-1.25, -0.66, 0.14, 0.12, 0.14, 2], [1.5, -0.66, 0.15, 0.12, 0.15, 2], [2.0, -0.64, 0.03, 0.03, 0.03, 2]], 10, 2, 0));
+      P.metal.push(paint(cylZ(0.025, 0.025, 0.3, 6, false).translate(0, -0.7, -1.9), 0.08, 0.08, 0.09));
+      canopy(P, [[-6.1, 0.43, 0.05, 0.05, 0.05], [-5.65, 0.46, 0.38, 0.36, 0.1], [-4.85, 0.5, 0.5, 0.58, 0.1], [-3.95, 0.52, 0.5, 0.54, 0.1], [-3.2, 0.52, 0.4, 0.4, 0.1], [-2.7, 0.52, 0.05, 0.05, 0.05]]);
+      const M = P.metal;
+      M.push(paint(box(0.24, 0.02, 0.4, 0, -0.33, -6.4), 0.16, 0.2, 0.26));   // EOTS window
+      for (const o of [-1, 1]) P.decals.push(decal(0, 0.85, 0.85, side(o), o * 1.5, 0.0, 1.6));
+      for (const sx of [-1, 1]) P.decals.push(decal(0, 0.95, 0.95, 'top', sx * 3.6, 0.05, 2.5), decal(0, 0.95, 0.95, 'bottom', sx * 3.6, -0.05, 2.5));
+      for (const sx of [-1, 1]) for (const o of [-1, 1]) P.decals.push(decal(3, 1.1, 1.1, side(o), sx * (1.42 + 0.55) + o * 0.06, 1.55, 6.0));
+      for (const o of [-1, 1]) P.decals.push(decal(1, 0.6, 0.3, side(o), o * 1.22, 0.08, -4.6));
+    },
+  };
+  FL.registerAircraft('f35b', F35, {
+    tier: 7, price: 600000, unlockLevel: 29, roughness: 0.06, hardpoints: 4, pylonLayout: 'b b w w w', engineSound: 'single',
+    bayMap: { L1: 'bay', R1: 'bay', L2: 'bay', R2: 'bay' },
+    name: 'Lockheed Martin F-35B Lightning II', nation: 'US', year: 2015, role: 'STOVL stealth',
+    blurb: 'Stealth that lands like a helicopter. Press the special below 500 km/h: the lift fan opens and the nozzle swivels down. The jet holds its height by itself; the stick moves it, the throttle lifts it.',
+    // real: F135-PW-600 ~125 / 191 kN (STOVL lift 180 kN: fan 89 + nozzle 81 + roll posts), wing 42.7 m2, ~20 t, Mach 1.6, 4 int + 6 ext, 6,800 kg (hover 3,000), GAU-22 pod
+    mass: 20000, wingArea: 42.7, thrustMil: 125000, thrustAB: 191000, arcadeThrust: 1.35,
+    rollRate: 250, pitchRate: 110, yawRate: 50, drift: 1.1, maxG: 7, missiles: 4, gun: 'gau22', gunName: 'GAU-22/A 25 mm (pod)',
+    cd0: 0.021, machMax: 1.6, topSpeedKmh: 1930, ceiling: 15240, climbRate: 230,
+    stats: { speed: 3, agility: 3, firepower: 4, toughness: 4 },
+  }, { stations: [['R1', 0.72, 1.6, 'bay', 0.03], ['R2', 0.42, 0.4, 'bay', 0.03], ['R3', 2.4, 2.0, 'wing'], ['R4', 3.4, 2.3, 'wing'], ['R5', 4.5, 2.6, 'wing']], muzzle: [0, -0.7, -2.2] });
+
+  // ===================================================================================================== SR-71A Blackbird
+  // 32.74 m, span 16.94 m, height 5.64 m. Long chined body, 60 deg delta, two J58 nacelles at mid span with moving inlet spikes,
+  // two all-moving fins canted 15 deg inward on the nacelles, tandem cockpit (pilot + RSO). Game: a D-21 drone on a dorsal pylon (M-21 style).
+  const SR71 = {
+    b3: { idle: 'spike' },
+    surf: [{ a: 0.04, b: 0.32, c: 0.12, kind: 'elevon' }, { a: 0.62, b: 0.96, c: 0.16, kind: 'elevon' }], noRudder: true,
+    gearSpec: [
+      { x: 0, y: -0.42, z: -9.6, r: 0.34, w: 0.2, wheels: 2, nose: true, fold: [1, 0, 0], ang: PI / 2, lift: 0.12, sr: 0.08 },
+      { x: 2.45, y: -0.42, z: 2.6, r: 0.44, w: 0.26, wheels: 2, fold: [0, 0, 1], ang: -PI / 2, shrink: 0.3, sr: 0.1, doors: 'inner' },
+    ],
+    cockpitStyle: 'se_analog', canTop: 1.08, rearSeat: [0.08, 1.75],
+    fins: [[4.3, 2.0, 11.4], [-4.3, 2.0, 11.4]],
+    nation: 'US', seed: 71, len: [-16.45, 16.35], hs: 8.6, radomeZ: -14.0, metalBody: false,
+    frames: [-13.5, -10.5, -6.0, -2.0, 2.0, 6.0, 10.0, 13.5],
+    // "Blackbird": iron-ball black paint, red markings and serial
+    liv: { pattern: 'patches', base: '#17181b', under: '#141518', radome: '#151619', rough: 0.72, patches: [{ c: '#1c1d21', p: [[-12, 0.6], [6, 5.6], [10, 5.6], [12, 0.6]] }] },
+    marks: { badge: 'us', sq: '9 SRW', badgeCol: '#b8202a', fin: 'num', num: '17972', numCol: '#c8202a', numStroke: null },
+    code: { text: 'U.S. AIR FORCE', color: '#c8202a', stroke: null },
+    engines: [{ x: -4.3, y: 0.1, z: 13.05, r: 0.66, len: 0.9 }, { x: 4.3, y: 0.1, z: 13.05, r: 0.66, len: 0.9 }],
+    gear: [{ x: 0, y: -0.42, z: -9.6, r: 0.34, nose: 1 }, { x: 2.45, y: -0.42, z: 2.6, r: 0.44 }, { x: -2.45, y: -0.42, z: 2.6, r: 0.44 }],
+    wingtips: [[-8.45, 0.02, 9.0], [8.45, 0.02, 9.0]], navs: [[-8.35, 0.06, 8.5], [8.35, 0.06, 8.5]],
+    build(P) {
+      // chined fuselage: wide flat ledges (chine 0.9) from the nose to the wing
+      P.body.push(loft([
+        [-16.4, -0.02, 0.01, 0.01, 0.01, 2], [-15.6, 0.0, 0.24, 0.2, 0.18, 2, 0, 0.6, 0.6], [-14.0, 0.04, 0.62, 0.4, 0.32, 2, 0, 0.85, 0.9], [-12.0, 0.08, 1.0, 0.6, 0.42, 2, 0, 0.9, 0.95],
+        [-9.5, 0.1, 1.38, 0.72, 0.48, 2, 0, 0.9, 0.95], [-6.5, 0.1, 1.75, 0.72, 0.5, 2, 0, 0.9, 0.95], [-3.0, 0.08, 2.0, 0.68, 0.5, 2.1, 0, 0.88, 0.92], [1.0, 0.06, 2.1, 0.64, 0.5, 2.2, 0, 0.85, 0.9],
+        [5.0, 0.05, 1.8, 0.6, 0.48, 2.2, 0, 0.8, 0.85], [9.0, 0.05, 1.25, 0.52, 0.44, 2.1, 0, 0.7, 0.7], [12.5, 0.05, 0.7, 0.42, 0.36, 2], [15.0, 0.05, 0.32, 0.26, 0.24, 2], [16.3, 0.05, 0.03, 0.03, 0.03, 2],
+      ], 30, 3, 0));
+      // delta wing out to the tip, through the nacelles (elevons inboard and outboard)
+      P.body.push(...wingPair([[1.9, -4.0], [4.3, -0.5], [8.47, 8.3], [8.47, 9.7], [4.3, 10.7], [1.9, 11.7]], 0.14, 0.04, 0.02, (ax) => 1 - 0.55 * clamp01((ax - 1.9) / 6.6)));
+      // J58 nacelles: inlet with the moving spike (aux 'spike'), long body, ejector nozzle
+      const NAC = [[-4.9, 0.1, 0.62, 0.62, 0.62, 2], [-3.9, 0.1, 0.72, 0.72, 0.72, 2], [-1.0, 0.1, 0.8, 0.8, 0.8, 2], [4.0, 0.1, 0.84, 0.84, 0.84, 2], [9.0, 0.1, 0.8, 0.8, 0.8, 2], [12.2, 0.1, 0.74, 0.74, 0.74, 2], [13.05, 0.1, 0.7, 0.7, 0.7, 2]];
+      for (const sx of [-1, 1]) {
+        P.body.push(loft(NAC, 24, 3, sx * 4.3));
+        intake(P, NAC[0], sx * 4.3, { lip: 0.04, depth: 2.6, shrink: 0.75, face: false, lipCol: [0.3, 0.3, 0.32] });
+        const sp = latheZ([[-7.35, 0.0], [-6.7, 0.16], [-5.9, 0.33], [-5.0, 0.46], [-4.2, 0.5], [-3.2, 0.42]], 20).translate(sx * 4.3, 0.1, 0);
+        P.movers.push({ geo: sp, pivot: [sx * 4.3, 0.1, -5.0], kind: 'aux', aux: 'spike', side: sx, move: [0, 0, 0.66] });
+        ring(P.metal, sx * 4.3, 0.1, 12.8, 0.72, 0.3);
+      }
+      // all-moving fins canted 15 deg inward on the nacelles
+      for (const s of [1, -1]) {
+        const dc = merge([decal(3, 1.3, 0.7, 'right', 0.07, 1.3, 0.6), decal(3, 1.3, 0.7, 'left', -0.07, 1.3, 0.6)], true, false);
+        P.movers.push({ geo: fin([[-1.9, 0], [1.6, 0], [2.6, 2.65], [1.1, 2.65]], 0.1, 0.04, 0, 0.4), decal: dc, pivot: [s * 4.3, 0.82, 10.9], kind: 'tail', side: s, cant: s * 15 * DEG, local: true });
+      }
+      // D-21 drone on its dorsal pylon (aux 'd21' = 1: launched, hidden)
+      const D21 = [];
+      D21.push(loft([[-2.3, 1.62, 0.02, 0.02, 0.02, 2], [-1.6, 1.62, 0.3, 0.3, 0.3, 2], [0.0, 1.62, 0.42, 0.42, 0.42, 2], [6.5, 1.62, 0.42, 0.42, 0.42, 2], [9.8, 1.62, 0.34, 0.34, 0.34, 2], [10.4, 1.62, 0.3, 0.3, 0.3, 2]], 14, 2, 0));
+      D21.push(planform([[0.3, 1.5], [2.95, 7.7], [2.95, 9.4], [0.3, 10.2]], 0.08, 0.02, 1.48), mirrorX(planform([[0.3, 1.5], [2.95, 7.7], [2.95, 9.4], [0.3, 10.2]], 0.08, 0.02, 1.48)));
+      D21.push(fin([[7.4, 1.95], [9.9, 1.95], [10.4, 3.2], [9.5, 3.2]], 0.06, 0.02, 0, 0.4));
+      P.movers.push({ geo: merge(D21, false, false), pivot: [0, 1.62, 4.0], kind: 'aux', aux: 'd21' });
+      P.metal.push(paint(box(0.2, 0.8, 2.2, 0, 1.0, 4.6), 0.1, 0.1, 0.11));   // pylon
+      P.metal.push(paint(sphere(0.32, 0, 1.62, -2.0).scale(1, 1, 0.5), 0.05, 0.05, 0.06));   // ramjet inlet (dark)
+      canopy(P, [[-11.5, 0.6, 0.05, 0.05, 0.05], [-11.0, 0.66, 0.32, 0.3, 0.1], [-10.2, 0.72, 0.42, 0.44, 0.1], [-9.2, 0.76, 0.44, 0.44, 0.1], [-8.0, 0.78, 0.42, 0.42, 0.1], [-7.2, 0.76, 0.3, 0.26, 0.1], [-6.6, 0.72, 0.05, 0.05, 0.05]]);
+      const M = P.metal;
+      pitot(M, 0, -0.02, -16.4, 1.2, 0.035);
+      for (const o of [-1, 1]) P.decals.push(decal(0, 0.9, 0.9, side(o), o * 1.5, 0.1, 6.5));
+      for (const sx of [-1, 1]) P.decals.push(decal(0, 1.2, 1.2, 'top', sx * 6.2, 0.06, 6.8), decal(0, 1.2, 1.2, 'bottom', sx * 6.2, -0.02, 6.8));
+      for (const o of [-1, 1]) P.decals.push(decal(1, 2.6, 0.32, side(o), o * 0.88, 0.32, -6.6));
+      for (const o of [-1, 1]) P.decals.push(decal(2, 0.6, 0.6, side(o), o * 1.95, 0.12, 0.6));
+    },
+  };
+  FL.registerAircraft('sr71', SR71, {
+    tier: 8, price: 900000, unlockLevel: 38, roughness: 0.12, hardpoints: 0, pylonLayout: [], engineSound: 'twin', noGun: true,
+    builtIn: ['d21'],
+    name: 'Lockheed SR-71A Blackbird', nation: 'US', year: 1966, role: 'Mach 3 recon',
+    blurb: 'The fastest jet ever: Mach 3.2 and nothing catches it, but it turns like a train. No gun. Tap the special for a camera run: all enemies ahead show for the whole team. Hold it to launch the D-21 drone at your target.',
+    // real: J58 ~111 / 151 kN x2, wing 167 m2, ~45 t (game), Mach 3.3, ceiling 25,900 m, unarmed; D-21 drone: game weapon (from the M-21 program)
+    mass: 45000, wingArea: 167, thrustMil: 222000, thrustAB: 302000, arcadeThrust: 1.25,
+    rollRate: 90, pitchRate: 45, yawRate: 22, drift: 0.6, maxG: 3.5, missiles: 0, gun: 'none', gunName: 'None (unarmed) · D-21 drone',
+    cd0: 0.009, machMax: 3.0, topSpeedKmh: 3540, ceiling: 25900, climbRate: 60,
+    stats: { speed: 5, agility: 1, firepower: 1, toughness: 3 },
+  }, { stations: [], muzzle: [0, 0, -16] });
+
+  // ===================================================================================================== shared: swinging outer wing panel with flap + aileron riding on it
+  // planform outline in (x, z) at the build sweep; the panel turns about pivot by rot (aux name); flap / aileron hinge lines on the panel
+  function swingPanel(P, o) {
+    const { LE, TE, xr, xt, x0, x1, x2, pv, aux, rot, tip } = o, H = (x) => LE(x) + 0.74 * (TE(x) - LE(x));
+    const PAN = [[xr, LE(xr)], [xt, LE(xt)], [xt, TE(xt)], [x2, TE(x2)], [x2, H(x2)], [x0, H(x0)], [x0, TE(x0)], [xr, TE(xr)]];
+    const pan = planform(PAN, o.th || 0.14, 0.045, pv[1], (ax) => 1 - 0.5 * clamp01((ax - xr) / (xt - xr)));
+    const flp = planform([[x0 + 0.02, H(x0)], [x1 - 0.02, H(x1)], [x1 - 0.02, TE(x1)], [x0 + 0.02, TE(x0)]], 0.06, 0.02, pv[1] - 0.01);
+    const ail = planform([[x1 + 0.02, H(x1)], [x2 - 0.02, H(x2)], [x2 - 0.02, TE(x2)], [x1 + 0.02, TE(x1)]], 0.05, 0.02, pv[1] - 0.01);
+    const A = [x0, pv[1] - 0.01, H(x0)], Bp = [x1, pv[1] - 0.01, H(x1)], d = new T.Vector3(Bp[0] - A[0], 0, Bp[2] - A[2]).normalize();
+    const A2 = [x1, pv[1] - 0.01, H(x1)], B2 = [x2, pv[1] - 0.01, H(x2)], d2 = new T.Vector3(B2[0] - A2[0], 0, B2[2] - A2[2]).normalize();
+    for (const s of [1, -1]) {
+      P.movers.push({ geo: s > 0 ? pan : mirrorX(pan), pivot: [s * pv[0], pv[1], pv[2]], kind: 'aux', aux, side: s, rot: [rot[0], s * rot[1], s * rot[2]] });
+      P.movers.push({ geo: s > 0 ? flp : mirrorX(flp), pivot: [s * A[0], A[1], A[2]], kind: 'flap', side: s, axis: s > 0 ? [d.x, d.y, d.z] : [d.x, -d.y, -d.z], on: aux });
+      P.movers.push({ geo: s > 0 ? ail : mirrorX(ail), pivot: [s * A2[0], A2[1], A2[2]], kind: 'aileron', side: s, axis: s > 0 ? [d2.x, d2.y, d2.z] : [d2.x, -d2.y, -d2.z], on: aux });
+      if (tip) {   // folding wingtip panel (hinge along the chord at x = xt), rides on the swinging panel
+        let tg = planform([[0, LE(xt)], [tip.x - xt, LE(xt) + tip.dz], [tip.x - xt, LE(xt) + tip.dz + tip.c], [0, TE(xt)]], 0.08, 0.03, 0);
+        tg.translate(0, 0, -(LE(xt) + TE(xt)) / 2); if (s < 0) tg = mirrorX(tg);
+        P.movers.push({ geo: tg, pivot: [s * xt, pv[1], (LE(xt) + TE(xt)) / 2], kind: 'aux', aux: tip.aux, side: s, rot: [0, 0, -s * tip.ang], on: aux, local: true });
+      }
+    }
+  }
+
+  // ===================================================================================================== X-2 Lindorm (concept)
+  // 20.6 m, span 15.4 m (dogfight) / 10.6 m (dash), height 5.1 m. Chined "dragon" body with twin ventral intakes, close-coupled canards,
+  // fixed glove + manual morphing outer wing (25 / 45 / 65 deg) with folding tips (down in dash), canted twin fins, 2D vectoring nozzles,
+  // main + special weapons bay, tail hook (catapult carrier jet).
+  const LIN_LE = (x) => -0.3 + (x - 2.3) * Math.tan(25 * DEG), LIN_TE = (x) => 3.25 - (x - 2.3) * 0.095;
+  const LIN = {
+    b2x: { tipAux: 'morph', bayAux: ['bay'] },
+    b3: { idle: 'morph' },
+    surf: false,
+    gearSpec: [
+      { x: 0, y: -0.5, z: -6.2, r: 0.3, w: 0.18, wheels: 2, nose: true, fold: [1, 0, 0], ang: PI / 2, lift: 0.12, sr: 0.075 },
+      { x: 1.75, y: -0.5, z: 1.7, r: 0.46, w: 0.27, fold: [1, 0, 0], ang: PI / 2, twist: PI / 2, lift: 0.2, sr: 0.095 },
+    ],
+    cockpitStyle: 'us_glass', canTop: 1.1, goldCanopy: true,
+    fins: [[1.7, 1.4, 7.6], [-1.7, 1.4, 7.6]],
+    nation: 'NU', seed: 202, len: [-10.3, 10.3], hs: 7.8, radomeZ: -8.2, flat: true, nationMark: nationNU,
+    frames: [-8.2, -6.0, -3.0, 0.4, 3.6, 6.8],
+    panels: [bayPanel(-2.6, 2.2, -0.62, 0.62, -0.62), bayPanel(3.2, 6.0, -0.55, 0.55, -0.5)],
+    // storm grey splinter with blue-grey scales
+    liv: { pattern: 'splinter', base: '#4d5862', cols: [null, '#3e4852', '#5d6873'], weights: [0.42, 0.33, 0.25], cell: 1.3, squash: 1.35, under: '#707a83', radome: '#3a4149' },
+    marks: { badge: 'us', sq: 'DRAKE SQN', badgeCol: '#d7a93a', fin: 'num', num: 'X-2', numCol: '#d7a93a', numStroke: '#14233d' },
+    code: { text: '201', color: '#c9d0d6', stroke: '#14233d' },
+    engines: [{ x: -0.66, y: 0.0, z: 9.65, r: 0.5, len: 0.75, tvc: '2d' }, { x: 0.66, y: 0.0, z: 9.65, r: 0.5, len: 0.75, tvc: '2d' }],
+    gear: [{ x: 0, y: -0.5, z: -6.2, r: 0.3, nose: 1 }, { x: 1.75, y: -0.5, z: 1.7, r: 0.46 }, { x: -1.75, y: -0.5, z: 1.7, r: 0.46 }],
+    wingtips: [[-7.7, 0.15, 2.95], [7.7, 0.15, 2.95]], navs: [[-6.15, 0.18, 2.3], [6.15, 0.18, 2.3]],
+    build(P) {
+      P.body.push(loft([
+        [-10.25, -0.12, 0.01, 0.01, 0.01, 2], [-9.8, -0.11, 0.22, 0.15, 0.12, 2, 0, 0.5, 0.8], [-8.6, -0.06, 0.52, 0.32, 0.26, 2, 0, 0.55, 0.85], [-7.2, 0.0, 0.76, 0.45, 0.34, 2.1, 0, 0.6, 0.9],
+        [-5.8, 0.03, 0.92, 0.55, 0.4, 2.3, 0, 0.62, 0.9], [-4.2, 0.03, 1.06, 0.6, 0.45, 2.5, 0, 0.66, 0.85], [-2.4, 0.02, 1.2, 0.58, 0.5, 2.8, 0, 0.7, 0.8],
+        [0.5, 0.0, 1.3, 0.55, 0.52, 3, 0, 0.72, 0.8], [3.5, 0.0, 1.25, 0.5, 0.5, 3, 0, 0.72, 0.8], [6.2, 0.0, 1.1, 0.46, 0.44, 2.8, 0, 0.65, 0.7],
+        [8.4, 0.02, 1.15, 0.5, 0.48, 2.4], [9.4, 0.02, 1.18, 0.5, 0.5, 2.2],
+      ], 16, 3, 0, true));
+      // twin ventral intakes (the dragon's jaw), splitter between them
+      const IT = [[-4.4, -0.62, 0.36, 0.26, 0.34, 3.2, -0.3, 0.2, 0.5], [-3.8, -0.6, 0.4, 0.28, 0.36, 3.2, 0, 0.2, 0.5], [-1.0, -0.52, 0.42, 0.28, 0.32, 3, 0], [2.5, -0.38, 0.36, 0.24, 0.26, 2.6, 0], [4.4, -0.24, 0.1, 0.12, 0.12, 2, 0]];
+      for (const sx of [-1, 1]) { P.body.push(loft(IT, 14, 3, sx * 0.66, true)); intake(P, IT[0], sx * 0.66, { lip: 0.03, depth: 2.2, shrink: 0.8, lipCol: [0.48, 0.5, 0.53] }); }
+      P.metal.push(plateYZ([[-4.6, -0.42], [-2.2, -0.42], [-2.2, -0.92], [-4.2, -0.92]], 0, 0.04, [0.32, 0.34, 0.36]));
+      // fixed glove / strake (it carries the wing pylons)
+      const GL = [[0.9, -6.6], [1.6, -4.4], [2.45, -1.6], [2.55, -0.4], [2.55, 3.4], [0.9, 4.6]];
+      const gl = planform(GL, 0.15, 0.05, 0.12, (ax) => 1 - 0.35 * clamp01((ax - 0.9) / 1.6)); P.body.push(gl, mirrorX(gl));
+      // morphing outer wing: drawn at 25 deg, swings to 65 deg (aux 'morph'), tips fold down in dash (aux 'tipf')
+      swingPanel(P, { LE: LIN_LE, TE: LIN_TE, xr: 2.3, xt: 6.3, x0: 3.0, x1: 4.7, x2: 6.15, pv: [2.4, 0.15, 0.6], aux: 'morph', rot: [0, -40 * DEG, 0], th: 0.13,
+        tip: { x: 7.7, dz: 0.65, c: 0.6, aux: 'tipf', ang: 65 * DEG } });
+      // close-coupled canards
+      for (const s of [1, -1]) {
+        let c = planform([[0, -0.7], [1.5, 0.25], [1.5, 0.6], [0, 0.75]], 0.06, 0.025, 0);
+        if (s < 0) c = mirrorX(c);
+        P.movers.push({ geo: c, pivot: [s * 0.95, 0.32, -4.9], kind: 'canard', side: s, local: true });
+      }
+      // twin fins canted 18 deg out, all-moving stabs
+      for (const sx of [-1, 1]) P.body.push(cantFin(fin([[5.6, 0.42], [8.6, 0.42], [9.4, 2.7], [8.3, 2.7]], 0.1, 0.04, sx * 1.6, 0.45), sx * 1.6, 0.42, -sx * 18 * DEG));
+      for (const s of [1, -1]) {
+        let st = planform([[0, -1.2], [2.5, 0.5], [2.5, 1.2], [0, 1.4]], 0.07, 0.03, 0);
+        if (s < 0) st = mirrorX(st);
+        P.movers.push({ geo: st, pivot: [s * 1.5, 0.02, 8.6], kind: 'stab', side: s, local: true });
+      }
+      // 2D nozzle shrouds
+      for (const sx of [-1, 1]) {
+        const x = sx * 0.66, Mt = P.metal, c = [0.34, 0.34, 0.35];
+        Mt.push(paint(box(0.96, 0.05, 0.9, x, 0.5, 10.05), ...c), paint(box(0.96, 0.05, 0.9, x, -0.48, 10.05), ...c));
+      }
+      bayDoors(P, -2.6, 2.2, 0.62, -0.62, 'bay', { inner: 0.0 });
+      bayDoors(P, 3.2, 6.0, 0.55, -0.5, 'bay');
+      hookMv(P, -0.4, 8.2, 1.5);
+      canopy(P, [[-7.6, 0.44, 0.05, 0.05, 0.05], [-7.1, 0.47, 0.38, 0.36, 0.1], [-6.2, 0.52, 0.5, 0.6, 0.1], [-5.2, 0.55, 0.5, 0.56, 0.1], [-4.4, 0.55, 0.4, 0.42, 0.1], [-3.8, 0.55, 0.05, 0.05, 0.05]]);
+      const M = P.metal;
+      for (const sx of [-1, 1]) ring(M, sx * 0.66, 0.0, 9.4, 0.53, 0.3);
+      M.push(paint(sphere(0.11, 0, 0.42, -8.0), 0.15, 0.2, 0.26));
+      M.push(paint(box(0.06, 0.06, 0.3, -1.12, 0.16, -3.3), 0.05, 0.05, 0.05));   // gun port
+      for (const sx of [-1, 1]) { store(P.stores, 'meteor', sx * 1.9, -0.25, 0.9, 0.2); store(P.stores, 'aim9x', sx * 1.5, -0.25, 2.8, 0.2); }
+      for (const sx of [-1, 1]) P.decals.push(decal(0, 1.1, 1.1, 'top', sx * 1.7, 0.2, -1.4), decal(0, 1.1, 1.1, 'bottom', sx * 1.7, 0.05, -1.4));
+      for (const o of [-1, 1]) P.decals.push(decal(0, 0.8, 0.8, side(o), o * 1.28, 0.05, 1.6));
+      for (const sx of [-1, 1]) for (const o of [-1, 1]) P.decals.push(decal(3, 1.2, 0.8, side(o), sx * (1.6 + 0.55) + o * 0.06, 1.7, 7.9));
+      for (const o of [-1, 1]) P.decals.push(decal(1, 0.75, 0.38, side(o), o * 0.8, 0.0, -7.2));
+      for (const o of [-1, 1]) P.decals.push(decal(2, 0.42, 0.42, side(o), o * 0.95, 0.25, -3.0));
+    },
+  };
+  FL.registerAircraft('lindorm', LIN, {
+    tier: 10, price: 1200000, unlockLevel: 44, roughness: 0.06, hardpoints: 6, pylonLayout: 'b b w w c c', engineSound: 'twin', carrier: 'catobar', supercruise: 1.4,
+    bayMap: { L1: 'bay', R1: 'bay', L2: 'bay', R2: 'bay' },
+    name: 'X-2 Lindorm (concept)', nation: 'NU', year: 2041, role: 'Morphing-wing dragon',
+    blurb: 'A concept strike fighter with a wing that changes shape. Press the special: DOGFIGHT (wide, tight turns), CRUISE, DASH (swept back, tips folded, top speed). The big special bay carries twice the special ammo.',
+    // concept: 2 x ~110 / 165 kN, wing ~58 m2 (dogfight), ~22 t, Mach 2.6 (dash), 10 stations + special bay, 9,000 kg, 30 mm gun
+    mass: 22000, wingArea: 58, thrustMil: 220000, thrustAB: 330000, arcadeThrust: 1.32,
+    rollRate: 290, pitchRate: 125, yawRate: 58, drift: 1.35, maxG: 9, missiles: 10, gun: 'gsh30', gunName: '30 mm revolver cannon',
+    cd0: 0.018, machMax: 2.45, topSpeedKmh: 2750, ceiling: 20000, climbRate: 320,
+    stats: { speed: 5, agility: 5, firepower: 5, toughness: 4 },
+  }, { stations: [['R1', 0.3, 0.0, 'bay', 0.03], ['R2', 0.3, 4.6, 'bay', 0.03], ['R3', 1.95, 0.9, 'wing', 0.2], ['R4', 1.5, 2.8, 'wing', 0.2], ['C', 0, -5.2, 'belly', 0.15], ['C2', 0, 7.0, 'belly', 0.12]], muzzle: [-1.12, 0.16, -3.45] });
+
+  // ===================================================================================================== XFA-01 Valravn (concept)
+  // 19.2 m, span 14.2 m, height 4.6 m. Forward-swept wing with big LERX, small canards, butterfly V tail (ruddervators), 3D vectoring
+  // nozzles, a tactical laser turret that rises from the spine (aux 'laser'), one main bay. The laser is its gun (built-in slot).
+  const VAL = {
+    b2x: { vtail: true, bayAux: ['bay'] },
+    b3: { idle: 'laser' },
+    surf: [{ a: 0.06, b: 0.52, c: 0.24, kind: 'flaperon' }, { a: 0.56, b: 0.94, c: 0.24, kind: 'aileron' }], noRudder: true,
+    gearSpec: [
+      { x: 0, y: -0.45, z: -6.0, r: 0.29, w: 0.17, nose: true, fold: [1, 0, 0], ang: PI / 2, lift: 0.12, sr: 0.07 },
+      { x: 1.6, y: -0.48, z: 1.9, r: 0.45, w: 0.26, fold: [1, 0, 0], ang: PI / 2, twist: PI / 2, lift: 0.2, sr: 0.09 },
+    ],
+    cockpitStyle: 'us_glass', canTop: 1.1,
+    fins: [[1.9, 1.2, 7.6], [-1.9, 1.2, 7.6]],
+    nation: 'NU', seed: 301, len: [-9.65, 9.6], hs: 7.2, radomeZ: -7.6, flat: true, nationMark: nationNU,
+    frames: [-7.6, -5.4, -2.4, 0.8, 3.8, 6.6],
+    panels: [bayPanel(-1.2, 3.4, -0.7, 0.7, -0.58), [-2.1, -1.1, -0.3, 0.3, 'up', 0.6]],
+    // raven: blue-black with dark grey feathers, grey belly
+    liv: { pattern: 'splinter', base: '#23272d', cols: [null, '#2e343c', '#1b1e23'], weights: [0.45, 0.3, 0.25], cell: 1.1, squash: 1.6, under: '#3c434b', radome: '#1c1f24' },
+    marks: { badge: 'us', sq: 'RAVEN SQN', badgeCol: '#d7a93a', fin: 'num', num: 'XFA-01', numCol: '#9aa3ad', numStroke: null },
+    code: { text: '301', color: '#9aa3ad', stroke: null },
+    engines: [{ x: -0.62, y: 0.0, z: 9.0, r: 0.5, len: 0.8, tvc: true }, { x: 0.62, y: 0.0, z: 9.0, r: 0.5, len: 0.8, tvc: true }],
+    gear: [{ x: 0, y: -0.45, z: -6.0, r: 0.29, nose: 1 }, { x: 1.6, y: -0.48, z: 1.9, r: 0.45 }, { x: -1.6, y: -0.48, z: 1.9, r: 0.45 }],
+    wingtips: [[-7.1, 0.05, -0.8], [7.1, 0.05, -0.8]], navs: [[-7.05, 0.09, -1.2], [7.05, 0.09, -1.2]],
+    build(P) {
+      P.body.push(loft([
+        [-9.6, -0.1, 0.01, 0.01, 0.01, 2], [-9.15, -0.09, 0.21, 0.15, 0.12, 2, 0, 0.5, 0.8], [-8.0, -0.05, 0.5, 0.32, 0.26, 2, 0, 0.55, 0.85], [-6.7, 0.0, 0.7, 0.45, 0.35, 2.1, 0, 0.6, 0.85],
+        [-5.3, 0.02, 0.86, 0.54, 0.4, 2.3, 0, 0.62, 0.85], [-3.8, 0.02, 1.02, 0.58, 0.45, 2.5, 0, 0.66, 0.85], [-2.0, 0.0, 1.24, 0.58, 0.5, 2.8, 0, 0.7, 0.85],
+        [0.5, 0.0, 1.36, 0.55, 0.52, 3, 0, 0.72, 0.8], [3.5, 0.0, 1.3, 0.5, 0.5, 3, 0, 0.72, 0.8], [6.2, 0.0, 1.1, 0.46, 0.44, 2.8, 0, 0.6, 0.6],
+        [8.2, 0.02, 1.12, 0.5, 0.48, 2.4], [9.0, 0.02, 1.15, 0.5, 0.5, 2.2],
+      ], 16, 3, 0, true));
+      // trapezoid side intakes under the LERX
+      const IT = [[-3.4, -0.22, 0.4, 0.36, 0.4, 3, 0.35, 0.2, 0.5], [-2.8, -0.22, 0.44, 0.4, 0.42, 3, 0.1, 0.2, 0.5], [-0.5, -0.16, 0.46, 0.42, 0.42, 2.8, 0], [2.5, -0.1, 0.42, 0.38, 0.38, 2.6, 0], [4.2, -0.05, 0.1, 0.18, 0.18, 2, 0]];
+      for (const sx of [-1, 1]) { P.body.push(loft(IT, 12, 3, sx * 1.22, true)); intake(P, IT[0], sx * 1.22, { lip: 0.03, depth: 2.2, shrink: 0.8, lipCol: [0.36, 0.38, 0.4] }); }
+      const lx = planform([[0.9, -5.6], [1.65, -3.6], [2.25, -1.2], [2.3, 0.6], [0.9, 0.6]], 0.08, 0.03, 0.14); P.body.push(lx, mirrorX(lx));
+      // forward-swept wing (flaperons + ailerons)
+      P.body.push(...wingPair([[1.2, 0.4], [7.1, -1.4], [7.1, -0.2], [1.2, 4.2]], 0.15, 0.05, 0.05, (ax) => 1 - 0.5 * clamp01((ax - 1.2) / 5.9)));
+      for (const s of [1, -1]) {
+        let c = planform([[0, -0.6], [1.35, 0.25], [1.35, 0.55], [0, 0.65]], 0.06, 0.025, 0);
+        if (s < 0) c = mirrorX(c);
+        P.movers.push({ geo: c, pivot: [s * 0.95, 0.24, -4.6], kind: 'canard', side: s, local: true });
+      }
+      // butterfly V tail: all-moving ruddervators canted 42 deg (pitch + yaw mixing: aircraft_b2 vtail post)
+      for (const s of [1, -1]) {
+        const dc = merge([decal(3, 1.1, 0.6, 'right', 0.08, 1.2, 0.4), decal(3, 1.1, 0.6, 'left', -0.08, 1.2, 0.4)], true, false);
+        P.movers.push({ geo: fin([[-1.6, 0], [1.4, 0], [2.2, 2.55], [1.0, 2.55]], 0.09, 0.04, 0, 0.4), decal: dc, pivot: [s * 1.45, 0.38, 7.4], kind: 'tail', side: s, cant: -s * 42 * DEG, vtail: true, local: true });
+      }
+      // laser turret: rises 0.34 m out of the spine behind the canopy (aux 'laser'); lens faces forward
+      const LT = merge([paint(cylZ(0.24, 0.24, 0.62, 16, false).translate(0, 0, -0.31), 0.16, 0.17, 0.19), paint(sphere(0.24, 0, 0, -0.31).scale(1, 1, 0.6), 0.16, 0.17, 0.19),
+        paint(sphere(0.12, 0, 0.02, -0.46), 0.75, 0.12, 0.08), paint(box(0.36, 0.3, 0.5, 0, -0.18, 0.05), 0.14, 0.15, 0.16)], false, true);
+      P.movers.push({ geo: LT, pivot: [0, 0.3, -1.6], kind: 'aux', aux: 'laser', move: [0, 0.34, 0], local: true });
+      bayDoors(P, -1.2, 3.4, 0.7, -0.58, 'bay');
+      for (const sx of [-1, 1]) { const x = sx * 0.62, Mt = P.metal; for (let k = 0; k < 6; k++) Mt.push(paint(box(0.2, 0.02, 0.5, 0, 0.5, 0.25).rotateZ((k / 6) * PI * 2).translate(x, 0, 9.55), 0.34, 0.33, 0.33)); }
+      canopy(P, [[-7.0, 0.43, 0.05, 0.05, 0.05], [-6.55, 0.46, 0.36, 0.34, 0.1], [-5.7, 0.5, 0.48, 0.58, 0.1], [-4.8, 0.53, 0.48, 0.54, 0.1], [-4.0, 0.53, 0.38, 0.4, 0.1], [-3.45, 0.53, 0.05, 0.05, 0.05]]);
+      const M = P.metal;
+      for (const sx of [-1, 1]) ring(M, sx * 0.62, 0.0, 8.75, 0.53, 0.3);
+      M.push(paint(sphere(0.1, 0, 0.4, -7.4), 0.15, 0.2, 0.26));
+      for (const sx of [-1, 1]) { store(P.stores, 'r77', sx * 2.6, -0.15, 1.5, 0.25); store(P.stores, 'r73', sx * 5.0, -0.1, 0.3, 0.2); }
+      for (const sx of [-1, 1]) P.decals.push(decal(0, 1.0, 1.0, 'top', sx * 3.6, 0.15, 1.0), decal(0, 1.0, 1.0, 'bottom', sx * 3.6, 0.0, 1.0));
+      for (const o of [-1, 1]) P.decals.push(decal(0, 0.75, 0.75, side(o), o * 1.34, 0.0, 2.2));
+      for (const o of [-1, 1]) P.decals.push(decal(1, 0.75, 0.38, side(o), o * 0.78, 0.0, -6.6));
+      for (const o of [-1, 1]) P.decals.push(decal(2, 0.4, 0.4, side(o), o * 1.0, 0.25, -2.9));
+    },
+  };
+  FL.registerAircraft('valravn', VAL, {
+    tier: 10, price: 1400000, unlockLevel: 48, roughness: 0.06, hardpoints: 6, pylonLayout: 'b b w w w', engineSound: 'twin', noGun: true, supercruise: 1.3,
+    bayMap: { L1: 'bay', R1: 'bay', L2: 'bay', R2: 'bay' }, builtIn: ['vlaser'],
+    name: 'XFA-01 Valravn (concept)', nation: 'NU', year: 2044, role: 'Forward-swept laser fighter',
+    blurb: 'A concept raven with forward-swept wings and 3D vectoring. Its gun is a laser in the spine: own slot, no pylon. Hold fire to cut; watch the heat bar. The engine refills the laser energy as you fly.',
+    // concept: 2 x ~105 / 160 kN, wing ~56 m2, ~20 t, Mach 2.2, 10 stations, 8,000 kg, laser instead of a gun
+    mass: 20000, wingArea: 56, thrustMil: 210000, thrustAB: 320000, arcadeThrust: 1.32,
+    rollRate: 320, pitchRate: 135, yawRate: 62, drift: 1.5, maxG: 9.5, missiles: 8, gun: 'none', gunName: 'None · Valravn laser (built in)',
+    cd0: 0.019, machMax: 2.2, topSpeedKmh: 2400, ceiling: 19500, climbRate: 320,
+    stats: { speed: 4, agility: 5, firepower: 5, toughness: 4 },
+  }, { stations: [['R1', 0.3, 0.2, 'bay', 0.03], ['R2', 0.55, 2.4, 'bay', 0.03], ['R3', 2.6, 1.5, 'wing'], ['R4', 3.8, 0.95, 'wing'], ['R5', 5.0, 0.3, 'wing']], muzzle: [0, 0.68, -2.1] });
+
+  // ===================================================================================================== AC-X Kraken (concept)
+  // 26.5 m, span 34 m, height 8.6 m. Big lifting fuselage with an upswept tail, high wing with 4 podded turbofans, T tail,
+  // 40 mm turret under the left belly (aux 'turret' / 'tpitch'), dorsal drone hive behind the wing (aux 'hive'), side-by-side cockpit.
+  const KRK = {
+    b3: { idle: 'turret', init: { turret: 0.857, tpitch: 0.85 } },
+    surf: [{ a: 0.06, b: 0.55, c: 0.26, kind: 'flap' }, { a: 0.6, b: 0.95, c: 0.26, kind: 'aileron' }],
+    gearSpec: [
+      { x: 0, y: -0.95, z: -9.8, r: 0.42, w: 0.24, wheels: 2, nose: true, fold: [1, 0, 0], ang: PI / 2, lift: 0.12, sr: 0.09 },
+      { x: 2.05, y: -0.95, z: 0.8, r: 0.56, w: 0.32, wheels: 2, fold: [1, 0, 0], ang: PI / 2, lift: 0.12, sr: 0.12, doors: 'none' },
+    ],
+    cockpitStyle: 'us_glass', canTop: 1.0, sideBySide: 0.55,
+    fins: [[0, 4.4, 11.0]],
+    nation: 'NU', seed: 404, len: [-13.4, 13.3], hs: 17.2, radomeZ: -12.2, nationMark: nationNU,
+    frames: [-11.0, -8.0, -5.0, -2.0, 1.0, 4.0, 7.0, 10.0],
+    // sea grey mottle, lighter belly
+    liv: { pattern: 'mottle', base: '#5d666c', tones: ['#535b61', '#687177'], under: '#737c82', radome: '#4b5257' },
+    marks: { badge: 'us', sq: 'HIVE SQN', badgeCol: '#d7a93a', fin: 'num', num: 'AC-X', numCol: '#e9edf0', numStroke: '#14233d' },
+    code: { text: 'K-01', color: '#e9edf0', stroke: '#14233d' },
+    engines: [-9.6, -5.2, 5.2, 9.6].map((x) => ({ x, y: 1.85, z: 1.75, r: 0.42, len: 0.5, plain: true })),
+    noAB: true,
+    gear: [{ x: 0, y: -0.95, z: -9.8, r: 0.42, nose: 1 }, { x: 2.05, y: -0.95, z: 0.8, r: 0.56 }, { x: -2.05, y: -0.95, z: 0.8, r: 0.56 }],
+    wingtips: [[-17.0, 2.65, 1.2], [17.0, 2.65, 1.2]], navs: [[-16.9, 2.7, 0.6], [16.9, 2.7, 0.6]],
+    build(P) {
+      P.body.push(loft([
+        [-13.35, -0.25, 0.01, 0.01, 0.01, 2], [-12.7, -0.2, 0.6, 0.55, 0.5, 2], [-11.0, 0.0, 1.3, 1.2, 1.1, 2.2], [-8.5, 0.3, 1.9, 1.75, 1.6, 2.4],
+        [-5.0, 0.5, 2.2, 2.0, 1.9, 2.6], [0.0, 0.6, 2.35, 2.1, 2.0, 2.7], [5.0, 0.7, 2.1, 1.95, 1.7, 2.6], [8.5, 1.2, 1.4, 1.3, 0.9, 2.3],
+        [11.5, 1.7, 0.7, 0.6, 0.4, 2], [13.25, 1.9, 0.08, 0.08, 0.06, 2],
+      ], 30, 3, 0));
+      // main gear sponsons
+      for (const sx of [-1, 1]) P.body.push(loft([[-2.0, -0.8, 0.04, 0.04, 0.04, 2], [-1.4, -0.8, 0.5, 0.45, 0.55, 2.2], [2.8, -0.8, 0.5, 0.45, 0.55, 2.2], [3.6, -0.75, 0.05, 0.05, 0.05, 2]], 14, 2, sx * 1.95));
+      // high wing, four turbofan pods underneath
+      P.body.push(...wingPair([[1.2, -2.1], [17.05, 0.2], [17.05, 1.95], [1.2, 2.7]], 0.42, 0.06, 2.45, (ax) => 1 - 0.45 * clamp01((ax - 1.2) / 15.9)));
+      const NAC = [[-3.4, 1.85, 0.55, 0.55, 0.55, 2], [-3.0, 1.85, 0.62, 0.62, 0.62, 2], [-1.0, 1.85, 0.6, 0.6, 0.6, 2], [1.2, 1.85, 0.48, 0.48, 0.48, 2], [1.75, 1.85, 0.42, 0.42, 0.42, 2]];
+      for (const x of [-9.6, -5.2, 5.2, 9.6]) {
+        P.body.push(loft(NAC, 18, 3, x));
+        intake(P, NAC[0], x, { lip: 0.05, depth: 0.8, shrink: 0.9, lipCol: [0.6, 0.62, 0.64] });
+        P.body.push(box(0.16, 0.5, 2.0, x, 2.25, -0.6));
+      }
+      // T tail
+      P.body.push(fin([[8.0, 2.2], [12.9, 2.2], [13.3, 6.5], [11.4, 6.5]], 0.28, 0.06, 0, 0.45));
+      P.body.push(planform([[-5.6, 11.1], [5.6, 11.1], [5.6, 12.4], [-5.6, 12.4]], 0.14, 0.04, 6.5));
+      P.movers.push({ geo: planform([[-5.5, 12.4], [5.5, 12.4], [5.5, 13.1], [-5.5, 13.1]], 0.08, 0.03, 6.5), pivot: [0, 6.5, 12.4], kind: 'elevon', side: 0, axis: [1, 0, 0] });
+      // 40 mm turret under the left belly: yaw ring (aux 'turret', 0 = aft) and the barrel (aux 'tpitch', 0 = -85 deg), barrel built pointing aft-down
+      const TP = [-1.45, -1.3, -4.8];
+      P.movers.push({ geo: merge([paint(sphere(0.52, 0, 0, 0).scale(1, 0.75, 1), 0.3, 0.32, 0.33), paint(cylZ(0.42, 0.42, 0.2, 14, false).rotateX(-PI / 2).translate(0, 0.32, 0), 0.24, 0.25, 0.26)], false, true),
+        pivot: TP, kind: 'aux', aux: 'turret', side: 1, rot: [0, -210 * DEG, 0], local: true });
+      const BR = merge([paint(cylZ(0.11, 0.09, 3.0, 10, false).translate(0, 0, 0.3), 0.14, 0.14, 0.15), paint(cylZ(0.15, 0.15, 0.35, 10, false).translate(0, 0, 3.2), 0.1, 0.1, 0.11),
+        paint(box(0.36, 0.3, 0.55, 0, 0, 0.2), 0.26, 0.27, 0.28)], false, true).rotateX(85 * DEG);
+      P.movers.push({ geo: BR, pivot: TP, kind: 'aux', aux: 'tpitch', side: 1, rot: [-100 * DEG, 0, 0], on: 'turret', local: true });
+      // dorsal drone hive doors behind the wing (hinged on the outer edges, open upward)
+      for (const s of [1, -1]) {
+        P.metal.push(paint(box(1.0, 0.02, 3.8, s * 0.55, 2.42, 5.4), 0.08, 0.085, 0.09));
+        P.movers.push({ geo: box(1.1, 0.04, 4.0, -s * 0.55, 0, 0), pivot: [s * 1.1, 2.62, 5.4], kind: 'aux', aux: 'hive', side: s, rot: [0, 0, -s * 1.35], local: true });
+      }
+      canopy(P, [[-12.3, 0.5, 0.05, 0.05, 0.05], [-11.9, 0.62, 0.8, 0.3, 0.1], [-11.1, 0.85, 1.12, 0.42, 0.1], [-10.2, 1.05, 1.2, 0.45, 0.1], [-9.5, 1.15, 1.0, 0.35, 0.1], [-9.1, 1.18, 0.05, 0.05, 0.05]]);
+      const M = P.metal;
+      M.push(paint(sphere(0.3, 0, -0.85, -11.2), 0.12, 0.16, 0.22));   // sensor ball
+      M.push(paint(cylZ(0.04, 0.03, 1.2, 6).rotateX(-0.2).translate(0.6, 0.95, -12.6), 0.6, 0.6, 0.62));   // refuel probe
+      for (const sx of [-1, 1]) { store(P.stores, 'agm65', sx * 3.2, 2.1, 0.0, 0.3); store(P.stores, 'agm65', sx * 7.6, 2.0, 0.3, 0.3); }
+      for (const sx of [-1, 1]) P.decals.push(decal(0, 2.4, 2.4, 'top', sx * 12.0, 2.75, 0.8), decal(0, 2.4, 2.4, 'bottom', sx * 12.0, 2.2, 0.8));
+      for (const o of [-1, 1]) P.decals.push(decal(0, 1.6, 1.6, side(o), o * 2.38, 0.6, 1.5));
+      for (const o of [-1, 1]) P.decals.push(decal(3, 2.6, 1.3, side(o), o * 0.16, 4.6, 11.6));
+      for (const o of [-1, 1]) P.decals.push(decal(1, 1.6, 0.7, side(o), o * 2.0, 0.2, -6.6));
+      for (const o of [-1, 1]) P.decals.push(decal(2, 0.8, 0.8, side(o), o * 2.25, 1.2, -3.2));
+    },
+  };
+  FL.registerAircraft('kraken', KRK, {
+    tier: 10, price: 1500000, unlockLevel: 50, roughness: 0.4, hardpoints: 8, pylonLayout: 'w w w w w c c', engineSound: 'twin', builtIn: ['kdrones'],
+    name: 'AC-X Kraken (concept)', nation: 'NU', year: 2046, role: 'Drone-carrier gunship',
+    blurb: 'A flying fortress: slow, huge and very tough. Press the special to orbit the target in a left-hand pylon turn; the 40 mm turret fires where you aim. The dorsal hive builds new attack drones in flight.',
+    // concept: 4 x ~45 kN turbofans (no afterburner), wing ~150 m2, ~48 t, 680 km/h, 12 stations, 12,000 kg, 40 mm turret + drone hive
+    mass: 48000, wingArea: 150, thrustMil: 170000, thrustAB: 180000, arcadeThrust: 1.45,
+    rollRate: 70, pitchRate: 32, yawRate: 20, drift: 0.4, maxG: 4, missiles: 6, gun: 'turret40', gunName: '40 mm turret (aims by itself)',
+    cd0: 0.03, machMax: 0.62, topSpeedKmh: 680, ceiling: 11000, climbRate: 18,
+    stats: { speed: 1, agility: 1, firepower: 5, toughness: 5 },
+  }, { stations: [['R1', 3.2, 0.0, 'wing'], ['R2', 7.6, 0.3, 'wing'], ['R3', 12.0, 0.6, 'wing'], ['R4', 14.0, 0.8, 'wing'], ['R5', 15.8, 0.9, 'wing'], ['C', 0, 1.6, 'belly'], ['C2', 0, -1.6, 'belly']], muzzle: [-1.45, -1.3, -4.8] });
+
+  // ===================================================================================================== F/X-6 Skuld (concept)
+  // 19.8 m, span 15.6 m, height 3.6 m. Tailless cranked-kite 6th-gen fighter: no fins, split drag rudders at the tips (yaw), dorsal
+  // serpentine intakes, two buried engines with flat vectoring nozzles, 4 bay pairs (8 stations), 2 loyal drones (wingman.js), hook.
+  const SKD = {
+    b2x: { bayAux: ['bay'], idle: 'bay' },
+    b3: { drag: true },
+    surf: [{ a: 0.08, b: 0.5, c: 0.2, kind: 'elevon' }, { a: 0.52, b: 0.84, c: 0.2, kind: 'elevon' }], noRudder: true,
+    gearSpec: [
+      { x: 0, y: -0.36, z: -5.6, r: 0.29, w: 0.17, wheels: 2, nose: true, fold: [1, 0, 0], ang: PI / 2, lift: 0.1, sr: 0.07 },
+      { x: 1.55, y: -0.42, z: 2.0, r: 0.45, w: 0.26, fold: [0, 0, 1], ang: -PI / 2, shrink: 0.3, sr: 0.09, doors: 'inner' },
+    ],
+    cockpitStyle: 'us_glass', canTop: 1.06, goldCanopy: true,
+    fins: [],
+    nation: 'NU', seed: 606, len: [-9.95, 9.95], hs: 7.9, radomeZ: -7.8, flat: true, nationMark: nationNU,
+    frames: [-7.8, -5.0, -2.0, 1.0, 4.0, 7.0],
+    panels: [bayPanel(-2.6, 4.2, -1.1, 1.1, -0.5)],
+    // two-tone low-observable grey with darker leading edges
+    liv: { pattern: 'patches', base: '#62686e', under: '#6c7278', radome: '#575d63',
+      patches: [{ c: '#51575d', p: [[-7.5, 0.4], [-2.0, 3.6], [3.0, 7.9], [4.2, 7.9], [-1.0, 2.2], [-6.8, 0.4]] }] },
+    marks: { badge: 'us', sq: 'NORN SQN', badgeCol: '#d7a93a', fin: 'num', num: 'FX-6', numCol: '#c9d0d6', numStroke: null },
+    code: { text: '601', color: '#c9d0d6', stroke: null },
+    engines: [{ x: -0.72, y: 0.04, z: 8.9, r: 0.42, len: 0.55, tvc: true }, { x: 0.72, y: 0.04, z: 8.9, r: 0.42, len: 0.55, tvc: true }],
+    gear: [{ x: 0, y: -0.36, z: -5.6, r: 0.29, nose: 1 }, { x: 1.55, y: -0.42, z: 2.0, r: 0.45 }, { x: -1.55, y: -0.42, z: 2.0, r: 0.45 }],
+    wingtips: [[-7.8, 0.0, 3.5], [7.8, 0.0, 3.5]], navs: [[-7.7, 0.04, 3.1], [7.7, 0.04, 3.1]],
+    build(P) {
+      P.body.push(loft([
+        [-9.9, -0.08, 0.01, 0.01, 0.01, 2], [-9.4, -0.07, 0.22, 0.14, 0.1, 2, 0, 0.5, 0.8], [-8.2, -0.04, 0.56, 0.3, 0.22, 2, 0, 0.6, 0.85], [-6.8, 0.0, 0.86, 0.42, 0.3, 2.2, 0, 0.66, 0.9],
+        [-5.0, 0.0, 1.2, 0.5, 0.36, 2.5, 0, 0.7, 0.9], [-2.8, 0.0, 1.55, 0.52, 0.42, 3, 0, 0.75, 0.88], [0.0, 0.0, 1.75, 0.5, 0.44, 3.2, 0, 0.78, 0.85],
+        [3.0, 0.0, 1.7, 0.46, 0.42, 3.2, 0, 0.78, 0.85], [6.0, 0.02, 1.45, 0.4, 0.36, 3.2, 0, 0.75, 0.85], [8.2, 0.04, 1.25, 0.34, 0.3, 3.5, 0, 0.6, 0.7], [9.2, 0.04, 1.2, 0.32, 0.28, 3.8],
+      ], 16, 3, 0, true));
+      // cranked-kite wing blended into the body (elevons)
+      P.body.push(...wingPair([[0.95, -7.4], [2.9, -3.4], [7.8, 2.95], [7.8, 4.05], [2.6, 8.7], [0.95, 9.1]], 0.12, 0.04, 0.0, (ax) => 1 - 0.55 * clamp01((ax - 0.95) / 6.85)));
+      // dorsal serpentine intakes
+      const IT = [[-3.2, 0.42, 0.42, 0.24, 0.12, 3, -0.3, 0.3, 0.2], [-2.7, 0.42, 0.44, 0.26, 0.12, 3, 0, 0.3, 0.2], [0.0, 0.36, 0.44, 0.22, 0.12, 3, 0], [3.0, 0.3, 0.1, 0.1, 0.08, 2.5, 0]];
+      for (const sx of [-1, 1]) { P.body.push(loft(IT, 12, 3, sx * 0.95, true)); intake(P, IT[0], sx * 0.95, { lip: 0.025, depth: 1.8, shrink: 0.75, face: false, dy: -0.2, lipCol: [0.4, 0.42, 0.45] }); }
+      // flat nozzle troughs: top and bottom plates, side walls
+      for (const sx of [-1, 1]) { const x = sx * 0.72, Mt = P.metal, c = [0.33, 0.33, 0.34]; Mt.push(paint(box(0.95, 0.04, 0.9, x, 0.38, 9.35), ...c), paint(box(0.95, 0.04, 0.9, x, -0.3, 9.35), ...c)); }
+      // split drag rudders at the tips (top + bottom halves), driven by yaw / airbrake (post wrapper)
+      for (const s of [1, -1]) for (const top of [1, -1]) {
+        let g = planform([[-0.6, 0], [0.6, 0], [0.6, 0.5], [-0.6, 0.5]], 0.02, 0.008, 0); if (s < 0) g = mirrorX(g);
+        P.movers.push({ geo: g, pivot: [s * 7.0, top * 0.03, 3.7], kind: 'aux', aux: 'drag', side: s, top, local: true });
+      }
+      bayDoors(P, -2.6, 4.2, 1.1, -0.5, 'bay');
+      hookMv(P, -0.3, 7.0, 1.4);
+      canopy(P, [[-7.4, 0.34, 0.05, 0.05, 0.05], [-6.9, 0.37, 0.36, 0.3, 0.1], [-6.0, 0.41, 0.48, 0.5, 0.1], [-5.1, 0.44, 0.48, 0.48, 0.1], [-4.3, 0.44, 0.38, 0.34, 0.1], [-3.8, 0.43, 0.05, 0.05, 0.05]]);
+      const M = P.metal;
+      M.push(paint(box(0.3, 0.02, 0.5, 0, -0.3, -7.6), 0.16, 0.2, 0.26));   // distributed aperture window
+      for (const sx of [-1, 1]) P.decals.push(decal(0, 1.1, 1.1, 'top', sx * 4.6, 0.1, 2.4), decal(0, 1.1, 1.1, 'bottom', sx * 4.6, -0.05, 2.4));
+      for (const o of [-1, 1]) P.decals.push(decal(0, 0.7, 0.7, side(o), o * 1.7, 0.0, 1.2));
+      for (const o of [-1, 1]) P.decals.push(decal(1, 0.7, 0.3, side(o), o * 1.0, 0.0, -5.8));
+      for (const o of [-1, 1]) P.decals.push(decal(3, 0.9, 0.6, side(o), o * 1.62, 0.0, 4.2));
+    },
+  };
+  FL.registerAircraft('skuld', SKD, {
+    tier: 10, price: 1700000, unlockLevel: 54, roughness: 0.04, hardpoints: 6, pylonLayout: 'b b b b', engineSound: 'twin', carrier: 'catobar', supercruise: 1.6,
+    bayMap: { L1: 'bay', R1: 'bay', L2: 'bay', R2: 'bay', L3: 'bay', R3: 'bay', L4: 'bay', R4: 'bay' },
+    name: 'F/X-6 Skuld (concept)', nation: 'NU', year: 2050, role: '6th-gen tailless',
+    blurb: 'The end of the line: a tailless 6th-gen fighter with two loyal drone wingmen from its bays. Y = drones attack your target, U = drones cover you. Lost drones rebuild in flight.',
+    // concept: 2 x ~140 / 200 kN adaptive engines, wing ~95 m2, ~25 t, Mach 2.4, supercruise 1.6, 8 bay stations + 2 drones, 10,000 kg
+    mass: 25000, wingArea: 95, thrustMil: 280000, thrustAB: 400000, arcadeThrust: 1.3,
+    rollRate: 300, pitchRate: 130, yawRate: 55, drift: 1.45, maxG: 9, missiles: 8, gun: 'm61', gunName: '20 mm cannon (internal)',
+    cd0: 0.016, machMax: 2.4, topSpeedKmh: 2550, ceiling: 21000, climbRate: 340,
+    stats: { speed: 5, agility: 5, firepower: 5, toughness: 4 },
+  }, { stations: [['R1', 0.4, -1.6, 'bay', 0.03], ['R2', 0.85, -0.4, 'bay', 0.03], ['R3', 0.4, 2.2, 'bay', 0.03], ['R4', 0.85, 3.4, 'bay', 0.03]], muzzle: [1.2, 0.2, -4.4] });
+
+  // ===================================================================================================== Skuld loyal-wingman drone (not for sale)
+  // 7.4 m, span 8.2 m: small tailless UCAV, one dry engine, dorsal intake, no cockpit (sensor window). Built by wingman.js as 'skuld_d'.
+  const DRN = {
+    b3: { noPilot: true },
+    surf: [{ a: 0.1, b: 0.9, c: 0.22, kind: 'elevon' }], noRudder: true,
+    gearSpec: [
+      { x: 0, y: -0.25, z: -2.2, r: 0.18, w: 0.1, nose: true, fold: [1, 0, 0], ang: PI / 2, lift: 0.05, sr: 0.04 },
+      { x: 0.9, y: -0.28, z: 0.8, r: 0.24, w: 0.14, fold: [1, 0, 0], ang: PI / 2, lift: 0.08, sr: 0.05 },
+    ],
+    cockpitStyle: 'us_glass', canTop: 0.6,
+    fins: [],
+    nation: 'NU', seed: 607, len: [-3.75, 3.7], hs: 4.2, radomeZ: -3.0, flat: true, nationMark: nationNU,
+    frames: [-2.4, -0.6, 1.2, 2.8],
+    liv: { pattern: 'patches', base: '#62686e', under: '#6c7278', radome: '#575d63', patches: [] },
+    marks: {}, code: { text: 'D', color: '#c9d0d6', stroke: null },
+    engines: [{ x: 0, y: 0.02, z: 3.35, r: 0.28, len: 0.3, plain: true }],
+    noAB: true,
+    gear: [{ x: 0, y: -0.25, z: -2.2, r: 0.18, nose: 1 }, { x: 0.9, y: -0.28, z: 0.8, r: 0.24 }, { x: -0.9, y: -0.28, z: 0.8, r: 0.24 }],
+    wingtips: [[-4.1, 0.0, 1.9], [4.1, 0.0, 1.9]], navs: [[-4.0, 0.03, 1.6], [4.0, 0.03, 1.6]],
+    build(P) {
+      P.body.push(loft([[-3.7, -0.04, 0.01, 0.01, 0.01, 2], [-3.3, -0.03, 0.2, 0.12, 0.09, 2, 0, 0.6, 0.85], [-2.2, 0.0, 0.48, 0.26, 0.18, 2.4, 0, 0.7, 0.9],
+        [-0.5, 0.0, 0.72, 0.32, 0.22, 3, 0, 0.75, 0.88], [1.5, 0.0, 0.7, 0.3, 0.22, 3, 0, 0.75, 0.85], [3.0, 0.02, 0.42, 0.22, 0.18, 3], [3.4, 0.02, 0.3, 0.2, 0.16, 3]], 14, 3, 0, true));
+      P.body.push(...wingPair([[0.5, -1.6], [4.1, 1.5], [4.1, 2.2], [0.5, 3.2]], 0.08, 0.03, 0.0, (ax) => 1 - 0.5 * clamp01((ax - 0.5) / 3.6)));
+      const IT = [[-1.4, 0.24, 0.3, 0.14, 0.08, 3, -0.2, 0.3, 0.2], [-1.0, 0.24, 0.32, 0.16, 0.08, 3], [1.0, 0.2, 0.1, 0.06, 0.05, 2.5]];
+      P.body.push(loft(IT, 10, 2, 0, true)); intake(P, IT[0], 0, { lip: 0.02, depth: 1.0, shrink: 0.7, face: false, lipCol: [0.4, 0.42, 0.45] });
+      canopy(P, [[-3.0, 0.08, 0.04, 0.04, 0.04], [-2.7, 0.12, 0.18, 0.08, 0.05], [-2.3, 0.15, 0.2, 0.08, 0.05], [-2.0, 0.15, 0.04, 0.04, 0.04]]);
+      for (const sx of [-1, 1]) P.decals.push(decal(0, 0.55, 0.55, 'top', sx * 2.6, 0.06, 1.3));
+    },
+  };
+  FL.registerAircraft('skuld_d', DRN, null, { stations: [], muzzle: [0, -0.2, -3.4] });
+
+  // ===================================================================================================== post-build: batch-3 moving parts
+  // Wraps FL.buildAircraft (outside the aircraft_b2.js wrapper) for defs with def.b3: rotating nozzles (engine pivots), F-35B lift fan
+  // nozzle (shown while the lift doors are open, no flame), D-21 visibility, Skuld split drag rudders, drone without a pilot,
+  // api.hangarIdle showcase loops. No allocations per call.
+  const obuild = FL.buildAircraft;
+  FL.buildAircraft = function (type, opts) {
+    const api = obuild(type, opts), d = D[type];
+    if (d && d.b3) { try { post3(api, d); } catch (e) { console.warn('aircraft_b3 post ' + type, e); } }
+    return api;
+  };
+  function post3(api, d) {
+    const X = d.b3, MV = {};
+    api.group.traverse((o) => { if (o.userData && o.userData.mv && o.userData.mv.aux) (MV[o.userData.mv.aux] = MV[o.userData.mv.aux] || []).push(o); });
+    const ENG = []; api.group.children.forEach((o) => { if (o.isGroup && o.children.some((c) => c.name === 'nozzle')) ENG.push(o); });
+    const noz = (X.noz || []).map((i) => ENG[i]).filter(Boolean), nozMax = (X.nozMax || 90) * DEG;
+    const fan = X.fan != null ? ENG[X.fan] : null, fanKids = [];
+    if (fan) { fan.rotation.x = PI / 2; fan.visible = false; for (let i = 1; i < fan.children.length; i++) fanKids.push(fan.children[i]); for (const k of fanKids) k.visible = false; }
+    if (fan) { const oe = api.setEngine; api.setEngine = function (thr, ab, time) { oe(thr, ab, time); for (let i = 0; i < fanKids.length; i++) fanKids[i].visible = false; }; }
+    if (X.noPilot) {   // drone: no seat, no pilot
+      const seat = api.group.getObjectByName('seat');
+      if (seat) api.group.children.forEach((o) => { if (o.isMesh && o.material === seat.material) o.visible = false; });
+    }
+    const oAux = api.setAux, aux = {};
+    api.setAux = function (name, t) {
+      t = clamp01(t || 0);
+      if (aux[name] === t) return;
+      aux[name] = t; oAux(name, t);
+      if (name === 'nozzle') { for (let i = 0; i < noz.length; i++) noz[i].rotation.x = t * nozMax; }
+      else if (name === 'lift') { if (fan) fan.visible = t > 0.35; }
+      else if (name === 'd21') { const L = MV.d21; if (L) for (let i = 0; i < L.length; i++) L[i].visible = t < 0.5; }
+    };
+    api.auxNames = [...new Set(api.auxNames.concat(X.extraAux || []))];
+    if (X.init) for (const k in X.init) api.setAux(k, X.init[k]);
+    api.auxValue = function (name) { return aux[name] || 0; };
+    // Skuld: split drag rudders open on the side you yaw into (+ both with the airbrake)
+    if (X.drag && MV.drag) {
+      const DR = MV.drag.map((pv) => ({ inner: pv.children[0], s: pv.userData.mv.side, top: pv.userData.mv.top }));
+      let yw = 0, brk = 0;
+      const sync = () => { for (let i = 0; i < DR.length; i++) { const q = DR[i], o = Math.min(1, Math.max(0, yw * q.s) + brk * 0.6); q.inner.rotation.x = -q.top * o * 0.8; } };
+      const oc = api.setControls; api.setControls = function (p, r, y) { oc(p, r, y); yw = y || 0; sync(); };
+      const ob = api.setAirbrake; api.setAirbrake = function (t) { ob(t); brk = clamp01(t || 0); sync(); };
+    }
+    // hangar showcase (on top of aircraft_b2.js bay loops)
+    let ht = 0; const h2 = api.hangarIdle;
+    const sm = (a, b, t) => { const x = clamp01((t - a) / (b - a)); return x * x * (3 - 2 * x); };
+    if (X.idle) api.hangarIdle = function (dt) {
+      ht += Math.min(0.1, dt || 0);
+      const t = ht % 12, up = sm(2, 4, t) - sm(8, 10, t);
+      if (X.idle === 'nozzle') api.setAux('nozzle', up * 0.92);
+      else if (X.idle === 'stovl') { api.setAux('lift', sm(1, 2.5, t) - sm(10, 11.5, t)); api.setAux('nozzle', sm(2.5, 4.5, t) - sm(8, 10, t)); }
+      else if (X.idle === 'spike') api.setAux('spike', up);
+      else if (X.idle === 'morph') { const m = t < 4 ? 0 : t < 8 ? 0.5 * sm(4, 5.2, t) : 0.5 + 0.5 * sm(8, 9.2, t); api.setAux('morph', t > 11 ? 1 - sm(11, 12, t) : m); api.setAux('tipf', sm(9, 10, t) - sm(11, 11.6, t)); }
+      else if (X.idle === 'laser') { api.setAux('laser', up); api.setAux('bay', sm(5, 5.4, t) - sm(7, 7.4, t)); }
+      else if (X.idle === 'turret') { api.setAux('turret', 0.857 - 0.43 * up); api.setAux('tpitch', 0.85 - 0.5 * up); api.setAux('hive', sm(5, 6, t) - sm(9, 10, t)); }
+      if (h2 && d.b2x && d.b2x.idle) h2(dt);
+    };
+  }
+})();
+
+</script>
+<script>
 /* ---- hangarthumbs.js ---- */
 /* Flanker — baked hangar pictures (make_thumbs.py). side = 3/4 front view 512x256, top = top view 420x352,
    pyl = pylon points in % of the top view. Generated file: do not edit by hand. */
@@ -15443,8 +16186,9 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
       CPEAK = KORT ? 70 * DEG : COB_PEAK; AKS = clamp(24 * DEG / AOAMAX, 0.35, 1);
       // ROSTER M3 VTOL (Harrier 'harrier', F-35B 'f35'): nozzle range, max stores for a hover (jetsig.js drives st.nozzle / st.hoverVS)
       VT = a.vtol || ''; NOZMAX = (a.nozzleMax || 90) * DEG; HOVKG = a.hoverStoresKg != null ? a.hoverStoresKg : 2000;
+      HOVV0 = VT === 'f35' ? 110 : 80; HOVV1 = VT === 'f35' ? 40 : 25;   // jet-borne speed window: full below V0 - V1, none above V0 (F-35B: lift fan carries more)
     }
-    var VT = '', NOZMAX = 90 * DEG, HOVKG = 2000;
+    var VT = '', NOZMAX = 90 * DEG, HOVKG = 2000, HOVV0 = 80, HOVV1 = 25;
     var AOAMAX = 24 * DEG, AOAMIN = -12 * DEG, PSM = 1, KORT = false, KULBIT = true, SUPER = 0, DASH = 0, ZOOM = 0.7, DDRAG = 1, CPEAK = 115 * DEG, AKS = 1;
     function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
 
@@ -15563,7 +16307,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
         st.thrMode = brk > 0.1 && !wantBoost ? 'BRAKE' : wantBoost ? 'BOOST' : gas > 0.5 ? 'MIL' : (st.onGround && gas < 0.02) ? 'IDLE' : 'CRUISE';
       }
       // VTOL (ROSTER M3): nozzle angle (0 = aft) and the jet-borne weight hw (1 = full hover law: nozzles >= 65 deg and below ~55 m/s)
-      var nozA = VT ? clamp(st.nozzle || 0, 0, 1) * NOZMAX : 0, hw = VT ? clamp((nozA - 35 * DEG) / (30 * DEG), 0, 1) * clamp((80 - speed) / 25, 0, 1) : 0;
+      var nozA = VT ? clamp(st.nozzle || 0, 0, 1) * NOZMAX : 0, hw = VT ? clamp((nozA - 35 * DEG) / (30 * DEG), 0, 1) * clamp((HOVV0 - speed) / HOVV1, 0, 1) : 0;
       st.nozAng = nozA; st.hoverW = hw; st.hover = hw > 0.5;
       // Automatic gear
       if (st.onGround) st.gearDown = true;
@@ -15602,7 +16346,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
       var CL = 1.5 * Math.sin(2 * aoa) * (st.cobraPhase ? 0.5 : drift ? 0.38 : 1.2) * (st.sigLift || 1) * (st.superStallT > 0 ? 0.45 : 1);
       var sa = Math.sin(aoa), mach = speed / 340;
       var airbrake = (!st.onGround ? 0.13 * st.brake : 0) + 0.25 * (st.rev || 0);   // rev: thrust reverser (JA 37) dumps speed 2-3x the airbrake
-      if (VT === 'harrier' && nozA > 0.05 && hw < 1) airbrake += 0.16 * Math.sin(Math.min(nozA, 1.5)) * (1 - hw);   // VIFF: nozzles down in forward flight = a hard brake
+      if (VT === 'harrier' && nozA > 0.05 && hw < 1) airbrake += 0.3 * Math.sin(Math.min(nozA, 1.5)) * (1 - hw);   // VIFF: nozzles down in forward flight = a hard brake
       // supercruise: military power, no boost -> transonic drag rise x0.3 and dry thrust +25% up to the supercruise Mach
       var scOn = SUPER > 0 && !wantBoost && st.thr >= 0.78 && !st.onGround; st.supercruise = scOn && mach > 1.0;
       // dash (MiG-25 / MiG-31): boosting above Mach 2.3 moves the second drag rise up to 0.85 x dashMach
@@ -15643,10 +16387,11 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
         F.addScaledVector(tv, thrust);
       } else F.addScaledVector(fwd, thrust * (slide ? 1.3 : 1));   // drift: a bit more push along the nose
       if (hw > 0 && !st.onGround) {
-        // hover: stick = translate. Horizontal velocity target in the heading frame (25 m/s fore-aft, 18 m/s sideways), accel <= 4 m/s2
+        // hover: stick = translate. Horizontal velocity target in the heading frame (25 m/s fore-aft, 18 m/s sideways), accel <= 5 m/s2
         hvv.set(fwd.x, 0, fwd.z); if (hvv.lengthSq() < 1e-6) hvv.set(-up.x, 0, -up.z); hvv.normalize();
-        var hvf = st.vel.x * hvv.x + st.vel.z * hvv.z, hvr = st.vel.x * -hvv.z + st.vel.z * hvv.x;
-        var af = clamp(1.2 * (-(inp.pitch || 0) * 25 - hvf), -4, 4), ar = clamp(1.2 * ((inp.roll || 0) * 18 - hvr), -4, 4);
+        var rvx = st.vel.x - (st.hoverRefX || 0), rvz = st.vel.z - (st.hoverRefZ || 0);   // relative to the ground under you (carrier deck: jetsig.js)
+        var hvf = rvx * hvv.x + rvz * hvv.z, hvr = rvx * -hvv.z + rvz * hvv.x;
+        var af = clamp(1.2 * (-(inp.pitch || 0) * 25 - hvf), -5, 5), ar = clamp(1.2 * ((inp.roll || 0) * 18 - hvr), -5, 5);
         F.x += M * hw * (af * hvv.x - ar * hvv.z); F.z += M * hw * (af * hvv.z + ar * hvv.x);
         st.hoverAF = af; st.hoverAR = ar;
       }
@@ -20342,7 +21087,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
     var price = spec.price != null ? spec.price : row ? row[1] : 20000 + idx * 25000;
     var level = spec.unlockLevel || (spec.tier != null ? TIER_LV[clamp(Math.round(spec.tier) - Math.max(1, Math.round(minTier())), 0, TIER_LV.length - 1)] : row ? row[2] : TIER_LV[clamp(idx, 0, 8)]);
     if (price <= 0) level = 1;
-    return { price: price, level: level, rails: spec.missiles || spec.rails || (row ? row[3] : 6), gun: spec.gun || (row ? row[4] : 'gsh30'), hardpoints: spec.hardpoints || (row ? row[5] : 4) };
+    return { price: price, level: level, rails: spec.missiles || spec.rails || (row ? row[3] : 6), gun: spec.gun || (row ? row[4] : 'gsh30'), hardpoints: spec.hardpoints != null ? spec.hardpoints : (row ? row[5] : 4) };   // 0 = no pylons (SR-71)
   }
   function minTier() { var m = 1e9; acList().forEach(function (a) { if (a.tier != null && a.tier < m) m = a.tier; }); return m === 1e9 ? 0 : m; }
   function starterAc() {
@@ -20713,7 +21458,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
         var t = storeType(w), n = countFor(st, w, s), ammo = n;
         if (t === 'rocket') ammo = Math.max(1, Math.round((w.ammo + s.podAmmoAdd) * s.specialAmmoMul));
         else if (t === 'gunpod') ammo = w.ammo || 300;
-        else if (w.special && w.ammo > 1) ammo = w.ammo;           // multi-shot launchers (4AAM, drones, SFFS ...)
+        else if (w.special) ammo = (w.ammo > 1 ? w.ammo : n) * ((acSpec(P.ac) || {}).specialX || 1);   // multi-shot launchers (4AAM, drones, SFFS ...); specialX: X-2 special bay
         var e = { slot: st.id, pylon: st.id, kind: st.kind, side: st.side, index: st.index, frac: st.frac, id: w.id, spec: specCopy(w, s), type: t, count: n, ammo: ammo,
           mass: Math.round(t === 'rocket' ? (w.weight || 0) * ammo + 60 : t === 'gunpod' ? (w.podMass || 500) : n * (w.weight || 0)) };
         if (capKg && kg + e.mass > capKg) { s.overKg = (s.overKg || 0) + e.mass; return; }   // over the real payload: this store stays home
@@ -20721,6 +21466,9 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
         if (t === 'aam' && !firstAAM) firstAAM = e;
         out.push(e);
       });
+      // built-in weapons (jetsig.js spec.builtIn: D-21, Valravn laser, Kraken hive): own slot 'INT', no pylon, no payload weight
+      var bi = (acSpec(P.ac) || {}).builtIn || [];
+      for (var bk = 0; bk < bi.length; bk++) { var bw = FL.WEAPONS[bi[bk]]; if (bw) out.push({ slot: 'int', pylon: 'INT', id: bw.id, spec: specCopy(bw, s), type: storeType(bw), count: 0, ammo: bw.ammo || 1, mass: 0 }); }
       if (firstAAM && s.reserveAAM > 0) out.push({ slot: 'reserve', pylon: 'RES', id: firstAAM.id, spec: firstAAM.spec, type: 'aam', count: 0, ammo: s.reserveAAM, mass: Math.round(s.reserveAAM * (firstAAM.spec.weight || 0)) });
       return out;
     }
@@ -20732,7 +21480,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
         var c = map[e.id];
         if (!c) { c = map[e.id] = { id: e.id, spec: e.spec, type: e.type, ammo: 0, pylons: [], stores: [], mass: 0 }; list.push(c); }
         c.ammo += e.ammo; c.mass += e.mass;
-        if (e.pylon !== 'RES' && e.pylon !== 'GUN') { c.pylons.push(e.pylon); c.stores.push({ pylon: e.pylon, side: e.side, frac: e.frac, count: e.count }); }
+        if (e.pylon !== 'RES' && e.pylon !== 'GUN' && e.pylon !== 'INT') { c.pylons.push(e.pylon); c.stores.push({ pylon: e.pylon, side: e.side, frac: e.frac, count: e.count }); }
       });
       return list;
     }
@@ -20740,7 +21488,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
     // what hangs where (for the 3D model and for bomb release points)
     function pylonStoresOf(lo) {
       var spec = acSpec(P.ac) || {}, pp = spec.pylons || {};
-      return lo.filter(function (e) { return e.pylon !== 'GUN' && e.pylon !== 'RES'; }).map(function (e) {
+      return lo.filter(function (e) { return e.pylon !== 'GUN' && e.pylon !== 'RES' && e.pylon !== 'INT'; }).map(function (e) {
         var p = pp[e.pylon];
         return { pylon: e.pylon, side: e.side, index: e.index, kind: e.kind, frac: e.frac, pos: p ? { x: p.x, y: p.y, z: p.z } : null,
           weaponId: e.id, type: e.type, count: e.count, rounds: e.ammo };
@@ -21974,7 +22722,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
       h += '<p class="flc-cyc"><span>Gun</span> ' + esc(gunE.spec.name) + ' · burst ' + s.gunBurst.toFixed(1) + ' s · assist ' + Math.round(s.aimAssist * 100) + '%</p></div></div>';
       // catalog
       var groups = [['gun', 'Guns'], ['missile', 'Missiles'], ['rocket', 'Rockets and pods'], ['bomb', 'Bombs'], ['special', 'Special weapons'], ['tank', 'Fuel']];
-      var allW = WEAPON_LIST.concat(extraWeapons());
+      var allW = WEAPON_LIST.concat(extraWeapons()).filter(function (w) { return !w.builtIn; });   // built-in weapons come with their jet
       if (FL.hangarIcons && FL.hangarIcons.legendHtml) h += FL.hangarIcons.legendHtml();
       groups.forEach(function (g) {
         var list = allW.filter(function (w) { return g[0] === 'special' ? (w.type === 'beam' || w.type === 'rail') : g[0] === 'rocket' ? (w.type === 'rocket' || isPod(w)) : g[0] === 'gun' ? (w.type === 'gun' && !isPod(w)) : w.type === g[0]; });
@@ -22526,7 +23274,15 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
     burner: { name: 'Prototype burner', desc: 'The longest boost meter in the game (x2). It refills 50% faster.' },
     ghost: { name: 'Ghost', desc: 'Enemies find you at half range. Open bay doors or stores under the wings break it (2 s after the doors close).' },
     supercruise: { name: 'Supercruise', desc: 'Mach 1.6 at military power, no afterburner. The boost meter refills 50% faster while you supercruise. Cold tail: locks on you take 15% longer.' },
-    sniper: { name: 'Sniper beam', key: true, desc: 'Press: the radar narrows to an 8° beam with double lock range. Press again for the wide scan.' }
+    sniper: { name: 'Sniper beam', key: true, desc: 'Press: the radar narrows to an 8° beam with double lock range. Press again for the wide scan.' },
+    // roster batch 3 (aircraft_b3.js)
+    viff: { name: 'VIFF + nozzle lever', key: true, desc: 'Below 400 km/h: press to turn the nozzles down and hover (throttle = up, brake = down, stick = move). Above 400 km/h: press for VIFF, a hard brake that makes a chaser overshoot. Hold + throttle / brake: move the nozzles by hand.' },
+    stovl: { name: 'Auto-hover (lift fan)', key: true, desc: 'Below 500 km/h: press for STOVL mode. The lift fan opens, the nozzle swivels down and the jet holds its height. Throttle = up, brake = down, stick = move. Land on any flat spot or the carrier deck.' },
+    recon: { name: 'Recon run + D-21', key: true, desc: 'Tap: 4 s camera run, keep the wings level. Every enemy in a 40 km cone ahead is marked for the team for 60 s (lock range x1.5, lock time -40%, +10% damage). Hold 0.6 s: launch the D-21 drone at your target.' },
+    morph: { name: 'Morphing wing', key: true, desc: 'Press to change the wing: DOGFIGHT (25°, tight turns) → CRUISE (45°) → DASH (65°, tips fold down, top speed). The big special bay carries twice the special ammo.' },
+    laser: { name: 'Built-in laser', desc: 'The laser is your gun: own slot, no pylon. Hold fire to cut. It overheats after 3.5 s. The engine refills its energy as you fly (faster at full power).' },
+    gunship: { name: 'Orbit gunship', key: true, desc: 'Press: the autopilot flies a left-hand circle (2.5 km) around your ground target or the point to your left. The 40 mm turret aims by itself; the stick moves the aim point. The hive builds a new drone every 25 s.' },
+    loyal: { name: 'Loyal wingmen', desc: 'Two drone wingmen fly with you. Y = drones attack your target, U = drones cover you. A lost drone rebuilds in 60 s.' }
   };
   FL.SIG_INFO = SIG;
 
@@ -22566,12 +23322,22 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
     mig144: { sig: 'burner', psm: 3, aoaMax: 26, rcs: 0.75, maxStoresKg: 7000 },
     j20: { sig: 'sniper', psm: 0, aoaMax: 26, rcs: 0.6, hp: 105, maxStoresKg: 8000 },
     f22: { sig: 'ghost', psm: 2, aoaMax: 30, rcs: 0.45, hp: 105, maxStoresKg: 8000 },
-    yf23: { sig: 'supercruise', psm: 0, aoaMax: 24, rcs: 0.5, hp: 95, maxStoresKg: 2500 }
+    yf23: { sig: 'supercruise', psm: 0, aoaMax: 24, rcs: 0.5, hp: 95, maxStoresKg: 2500 },
+    // roster batch 3. vtol: hover law (physics.js M3), nozzleMax deg, hoverStoresKg = max stores for a hover, hoverTime s on one boost meter
+    harrier: { sig: 'viff', psm: 0, aoaMax: 22, rcs: 1.0, hp: 100, maxStoresKg: 4200, carrier: 'vtol', vtol: 'harrier', nozzleMax: 98, hoverStoresKg: 2000, hoverTime: 45 },
+    f35b: { sig: 'stovl', psm: 0, aoaMax: 30, rcs: 0.55, hp: 105, maxStoresKg: 6800, carrier: 'vtol', vtol: 'f35', nozzleMax: 95, hoverStoresKg: 3000, hoverTime: 70 },
+    sr71: { sig: 'recon', psm: 0, aoaMax: 12, dashMach: 3.6, rcs: 0.8, hp: 90 },
+    lindorm: { sig: 'morph', psm: 2, aoaMax: 30, rcs: 0.6, hp: 110, maxStoresKg: 9000, carrier: 'catobar', specialX: 2 },
+    valravn: { sig: 'laser', psm: 3, aoaMax: 40, rcs: 0.55, hp: 105, maxStoresKg: 8000 },
+    kraken: { sig: 'gunship', psm: 0, aoaMax: 16, rcs: 1.6, armor: 0.6, hp: 220, maxStoresKg: 12000 },
+    skuld: { sig: 'loyal', psm: 3, aoaMax: 32, rcs: 0.4, hp: 110, maxStoresKg: 10000, carrier: 'catobar' }
   };
   FIELDS.su27.carrier = 'stobar'; FIELDS.mig29.carrier = 'stobar';
   // moving parts per jet that jetsig drives and co-op sends (net: one byte each, in this order)
   FL.SIG_AUX = { ja37: ['rev'], j29: ['slat'], f14: ['sweep', 'vane', 'hook'], f18e: ['fold', 'hook'], rafale: ['hook'], f22: ['bay', 'sbay', 'gundoor'], yf23: ['bay'],
-    j20: ['bay', 'sbay', 'srail'], mig144: ['bay'], su57: ['bay', 'sbay'], f15c: ['ramp'], f15e: ['ramp', 'tgp'], typhoon: ['decoy'] };
+    j20: ['bay', 'sbay', 'srail'], mig144: ['bay'], su57: ['bay', 'sbay'], f15c: ['ramp'], f15e: ['ramp', 'tgp'], typhoon: ['decoy'],
+    harrier: ['nozzle'], f35b: ['nozzle', 'lift', 'bay'], sr71: ['spike', 'd21'], lindorm: ['morph', 'tipf', 'bay', 'hook'], valravn: ['laser', 'bay'],
+    kraken: ['turret', 'tpitch', 'hive'], skuld: ['bay', 'hook'] };
   FL.JET_FIELDS = FIELDS;
   function applyFields() {
     (FL.AIRCRAFT || []).forEach(function (a) { var f = FIELDS[a.id]; if (!f) return; for (var k in f) if (a[k] === undefined) a[k] = f[k]; });
@@ -22606,7 +23372,14 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
     mig144: [['Izdeliye 1.44', 'Thrust +5%.', 'thrustMul*0.05'], ['AL-41F', 'Afterburner time +4 s.', 'boostDuration+4']],
     j20: [['Mighty Dragon', 'Lock range +15%.', 'lockRange*0.15'], ['Long eye', 'Sniper beam: lock range x2.5.', 'sigPow*0.25']],
     f22: [['Raptor', 'Thrust +5%.', 'thrustMul*0.05'], ['Low observable', 'Ghost comes back 1 s after the bays close. Signature -10%.', 'sigPow*0.5 detectMul*-0.1']],
-    yf23: [['Black Widow', 'Top speed +5%.', 'topSpeedMul*0.05'], ['Cold tail', 'Supercruise refills the boost meter 50% faster still.', 'sigPow*0.5']]
+    yf23: [['Black Widow', 'Top speed +5%.', 'topSpeedMul*0.05'], ['Cold tail', 'Supercruise refills the boost meter 50% faster still.', 'sigPow*0.5']],
+    harrier: [['Pegasus 408', 'Thrust +5%.', 'thrustMul*0.05'], ['VIFF ace', 'VIFF turns the nose 30% faster.', 'sigPow*0.3']],
+    f35b: [['DAS', 'Lock time -10%.', 'lockTime*-0.1'], ['Lift fan', 'Hover time +50% and hover lift +10%.', 'sigPow*0.5']],
+    sr71: [['Blackbird', 'Engine heat builds 35% slower.', 'heatMul*-0.35'], ['Tagboard II', 'The D-21 rearms in flight 90 s after a launch.', 'sigPow*0.5']],
+    lindorm: [['Dragon scales', 'Damage taken -8%.', 'armorMul*-0.08'], ['Fast morph', 'The wing changes shape 50% faster.', 'sigPow*0.5']],
+    valravn: [['Raven eye', 'Turn and roll rate +5%.', 'rateMul*0.05'], ['Cold optics', 'The laser energy refills 50% faster.', 'sigPow*0.5']],
+    kraken: [['Armored hull', 'Damage taken -10%.', 'armorMul*-0.1'], ['Hive queen', 'Hive drones rebuild 40% faster.', 'sigCd*-0.4']],
+    skuld: [['Norn', 'Lock time -10%.', 'lockTime*-0.1'], ['Quick rebuild', 'Lost drones rebuild 40% faster (36 s).', 'sigCd*-0.4']]
   };
 
   // =================================================================== 4. weapons (same defaults as campaign.js W())
@@ -22628,6 +23401,13 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
     W({ id: 'bk27', type: 'gun', weight: 0.26, name: 'Mauser BK-27 27 mm', targets: ['air', 'ground', 'sea'], range: 1300, speed: 1025, damage: 12, rate: 28, ammo: 150, blast: 1, price: 8000, unlockLevel: 11, jet: ['typhoon', 'jas39'], desc: 'Typhoon / Gripen only. Revolver cannon: fast spin-up, hard hits.' }),
     W({ id: 'pl15', type: 'missile', weight: 210, name: 'PL-15', guidance: 'radar', targets: ['air'], range: 50000, minRange: 1500, speed: 1300, g: 30, sustain: 7, seekMul: 3, lockTimeMul: 1.45, damage: 115, blast: 22, multi: true, price: 30000, unlockLevel: 33, jet: ['j20'], desc: 'J-20 only. Dual-pulse long-range radar missile. Fits the bays.' }),
     W({ id: 'mica', type: 'missile', weight: 112, name: 'MICA EM', guidance: 'radar', targets: ['air'], range: 25000, minRange: 400, speed: 1100, g: 50, lockTimeMul: 1.0, damage: 100, blast: 14, multi: true, price: 20000, unlockLevel: 23, jet: ['rafale'], desc: 'Rafale only. Light dual-seeker missile: quick lock, agile, short to medium range.' }),
+    // roster batch 3: jet guns (owned with the jet) and built-in weapons (spec.builtIn: own slot, no pylon, not in the shop)
+    W({ id: 'gau12', type: 'gun', weight: 0.58, name: 'GAU-12/U Equalizer 25 mm', targets: ['air', 'ground', 'sea'], range: 1300, speed: 1050, damage: 6.5, rate: 60, ammo: 300, blast: 1, price: 9000, unlockLevel: 10, jet: ['harrier'], desc: 'Harrier only. Five barrels, 3,600 rounds a minute, in the belly pods.' }),
+    W({ id: 'gau22', type: 'gun', weight: 0.6, name: 'GAU-22/A 25 mm', targets: ['air', 'ground', 'sea'], range: 1400, speed: 1080, damage: 7, rate: 55, ammo: 220, blast: 1, price: 12000, unlockLevel: 29, jet: ['f35b'], desc: 'F-35B only. Four barrels in a stealthy belly pod. 220 rounds.' }),
+    W({ id: 'turret40', type: 'gun', weight: 2, name: '40 mm turret', targets: ['air', 'ground', 'sea'], range: 3000, speed: 1400, damage: 42, rate: 2.5, ammo: 240, blast: 8, groundMul: 1.4, spread: 0.002, price: 30000, unlockLevel: 50, jet: ['kraken'], desc: 'Kraken only. The turret aims by itself at your target, at up to 3 km. Heavy explosive shells.' }),
+    W({ id: 'd21', type: 'missile', builtIn: true, special: true, topLaunch: true, weight: 5000, name: 'D-21 drone', short: 'D-21', guidance: 'radar', targets: ['air', 'ground', 'sea'], range: 80000, minRange: 3000, speed: 1150, g: 12, sustain: 60, life: 80, seekMul: 4, lockTimeMul: 0.5, damage: 450, blast: 45, needsBombsOK: true, ammo: 1, price: 0, unlockLevel: 38, jet: ['sr71'], desc: 'SR-71 built in. Hold the special: a Mach 3 drone flies to your target (or the mission zone) and strikes. Its camera marks the area for the team.' }),
+    W({ id: 'vlaser', type: 'beam', builtIn: true, name: 'Valravn laser', short: 'LSR', targets: ['air', 'ground', 'sea'], range: 2200, speed: 0, damage: 80, burst: 3.5, ammo: 14, price: 0, unlockLevel: 48, jet: ['valravn'], desc: 'Valravn built in. Hold fire. The engine refills the energy.' }),
+    W({ id: 'kdrones', type: 'missile', builtIn: true, special: true, weight: 300, name: 'Hive drones', short: 'HIVE', guidance: 'drone', targets: ['air', 'ground', 'sea'], range: 12000, speed: 240, g: 25, gimbal: 160, sustain: 30, life: 30, retarget: true, autoLock: 4, autoCone: 60, lockTimeMul: 0.5, damage: 70, blast: 9, scale: 0.7, ammo: 4, price: 0, unlockLevel: 50, jet: ['kraken'], desc: 'Kraken built in. Four drones hunt targets; the hive builds a new one every 25 s.' }),
     W({ id: 'aim7', type: 'missile', weight: 230, name: 'AIM-7E Sparrow', guidance: 'sarh', targets: ['air'], range: 26000, minRange: 1000, speed: 1150, g: 25, lockTimeMul: 1.4, damage: 110, blast: 20, multi: true, price: 12000, unlockLevel: 7, desc: 'Semi-active radar missile. Keep the lock until it hits.' })
   ];
   if (FL.WEAPONS) NEW_W.forEach(function (w) { if (!FL.WEAPONS[w.id]) { FL.WEAPONS[w.id] = w; if (FL.WEAPON_ORDER) FL.WEAPON_ORDER.push(w.id); } });
@@ -22658,7 +23438,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
     function cmb() { try { return ctx.getCombat ? ctx.getCombat() : null; } catch (e) { return null; } }
     function flash(t) { try { if (ctx.flash) ctx.flash(t); } catch (e) {} }
     function stat(k, d) { var s = S.stats; return s && s[k] != null ? s[k] : d; }
-    function reset() { S.cd = 0; S.act = 0; S.limpT = 0; S.limpUsed = false; S.gcasT = 0; S.fbwKick = 0; S.sigKey = ''; S.eagleUsed = 0; S.buff = 0; S.ghostT = 0; S.sniper = false; S.pay = 0; S.evN = -1; S.doorT = {}; S.parkT = 0; S.foldT = 0; S.aux = {}; S.swDeg = 20; }
+    function reset() { b3Reset(); S.cd = 0; S.act = 0; S.limpT = 0; S.limpUsed = false; S.gcasT = 0; S.fbwKick = 0; S.sigKey = ''; S.eagleUsed = 0; S.buff = 0; S.ghostT = 0; S.sniper = false; S.pay = 0; S.evN = -1; S.doorT = {}; S.parkT = 0; S.foldT = 0; S.aux = {}; S.swDeg = 20; }
     // bay doors: combat.js emits 'playerFire' { pylon, type } for every round that leaves a pylon
     function onFire(ev) {
       var sp = phys.spec ? phys.spec() : null; if (!sp || !sp.bayMap || !ev || (ev.type !== 'missile' && ev.type !== 'bomb')) return;
@@ -22833,8 +23613,17 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
       } else if (sig === 'sniper') {         // J-20: narrow long-range radar beam (toggle)
         if (edge) { S.sniper = !S.sniper; flash(S.sniper ? 'SNIPER BEAM: 8° CONE, LOCK RANGE x' + (2 * pow).toFixed(1) : 'RADAR: WIDE SCAN'); }
         if (S.sniper) { o.cone = 0.32; o.range = 2 * pow; S.label = 'SNIPER BEAM'; }
+      } else if (sig === 'viff' || sig === 'stovl') { b3Vtol(dt, inp, sp, sig, key, edge, pow, speed);
+      } else if (sig === 'recon') { b3Recon(dt, sp, key, edge, pow, cdMul, mach, c);
+      } else if (sig === 'morph') { b3Morph(dt, edge, pow);
+      } else if (sig === 'laser') { b3Laser(dt, pow, c);
+      } else if (sig === 'gunship') { b3Gunship(dt, inp, edge, cdMul, speed, c);
+      } else if (sig === 'loyal') { b3Loyal(dt, cdMul);
       }
-      if (sp.dashMach) S.label = st.engDmgT > 0 ? 'ENGINE DAMAGED' : (st.heat || 0) > 0.02 ? 'HEAT ' + Math.round(st.heat * 100) + '%' : mach > 2.3 ? 'DASH' : S.label;
+      if (sig !== 'loyal' && FL.loyalDrones && FL.loyalDrones.n) FL.loyalDrones.n = 0;      // drones only with the Skuld
+      if (sig !== 'gunship' && S.gunAim) { S.gunAim = false; S.apW = null; if (c && c.setGunAim) { try { c.setGunAim(null); } catch (e) {} } }
+      if (c && c.on && S.subbed3 !== c) { S.subbed3 = c; try { c.on('playerFire', onFire3); } catch (e) {} }
+      if (sp.dashMach && sig !== 'recon') S.label = st.engDmgT > 0 ? 'ENGINE DAMAGED' : (st.heat || 0) > 0.02 ? 'HEAT ' + Math.round(st.heat * 100) + '%' : mach > 2.3 ? 'DASH' : S.label;
       // limp home (A-10): rates and thrust x0.6, land to be saved
       if (S.limpT > 0) {
         S.limpT -= dt; st.sigRate *= 0.6; st.sigThrust *= 0.6; S.label = 'LIMP ' + Math.ceil(S.limpT) + ' S';
@@ -22874,6 +23663,212 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
         for (var ai = 0; ai < names.length; ai++) { var an = names[ai], av = S.aux[an] || 0; if (S.applied[an] == null || Math.abs(av - S.applied[an]) > 0.002) { S.applied[an] = av; pl.setAux(an, av); } }
       }
     }
+    // ================================================================= roster batch 3 (aircraft_b3.js): VTOL, recon, morph, laser, gunship, drones
+    var V3 = null;
+    function v3() { if (!V3 && root.THREE) { var T3 = root.THREE; V3 = { p: new T3.Vector3(), d: new T3.Vector3(), m: new T3.Vector3(), oc: new T3.Vector3(), aoff: new T3.Vector3(), lp: new T3.Vector3(), lv: new T3.Vector3(), q: new T3.Quaternion() }; } return V3; }
+    function near(cur, tg, r) { cur = cur || 0; return cur + clamp(tg - cur, -r, r); }
+    function b3Reset() {
+      S.nozT = 0; S.nozV = 0; S.kHeld = 0; S.kDown = false; S.viffT = 0; S.stovl = false; S.holdY = null; S.shape = 0; S.photoT = 0; S.d21Fired = false; S.d21T = 0; S.d21Gone = -1e9;
+      S.d21Chk = 0; S.orbit = false; S.oAlt = 0; S.oI = 0; S.apW = null; S.taz = 0; S.tel = -2; S.lid = 0; S.hiveT = 0; S.dT = 0; S.droneN = -1; S.laserFr = 1;
+      st.nozzle = 0; st.hoverVS = 0; st.sigHoverLift = 1;
+    }
+    function onFire3(ev) { if (ev && ev.id === 'kdrones') S.doorT.hive = 1.6; }
+    // hover: vertical speed target from throttle / brake / lever; F-35B holds its height when you let go
+    function holdVS() { if (S.holdY == null) S.holdY = st.pos.y; return clamp((S.holdY - st.pos.y) * 0.8, -3, 3); }
+    function b3Vtol(dt, inp, sp, sig, key, edge, pow, speed) {
+      var harr = sig === 'viff', nzD = sp.nozzleMax || 90, tap = false, tg;
+      speed = st.vel.length();   // st.speed is one step old (stale right after a reset)
+      if (S.nozV > 0 && !st.nozzle) { S.nozV = 0; S.nozT = 0; S.viffT = 0; S.stovl = false; S.aux.lift = 0; }   // physics reset (respawn / air start): nozzles aft
+      if (edge) S.kHeld = 0;
+      if (key) S.kHeld += dt; else { if (S.kDown && S.kHeld < 0.3) tap = true; S.kHeld = 0; }
+      S.kDown = key;
+      if (harr) {
+        if (key && S.kHeld >= 0.3) { S.nozT = clamp(S.nozT + ((inp.gas || 0) - (inp.brake || 0)) * dt * 0.9, 0, 1); S.viffT = 0; }   // nozzle lever
+        if (tap) {
+          if (speed > 111 && !st.onGround) { S.viffT = 1.2; flash('VIFF!'); }
+          else { S.nozT = S.nozT > 0.45 ? 0 : 0.92; flash(S.nozT > 0 ? 'NOZZLES DOWN — HOVER' : 'NOZZLES AFT'); }
+        }
+        S.viffT = Math.max(0, S.viffT - dt);
+        tg = S.viffT > 0 ? Math.max(S.nozT, 0.62) : S.nozT;
+      } else {
+        if (edge) {
+          if (!S.stovl && speed > 139 && !st.onGround) flash('STOVL: SLOW BELOW 500 KM/H');
+          else { S.stovl = !S.stovl; S.holdY = null; flash(S.stovl ? 'STOVL MODE — LIFT FAN OPEN' : 'CONVENTIONAL MODE'); }
+        }
+        if (S.stovl && speed > 165 && !st.onGround) { S.stovl = false; flash('CONVENTIONAL MODE — TOO FAST FOR STOVL'); }
+        S.aux.lift = near(S.aux.lift, S.stovl || S.nozV > 0.02 ? 1 : 0, dt * 0.8);   // doors open first, the nozzle swivels after
+        tg = S.stovl && S.aux.lift > 0.85 ? 90 / nzD : 0;   // the jet slows down on the nozzle; the hover law takes over below ~110 m/s
+        st.sigDrag *= 1 + 0.8 * (S.aux.lift || 0);         // open lift-fan doors and inlet
+      }
+      S.nozV = near(S.nozV, tg, dt * (harr ? 1.0 : 0.55));
+      st.nozzle = S.nozV; S.aux.nozzle = S.nozV;
+      var deg = Math.round(S.nozV * nzD);
+      // jet-borne: throttle = climb, brake = sink, boost = max climb; the F-35B holds its height
+      if ((st.hoverW || 0) > 0 || S.nozV > 0.4) {
+        var g = inp.gas || 0, b = inp.brake || 0, vs, hold = !harr;
+        if (inp.boost) { vs = 10; S.holdY = null; }
+        else if (inp.lever != null) { var lv = inp.lever; if (hold && lv > 0.4 && lv < 0.6) vs = st.onGround ? -1 : holdVS(); else { S.holdY = null; vs = lv >= 0.5 ? (lv - 0.5) * 16 : (lv - 0.5) * 10; } }
+        else if (g > 0.05) { S.holdY = null; vs = g * 8; }
+        else if (b > 0.05) { S.holdY = null; vs = -b * 5; }
+        else vs = st.onGround ? -1 : hold ? holdVS() : -0.8;
+        st.hoverVS = vs;
+      } else S.holdY = null;
+      // over the carrier deck the hover holds position relative to the moving ship
+      var cps = FL.friendlyCarrierPose ? FL.friendlyCarrierPose() : null;
+      if (cps && Math.abs(st.pos.x - cps.x) < 260 && Math.abs(st.pos.z - cps.z) < 260) { st.hoverRefX = cps.vx || 0; st.hoverRefZ = cps.vz || 0; } else { st.hoverRefX = 0; st.hoverRefZ = 0; }
+      // hover heat: hovering drains the boost meter (water injection / lift-fan limits); empty = only 0.95 g of lift
+      st.sigHoverLift = !harr && pow > 1 ? 1.1 : 1;
+      if (st.hover && !st.onGround) { st.boostFuel = Math.max(0, (st.boostFuel || 0) - dt / ((sp.hoverTime || 45) * (!harr && pow > 1 ? 1.5 : 1))); st.boostDelay = 1; if (st.boostFuel <= 0) st.boostLock = true; }
+      // VIFF: nozzles down in forward flight = big brake (physics) + a faster nose
+      if (!st.hover && speed > 60 && deg > 20) { st.sigRate *= 1 + 0.35 * Math.sin(S.nozV * nzD * 0.0174533) * (harr ? pow : 0.5); if (harr) st.sigAoaMax = Math.max(st.sigAoaMax || 0, 34); }
+      S.label = (S.stovl ? 'STOVL · ' : '') + (st.hover ? 'HOVER · ' : S.viffT > 0 ? 'VIFF · ' : '') + 'NOZZLE ' + deg + '°' + (st.hover && (st.hoverCap || 2) < 1.02 ? ' · TOO HEAVY' : st.hover && st.boostLock ? ' · HOT' : '');
+    }
+    function zonePoint(out) {   // the mission zone (ground), else 30 km ahead
+      var cp = null, m = null; try { cp = ctx.getCampaign ? ctx.getCampaign() : null; m = cp && cp.active && cp.mission ? cp.mission() : null; } catch (e) { m = null; }
+      var w = ctx.getWorld ? ctx.getWorld() : null, ax = phys.axes();
+      if (m && m.zone) out.set(m.zone.e, 0, -m.zone.n);
+      else { out.set(ax.fwd.x, 0, ax.fwd.z); if (out.lengthSq() < 1e-6) out.set(0, 0, -1); out.normalize().multiplyScalar(30000).add(st.pos); }
+      out.y = w && w.sampleH ? Math.max(0, w.sampleH(out.x, -out.z)) + 5 : 5;
+      return out;
+    }
+    function b3Recon(dt, sp, key, edge, pow, cdMul, mach, c) {
+      var V = v3(); if (!V) return;
+      st.sigHeatMul *= 0.4; st.sigTrans = 0.35; st.sigBoostDur = 4; st.sigBoostRe = 1.5;   // built for Mach 3: low wave drag, slow heat, J58 cruises in afterburner
+      S.aux.spike = near(S.aux.spike, clamp((mach - 1.6) / 1.6, 0, 1), dt * 0.5);   // inlet spikes move aft with Mach
+      if (edge) S.kHeld = 0;
+      if (key) S.kHeld += dt;
+      // hold 0.6 s: D-21 drone at the designated target, else the mission zone, else 30 km ahead
+      if (key && S.kHeld >= 0.6 && !S.d21Fired) {
+        S.d21Fired = true;
+        var h = hud5(c); S.hudT = 0;
+        if (h && h.lock && h.lock.designated) V.p.copy(h.lock.designated); else zonePoint(V.p);
+        var ok = false; try { ok = !!(c && c.sigFire && c.sigFire('d21', V.p)); } catch (e) { ok = false; }
+        if (ok) { S.aux.d21 = 1; S.d21Gone = S.clock; S.d21T = Math.max(3, st.pos.distanceTo(V.p) / 950); V.m.copy(V.p); flash('D-21 AWAY'); }
+        else flash(S.aux.d21 >= 1 ? 'D-21: GONE — LAND TO REARM' : 'D-21: NOT READY');
+      }
+      if (!key && S.kDown && S.kHeld < 0.6) {
+        if (S.cd > 0 || S.photoT > 0) flash('CAMERA: ' + (S.photoT > 0 ? 'RUNNING' : 'READY IN ' + Math.ceil(S.cd) + ' S'));
+        else if (st.onGround) flash('CAMERA: TAKE OFF FIRST');
+        else { S.photoT = 4; flash('CAMERA RUN — KEEP THE WINGS LEVEL'); }
+      }
+      if (!key) { S.d21Fired = false; S.kHeld = 0; }
+      S.kDown = key;
+      var ax = phys.axes();
+      if (S.photoT > 0) {
+        var roll = Math.atan2(-ax.right.y, ax.up.y);
+        if (Math.abs(roll) > 25 * 0.0174533 || st.onGround) { S.photoT = 0; S.cd = 5; flash('PHOTO RUN BROKEN — LEVEL THE WINGS'); }
+        else {
+          S.photoT -= dt; S.act = S.photoT;
+          if (S.photoT <= 0) {
+            S.photoT = 0; S.cd = 30 * cdMul;
+            V.d.set(ax.fwd.x, 0, ax.fwd.z); if (V.d.lengthSq() < 1e-6) V.d.set(0, 0, -1); V.d.normalize();
+            var n = 0; try { n = c && c.sigRecon ? c.sigRecon({ pos: st.pos, dir: V.d, range: 40000 * (mach > 2 ? 1.25 : 1), cone: 60, dur: 60 }) : 0; } catch (e) { n = 0; }
+            flash(n ? 'RECON: ' + n + ' TARGETS MARKED FOR THE TEAM' : 'RECON: NO TARGETS IN THE CONE');
+          }
+        }
+      }
+      if (S.d21T > 0) { S.d21T -= dt; if (S.d21T <= 0) { try { if (c && c.sigRecon) c.sigRecon({ center: V.m, radius: 12000, dur: 60 }); } catch (e) {} } }
+      S.d21Chk -= dt;
+      if (S.d21Chk <= 0 && c && c.sigRefill) {   // ammo check (rearm on landing / in the hangar); Tagboard II: rearm 90 s after a launch
+        S.d21Chk = 0.5; var fr = -1; try { fr = c.sigRefill('d21', pow > 1 && S.aux.d21 >= 1 && S.clock - S.d21Gone > 90 ? 1 : 0); } catch (e) { fr = -1; }
+        if (fr > 0 && S.aux.d21 >= 1) { if (S.clock - S.d21Gone > 5) flash('D-21 READY'); S.aux.d21 = 0; } else if (fr === 0) S.aux.d21 = 1;
+      }
+      var heat = (st.heat || 0) > 0.02 ? ' · HEAT ' + Math.round(st.heat * 100) + '%' : '';
+      S.label = (st.engDmgT > 0 ? 'ENGINE DAMAGED' : S.photoT > 0 ? 'PHOTO RUN ' + Math.ceil(S.photoT) + ' S' : S.cd > 0 ? 'CAMERA ' + Math.ceil(S.cd) + ' S' : 'CAMERA READY') + (S.aux.d21 >= 1 ? '' : ' · D-21') + heat;
+    }
+    var SHAPE = ['DOGFIGHT', 'CRUISE', 'DASH'];
+    function b3Morph(dt, edge, pow) {
+      if (edge) { S.shape = (S.shape + 1) % 3; flash('WING: ' + SHAPE[S.shape] + ' ' + [25, 45, 65][S.shape] + '°'); }
+      var land = st.gearT > 0.5 || st.onGround;
+      S.aux.morph = near(S.aux.morph, land ? 0 : S.shape * 0.5, dt * 0.8 * pow);
+      S.aux.tipf = near(S.aux.tipf, !land && S.shape === 2 && S.aux.morph > 0.8 ? 1 : 0, dt * 1.2 * pow);
+      var mw = S.aux.morph;
+      st.sigRate = 1.12 - 0.27 * mw; st.sigLift = 1.25 - 0.4 * mw; st.sigDrag = 1 - 0.2 * mw; st.sigTrans = 1.5 - mw; st.sigMach = 0.65 + 0.5 * mw; st.sigRoll = (1.1 - 0.3 * mw) / st.sigRate;
+      S.label = 'WING ' + SHAPE[S.shape] + ' ' + Math.round(25 + 40 * mw) + '°' + (land && S.shape ? ' (GEAR DOWN)' : '');
+    }
+    function b3Laser(dt, pow, c) {
+      var h = hud5(c), sel = !!(h && h.weaponId === 'vlaser');
+      S.aux.laser = near(S.aux.laser, sel ? 1 : 0, dt * 2.5);
+      var fr = -1; try { fr = c && c.sigRefill ? c.sigRefill('vlaser', h && h.beamFiring ? 0 : dt * (0.1 + 0.35 * clamp(st.thr || 0, 0, 1)) * pow) : -1; } catch (e) { fr = -1; }   // refills only while not firing
+      if (fr >= 0) S.laserFr = fr;
+      S.label = 'LASER ' + Math.round(S.laserFr * 100) + '%' + (h && h.beamOverheat ? ' · OVERHEAT' : h && h.beamFiring ? ' · FIRING' : '');
+    }
+    function b3Gunship(dt, inp, edge, cdMul, speed, c) {
+      var V = v3(); if (!V) return;
+      var ax = phys.axes(), w = ctx.getWorld ? ctx.getWorld() : null;
+      // the autopilot wrote the stick last frame: get the pilot's own stick back (a new poll overwrites it)
+      if (S.apW && inp.pitch === S.apW[0] && inp.roll === S.apW[1] && inp.yaw === S.apW[2] && inp.gas === S.apW[3]) { inp.pitch = S.apR[0]; inp.roll = S.apR[1]; inp.yaw = S.apR[2]; inp.gas = S.apR[3]; inp.brake = S.apR[4]; if (inp.lever != null) inp.lever = S.apR[5]; }
+      var rawP = inp.pitch || 0, rawR = inp.roll || 0, rawY = inp.yaw || 0;
+      var fx = ax.fwd.x, fz = ax.fwd.z, fl = Math.hypot(fx, fz) || 1; fx /= fl; fz /= fl;   // heading frame: right = (-fz, fx)
+      var h = hud5(c), des = h && h.lock && h.lock.designated ? h.lock : null;
+      if (edge) {
+        if (S.orbit) { S.orbit = false; flash('ORBIT OFF'); }
+        else if (!st.onGround && speed > 50) {
+          S.orbit = true; S.oI = 0; V.aoff.set(0, 0, 0);
+          var gh = w && w.sampleH ? Math.max(0, w.sampleH(st.pos.x, -st.pos.z)) : 0;
+          S.oAlt = Math.max(st.pos.y, gh + 700);
+          if (des && des.cat !== 'air') V.oc.copy(des.designated); else V.oc.set(st.pos.x + fz * 2500, 0, st.pos.z - fx * 2500);   // 2.5 km to the left
+          flash('ORBIT — TURRET HOT');
+        } else flash('ORBIT: TAKE OFF FIRST');
+      }
+      if (S.orbit && (st.onGround || speed < 40)) { S.orbit = false; flash('ORBIT OFF'); }
+      if (S.orbit) {
+        if (des && des.cat !== 'air') { V.oc.x = des.designated.x; V.oc.z = des.designated.z; }
+        var R = Math.max(2500, speed * speed / (9.81 * 0.84)), dx = st.pos.x - V.oc.x, dz = st.pos.z - V.oc.z, d = Math.hypot(dx, dz) || 1, ux = dx / d, uz = dz / d;
+        var corr = clamp((d - R) / R * 1.2, -0.8, 0.8), wx = uz - ux * corr, wz = -ux - uz * corr;   // tangent with the centre on the left, pulled to the circle
+        var vx = st.vel.x, vz = st.vel.z, vl = Math.hypot(vx, vz) || 1; vx /= vl; vz /= vl;
+        var err = Math.atan2(vz * wx - vx * wz, vx * wx + vz * wz);           // + = turn left
+        var rollA = Math.atan2(-ax.right.y, ax.up.y), phi0 = Math.atan(speed * speed / (9.81 * R));
+        var rollT = -clamp(phi0 + 1.5 * err, -0.2, 0.8);
+        var vsT = clamp((S.oAlt - st.pos.y) * 0.2, -10, 10);
+        S.oI = clamp(S.oI + (vsT - st.vel.y) * 0.03 * dt, -0.3, 0.6);
+        var ap = clamp(0.1 + S.oI + 0.06 * (vsT - st.vel.y) + 0.6 * (1 / Math.max(0.5, Math.cos(rollA)) - 1), -1, 1);
+        var ar = clamp(2.2 * (rollT - rollA) - 0.35 * st.w.z, -1, 1);
+        // speed hold ~400 km/h (the 2.5 km circle needs ~30 deg of bank)
+        var gw = clamp(0.35 + (112 - speed) * 0.04, 0, 1), bw = speed > 125 ? clamp((speed - 125) * 0.04, 0, 0.7) : 0;
+        S.apR = S.apR || [0, 0, 0, 0, 0, 0]; S.apR[0] = rawP; S.apR[1] = rawR; S.apR[2] = rawY; S.apR[3] = inp.gas; S.apR[4] = inp.brake; S.apR[5] = inp.lever;
+        inp.pitch = ap; inp.roll = ar; inp.yaw = 0; inp.gas = gw; inp.brake = bw; inp.boost = false; if (inp.lever != null) inp.lever = gw;
+        S.apW = S.apW || [0, 0, 0, 0]; S.apW[0] = ap; S.apW[1] = ar; S.apW[2] = 0; S.apW[3] = gw;
+        // the stick moves the aim point on the ground (no target designated)
+        V.aoff.x += (rawR * -fz - rawP * fx) * 260 * dt; V.aoff.z += (rawR * fx - rawP * fz) * 260 * dt;
+        var al = Math.hypot(V.aoff.x, V.aoff.z); if (al > 1800) { V.aoff.x *= 1800 / al; V.aoff.z *= 1800 / al; }
+        S.label = 'ORBIT ' + (d / 1000).toFixed(1) + ' KM' + (des ? ' · TRACKING' : '');
+      } else { S.apW = null; S.label = des ? 'TURRET · TRACKING' : 'TURRET'; }
+      // turret: aim point -> body azimuth / elevation (limits -180..+30, -85..+15) -> combat gun direction
+      var aim = null;
+      if (des) {
+        aim = V.p.copy(des.designated);
+        if (des.id === S.lid) { V.lv.lerp(V.d.subVectors(aim, V.lp).divideScalar(Math.max(dt, 1e-3)), 0.2); } else V.lv.set(0, 0, 0);
+        S.lid = des.id; V.lp.copy(aim);
+        aim.addScaledVector(V.lv, Math.min(3, st.pos.distanceTo(aim) / 1400));
+      } else if (S.orbit) { aim = V.p.set(V.oc.x + V.aoff.x, 0, V.oc.z + V.aoff.z); aim.y = w && w.sampleH ? Math.max(0, w.sampleH(aim.x, -aim.z)) + 2 : 2; S.lid = 0; }
+      var az = 0, el = -2;
+      if (aim) {
+        V.m.set(-1.45, -1.3, -4.8).applyQuaternion(st.q).add(st.pos);
+        V.d.subVectors(aim, V.m).normalize();
+        var lx = V.d.dot(ax.right), ly = V.d.dot(ax.up), lz = V.d.dot(ax.fwd);
+        az = clamp(Math.atan2(lx, lz) / 0.0174533, -180, 30); el = clamp(Math.asin(clamp(ly, -1, 1)) / 0.0174533, -85, 15);
+      }
+      S.taz = near(S.taz, az, 90 * dt); S.tel = near(S.tel, el, 70 * dt);
+      var ca = S.taz * 0.0174533, ce = S.tel * 0.0174533, cc = Math.cos(ce);
+      V.d.copy(ax.fwd).multiplyScalar(Math.cos(ca) * cc).addScaledVector(ax.right, Math.sin(ca) * cc).addScaledVector(ax.up, Math.sin(ce));
+      if (c && c.setGunAim) { try { c.setGunAim(V.d); S.gunAim = true; } catch (e) {} }
+      S.aux.turret = (S.taz + 180) / 210; S.aux.tpitch = (S.tel + 85) / 100;
+      // drone hive: a new drone every 25 s; the hive doors open when drones launch (combat 'playerFire')
+      S.hiveT += dt;
+      if (S.hiveT >= 25 * cdMul) { S.hiveT = 0; var fr = -1; try { fr = c && c.sigRefill ? c.sigRefill('kdrones', 1) : -1; } catch (e) { fr = -1; } if (fr > 0 && fr < 1.01) S.doorT.hive = Math.max(S.doorT.hive || 0, 0.8); }
+      S.aux.hive = near(S.aux.hive, (S.doorT.hive || 0) > 0 ? 1 : 0, dt * 3);
+    }
+    function b3Loyal(dt, cdMul) {
+      var L = FL.loyalDrones = FL.loyalDrones || { n: 0, rebuild: 60 };
+      L.n = 2; L.rebuild = 60 * cdMul;
+      S.label = S.droneN >= 0 ? 'DRONES ' + S.droneN + '/2' : '';
+      S.dT -= dt; if (S.dT > 0) return; S.dT = 0.5;
+      var n = 0; try { var all = FL.wingman && FL.wingman.all ? FL.wingman.all() : []; for (var i = 0; i < all.length; i++) if (/^drone/.test(all[i].owner) && all[i].alive) n++; } catch (e) { n = 0; }
+      if (S.droneN >= 0 && n > S.droneN) S.doorT.bay = Math.max(S.doorT.bay || 0, 1.6);   // a drone leaves the bay
+      S.droneN = n;
+      S.label = 'DRONES ' + n + '/2';
+    }
     // once per life the A-10 keeps flying at 0 HP (call when health reaches 0; true = saved, do not crash)
     function saveFromDeath() {
       var sp = phys.spec ? phys.spec() : null;
@@ -22896,14 +23891,15 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
         else { r.state = S.label || 'READY'; r.col = 'ok'; }
         return r;
       }
+      if (S.sig === 'recon') { r.t01 = st.heat || 0; r.bar = true; r.col = st.engDmgT > 0 || (st.heat || 0) > 0.8 ? 'red' : S.photoT > 0 ? 'amb' : (st.heat || 0) > 0.5 ? 'amb' : 'ok'; r.state = S.label; return r; }
       if (S.sig === 'dash' || S.sig === 'zaslon') { r.t01 = st.heat || 0; r.col = st.engDmgT > 0 || (st.heat || 0) > 0.8 ? 'red' : (st.heat || 0) > 0.5 ? 'amb' : 'ok'; r.state = S.label || 'COLD'; r.bar = true; return r; }
       r.state = S.label || (I.key ? 'READY' : 'PASSIVE'); r.col = S.label === 'FBW FAULT' || S.label === 'HEAVY' ? 'red' : S.label ? 'amb' : 'dim';
       return r;
     }
     // co-op: [flags, heat, aux bytes...] (flags 1 special on, 2 reverser, 4 limp, 8 supercruise); null = nothing to send
-    var NET = [0, 0], NETN = { 0: [0, 0], 1: [0, 0, 0], 2: [0, 0, 0, 0], 3: [0, 0, 0, 0, 0] };
+    var NET = [0, 0], NETN = { 0: [0, 0], 1: [0, 0, 0], 2: [0, 0, 0, 0], 3: [0, 0, 0, 0, 0], 4: [0, 0, 0, 0, 0, 0] };
     function netState() {
-      var names = FL.SIG_AUX[S.id] || NONE, n = Math.min(3, names.length);
+      var names = FL.SIG_AUX[S.id] || NONE, n = Math.min(4, names.length);
       NET = NETN[n];
       NET[0] = (S.act > 0 || S.sniper || S.buff > 0 ? 1 : 0) | (st.rev ? 2 : 0) | (S.limpT > 0 ? 4 : 0) | (st.supercruise ? 8 : 0);
       NET[1] = Math.round(clamp(st.heat || 0, 0, 1) * 255);
@@ -22916,7 +23912,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
   // co-op mates (main.js updateTeammates): show a teammate's swing wings, bay doors, hook ... from his net bytes
   FL.applyJetSigNet = function (model, acId, g) {
     var n = FL.SIG_AUX[acId]; if (!n || !g || !model || !model.setAux) return;
-    for (var i = 0; i < n.length && i < 3; i++) if (g[2 + i] != null) model.setAux(n[i], (g[2 + i] | 0) / 255);
+    for (var i = 0; i < n.length && i < 4; i++) if (g[2 + i] != null) model.setAux(n[i], (g[2 + i] | 0) / 255);
   };
 })();
 
@@ -23293,6 +24289,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
     var gunLegacy = false, trigDown = false, trigLast = -10, gunOn = false;
     var gunHeat = 0, gunOver = false, gunAcc = 0, gunRound = 0, flareCd = 0;
     var podAcc = 0, podSide = 1, gunEmptyT = -10, gunMuzzleL = null, gunMuzzleMirror = false;   // gun pods, empty warning, per-jet muzzle
+    var gunAimV = new THREE.Vector3(), gunAimOn = false, gunAimSent = -10, gunAimQ = new THREE.Quaternion(), gunAimF = new THREE.Vector3(0, 0, -1);   // turret (jetsig.js Kraken): the internal gun fires along gunAimV
     var aaOn = false, aaPos = new THREE.Vector3(), aaK = 0, aaKind = '';                       // aim-assist HUD cue (this frame)
     var ripple = [];                                  // queued missile launches (multi-lock ripple)
 
@@ -25098,8 +26095,12 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
           if (!P.alive || !detectsPT(ent.pos, range, P)) continue;
           var d = P.aim.distanceToSquared(ent.pos); if (d < bd) { bd = d; best = P; }
         }
-        if (!!best !== !!ent.detect) log((best ? 'DETECT ' : 'LOST ') + nameOf(ent) + (best ? ' -> ' + nameOf(best) : ''));
-        d_._detP = best; ent.detect = !!best; if (best) ent.tp = best;
+        d_._detP = best;
+        // hold the detect state 1 s after the last contact: terrain edges and changing ranges no longer flip DETECT/LOST every 0.2 s
+        if (best) d_._detLast = time;
+        var nd = !!best || (!!ent.detect && time - (d_._detLast || 0) < 1);
+        if (nd !== !!ent.detect) log((nd ? 'DETECT ' : 'LOST ') + nameOf(ent) + (best ? ' -> ' + nameOf(best) : ''));
+        ent.detect = nd; if (best) ent.tp = best;
         return best;
       },
       fireMissile: function (ent, from, target, o) {
@@ -25537,6 +26538,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
       if (t.needsBombs && how !== 'bomb' && !(spec && spec.needsBombsOK)) dmg /= 3;
       if (spec && spec.hardMul && (t.needsBombs || t.kind === 'structure')) dmg *= spec.hardMul;   // BETAB penetrator: bunkers / runways
       if (spec && spec.airMul && t.cat === 'air') dmg *= spec.airMul;
+      if (t.rcnT > time) dmg *= 1.1;   // SR-71 recon mark: known weak spots
       t.lastHit = owner;
       t.hp -= dmg;
       var killed = t.hp <= 0;
@@ -25648,6 +26650,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
     function launchPos(out, kind, w, peek) {
       var st = w && w.stores ? w.stores[w.rel % w.stores.length] : null;
       if (!peek) lastPyl = st ? st.pylon : '';   // jetsig.js 'playerFire': bay doors
+      if (w && w.spec && w.spec.topLaunch) return out.set(0, 2.2, 2.5).applyQuaternion(player.q).add(player.pos);   // SR-71 D-21: off the dorsal pylon
       if (st) {
         if (!peek) w.rel = (w.rel + 1) % w.stores.length;
         if (pModel && pModel.pylonWorld) { try { if (pModel.pylonWorld(st.pylon, out)) return out; } catch (e) { /* fall back */ } }
@@ -25697,12 +26700,12 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
             if (ang > 1e-3 && ang < Math.PI * 0.6) tF.lerp(tE, Math.min(1, maxA / ang)).normalize();
           }
         }
-        tB.set(0, -7, 0).applyQuaternion(player.q).addScaledVector(tF, noseSpeed());   // leaves along the nose (works while drifting)
+        tB.set(0, s.topLaunch ? 5 : -7, 0).applyQuaternion(player.q).addScaledVector(tF, noseSpeed());   // leaves along the nose (works while drifting)
         m = launchMissile('player', tA, tB, t, T, LP);
         stats.playerMissiles++; play('missile');
       }
       m.tag = tag || 0;
-      emit('playerFire', { pylon: lastPyl, type: s.type });
+      emit('playerFire', { pylon: lastPyl, type: s.type, id: s.base || s.id });
       if (client) {
         m.ghost = true;
         net.sendEvent({ t: 'fire', w: s.id, tid: t ? t.id : 0, locked: !!t, gp: t && t.kind === 'point' ? v3a(t.aim) : null, tag: m.tag, T: net.now(),
@@ -26129,10 +27132,10 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
     // Heat is per second of fire (rate independent): 0.22/s x gunHeatMul (campaign: gunHeatMul = 4.545 / gunBurst s) ->
     // stock overheat after ~4.5 s of trigger, cools from full in ~3 s, usable again below 30 %. Pods have no barrel heat.
     var GUN_HEAT_PS = 0.22, GUN_COOL_PS = 0.34, gunSig = 0;
-    function fireRound(from, gs, A, cls) {
-      var spd = gs.speed || C.gunSpeed, sp = (gs.spread != null ? gs.spread : 0.004) * (LO.gunSpreadMul || 1);
-      asD.copy(pF);
-      if (A && A.t && A.f > 0) {                               // bend toward the lead point (seen from this muzzle)
+    function fireRound(from, gs, A, cls, own) {
+      var spd = gs.speed || C.gunSpeed, sp = (gs.spread != null ? gs.spread : 0.004) * (LO.gunSpreadMul || 1), tur = own && gunAimOn;
+      asD.copy(tur ? gunAimV : pF);
+      if (!tur && A && A.t && A.f > 0) {                               // bend toward the lead point (seen from this muzzle)
         leadFor(A.t, spd, asT); asT.sub(from); var ad = asT.length();
         if (ad > 1 && asT.dot(pF) > 0) asD.lerp(asT.divideScalar(ad), A.f * (0.82 + 0.15 * Math.min(aaVal(), 1))).normalize();
       }
@@ -26180,9 +27183,9 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
       gunOn = gunCan || podCan;
       var rate = gs.rate || C.gunRate;                           // campaign bakes gunRateMul into the spec copy
       var sig = (gunCan ? 1 : 0) + (podCan ? 2 : 0);
-      if (client && sig !== gunSig) {
-        gunSig = sig; LP.gun = sig > 0;
-        net.sendEvent({ t: 'gun', on: sig > 0, T: net.now(), pos: v3a(player.pos), vel: v3a(player.vel), q: [r4(player.q.x), r4(player.q.y), r4(player.q.z), r4(player.q.w)],
+      if (client && (sig !== gunSig || (gunAimOn && sig && time - gunAimSent > 0.2))) {   // turret: resend the aim while firing
+        gunSig = sig; LP.gun = sig > 0; gunAimSent = time;
+        net.sendEvent({ t: 'gun', on: sig > 0, T: net.now(), pos: v3a(player.pos), vel: v3a(player.vel), q: [r4(player.q.x), r4(player.q.y), r4(player.q.z), r4(player.q.w)], ad: gunAimOn ? [r4(gunAimV.x), r4(gunAimV.y), r4(gunAimV.z)] : null,
                         r: Math.round((gunCan ? rate : 0) + (podCan ? podRate : 0)), d: (gs.damage || 12) * LO.gunDamageMul * PERK.gun * SIGM.gun, s: gs.spread != null ? gs.spread : 0.004, sp: gs.speed || C.gunSpeed });
       }
       if (gunCan) {
@@ -26199,7 +27202,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
       while (gunCan && gunAcc >= 1) {
         gunAcc -= 1; gunRound++;
         if (gw.ammo > 0) gw.ammo--;
-        fireRound(muzzleWorld(tA), gs, A, cls);
+        fireRound(muzzleWorld(tA), gs, A, cls, true);
         var heavyGun = cls === 2;
         if (heavyGun ? gunRound % 2 === 1 : gunRound % 4 === 1) play(heavyGun ? 'gunHeavy' : 'gun', { gun: gs.base || gs.id });
         if (gw.ammo === 0) { gunCan = false; gunAcc = 0; }
@@ -26229,6 +27232,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
         if (!P.gun || !P.alive) { P.gunAcc = Math.min(P.gunAcc, 1); continue; }
         P.gunAcc += h * (P.gunRate || 20);
         rgF.set(0, 0, -1).applyQuaternion(P.q); rgR.set(1, 0, 0).applyQuaternion(P.q); rgU.set(0, 1, 0).applyQuaternion(P.q);
+        if (P.gunAd) rgF.copy(P.gunAd);   // client turret (Kraken)
         while (P.gunAcc >= 1) {
           P.gunAcc -= 1;
           var sp = P.gunSpread != null ? P.gunSpread : 0.004;
@@ -26360,7 +27364,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
     var desig = null, desigOut = 0, lockT = 0, lockOut = 0, locked = false, multi = [], multiT = 0, aspectOK = true;
     var losP = new THREE.Vector3();
     function rangeOf(t, s) {
-      var r = t.lockR * LO.lockRange * SIGM.range * (s && s.seekMul ? s.seekMul : 1);   // seekMul: long-range radar missiles (Phoenix, Meteor, LACM)
+      var r = t.lockR * LO.lockRange * SIGM.range * (s && s.seekMul ? s.seekMul : 1) * (t.rcnT > time ? 1.5 : 1);   // seekMul: long-range radar missiles (Phoenix, Meteor, LACM); rcnT: SR-71 recon mark
       if (s && s.type === 'missile' && s.range) r = Math.min(r, s.range);
       return r;
     }
@@ -26411,7 +27415,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
       for (i = 0; i < tgts.length; i++) if (tgts[i].alive && tgts[i] !== exclude && multi.indexOf(tgts[i]) < 0) { c = coneAngle(tgts[i], s); if (c > bc) { bc = c; best = tgts[i]; } }
       return best;
     }
-    function lockNeed(s) { return LO.lockTime * (s && s.lockTimeMul ? s.lockTimeMul : 1) * (s && s.guidance === 'arm' ? SIGM.arm : 1); }
+    function lockNeed(s) { return LO.lockTime * (s && s.lockTimeMul ? s.lockTimeMul : 1) * (s && s.guidance === 'arm' ? SIGM.arm : 1) * (desig && desig.rcnT > time ? 0.6 : 1); }
     function updateLock(h) {
       var s = selW() ? selW().spec : null;
       if (!pAlive) { clearLock(); while (trk.length) dropTrack(0); return; }
@@ -27326,6 +28330,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
             return;
           case 'stop': clearAllClient(); return;
           case 'rearm': rearm(); return;
+          case 'rcn': applyRecon(ev.ids, ev.d); return;
           case 'ds': for (i = 0; i < ev.ids.length; i++) { unqueueSpawn(ev.ids[i]); if (ents[ev.ids[i]]) removeTarget(ents[ev.ids[i]]); } return;
           case 'k': if (!ents[ev.id]) { unqueueSpawn(ev.id); return; } fxQ.push(ev); return;
           case 'fx': case 'sl': fxQ.push(ev); return;
@@ -27339,9 +28344,12 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
       else if (ev.t === 'beam' || ev.t === 'rail') remoteRay(P, ev);
       else if (ev.t === 'gun') {   // never trust client numbers: clamp rate (internal gun + pods), damage, spread
         P.gun = !!ev.on; P.gunRate = numIn(ev.r, 20, 1, 200); P.gunDmg = numIn(ev.d, C.gunDmg, 0, 40); P.gunSpread = numIn(ev.s, 0.004, 0, 0.05);
-        P.gunSpeed = numIn(ev.sp, C.gunSpeed, 400, 1300);
+        P.gunSpeed = numIn(ev.sp, C.gunSpeed, 400, 1500);
+        if (Array.isArray(ev.ad) && ev.ad.length === 3 && isFinite(+ev.ad[0]) && isFinite(+ev.ad[1]) && isFinite(+ev.ad[2])) { P.gunAd = (P.gunAd || new THREE.Vector3()).set(+ev.ad[0], +ev.ad[1], +ev.ad[2]); if (P.gunAd.lengthSq() > 0.5) P.gunAd.normalize(); else P.gunAd = null; }
+        else P.gunAd = null;
       }
       else if (ev.t === 'flares') remoteFlares(P, ev);
+      else if (ev.t === 'rcn' && Array.isArray(ev.ids)) { applyRecon(ev.ids, ev.d); net.sendEvent({ t: 'rcn', ids: ev.ids.slice(0, 200), d: numIn(ev.d, 60, 1, 120) }); }   // SR-71 recon from a client: mark + tell everyone
     }
     // client laser / railgun hits: host validates weapon type, target, range, nose angle, rate; damage from the base spec (clamped)
     var rrF = new THREE.Vector3();
@@ -27760,7 +28768,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
         var c = coneAngle(e, null), inC = c > cosCone;
         if (inC) cands++;
         targets.push({ id: e.id, pos: e.aim, kind: e.kind, variant: e.variant || e.sub || null, label: e.label, group: e.group, cat: e.cat,
-          dist: e.aim.distanceTo(player.pos), locked: locked && desig === e || multi.indexOf(e) >= 0, designated: desig === e, inCone: inC,
+          recon: e.rcnT > time, dist: e.aim.distanceTo(player.pos), locked: locked && desig === e || multi.indexOf(e) >= 0, designated: desig === e, inCone: inC,
           detectingPlayer: !!e.detect && e.tp === LP, emp: empd(e), hp01: e.maxHp ? clamp(e.hp / e.maxHp, 0, 1) : 1, maxHp: e.maxHp || 0,
           range: e.kind === 'sam' ? (e.shortRange ? 3500 : lerp(4000, 10000, skillOf(e))) : 0, ace: e.ace || null, flares: e.flareT != null && time - e.flareT < 2.5, flaresLeft: e.cmLeft != null ? e.cmLeft : -1 });
       }
@@ -27869,6 +28877,53 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
       return 0;
     };
     combat.rearm = rearm;
+    // ---- roster batch 3 (jetsig.js): turret aim, recon marks, built-in weapon fire / refill
+    // Kraken turret: the internal gun fires along v (world unit vector); null = along the nose
+    combat.setGunAim = function (v) { if (v && isFinite(v.x) && isFinite(v.y) && isFinite(v.z) && v.lengthSq() > 0.5) { gunAimV.copy(v).normalize(); gunAimOn = true; } else gunAimOn = false; };
+    // SR-71 recon: mark targets for dur s (lock range x1.5, lock time x0.6, damage +10% for every pilot). o: { pos, dir (unit, horizontal), range, cone deg }
+    // or { center, radius }. Returns how many new targets were marked; co-op: the marks go to everyone.
+    function applyRecon(ids, d) {
+      var n = 0, until = time + clamp(+d || 60, 1, 120);
+      for (var i = 0; i < ids.length && i < 200; i++) { var t = ents[ids[i]]; if (t && t.alive) { if (!(t.rcnT > time)) n++; t.rcnT = until; } }
+      if (n) hudVer++;
+      return n;
+    }
+    var rcnIds = [];
+    combat.sigRecon = function (o) {
+      if (!o) return 0;
+      rcnIds.length = 0;
+      var cosC = Math.cos(((o.cone || 60) / 2) * DEG), R = o.range || 40000, C0 = o.center || null, r2 = (o.radius || 0) * (o.radius || 0);
+      for (var i = 0; i < tgts.length; i++) {
+        var t = tgts[i]; if (!t.alive) continue;
+        if (C0) { var cx = t.aim.x - C0.x, cz = t.aim.z - C0.z; if (cx * cx + cz * cz <= r2) rcnIds.push(t.id); continue; }
+        var dx = t.aim.x - o.pos.x, dz = t.aim.z - o.pos.z, dd = Math.hypot(dx, dz);
+        if (dd > R || dd < 1) continue;
+        if ((dx * o.dir.x + dz * o.dir.z) / dd >= cosC) rcnIds.push(t.id);
+      }
+      var n = applyRecon(rcnIds, o.dur || 60);
+      if (n && !client) { addScore(Math.min(3000, 100 * n), 'RECON PHOTOS'); }
+      if (net && rcnIds.length) net.sendEvent({ t: 'rcn', ids: rcnIds.slice(0, 200), d: o.dur || 60 });
+      return n;
+    };
+    // fire a built-in weapon (spec id or base id) at the designated target, else at a fixed point p (GPS point)
+    combat.sigFire = function (id, p) {
+      if (!pAlive) return false;
+      for (var i = 0; i < wl.length; i++) {
+        var w = wl[i]; if ((w.spec.base || w.spec.id) !== id || !(w.ammo > 0)) continue;
+        var t = desig && desig.alive && tgtOK(desig, w.spec) ? desig : p ? gpsPoint(p) : null;
+        return fireOne(w, t, tagSeq++);
+      }
+      return false;
+    };
+    // add n to a weapon's ammo (capped); returns ammo / capacity (0..1), or -1 if the jet has no such weapon (n = 0: just read)
+    combat.sigRefill = function (id, n) {
+      for (var i = 0; i < wl.length; i++) {
+        var w = wl[i]; if ((w.spec.base || w.spec.id) !== id || !(w.cap > 0)) continue;
+        if (n > 0 && w.ammo < w.cap) w.ammo = Math.min(w.cap, (w.ammo || 0) + n);
+        return w.ammo / w.cap;
+      }
+      return -1;
+    };
     // playerfeatures.js: checkpoint ammo save / restore ({w:{weaponId: ammo}, flares, heat})
     combat.ammoState = function () { var o = { w: {}, flares: nFlares, heat: gunHeat }; for (var i = 0; i < wl.length; i++) o.w[wl[i].spec.id] = wl[i].ammo; return o; };
     combat.setAmmoState = function (o) {
@@ -34111,18 +35166,21 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
     if (inst) p.onHit = function (amount, cause) { use(inst); onHit(amount, cause); };
     return p;
   }
-  function mkInst(key, P) {
-    var inst = { key: key, P: P || null, local: !P, st: newSt(), slot: V(), fS: V(0, 0, -1), rS: V(1, 0, 0), uS: V(0, 1, 0), W: null, O: null };
+  // F/X-6 Skuld loyal drones (jetsig.js sets FL.loyalDrones = { n: 2, rebuild: s } while the local jet is a Skuld): extra local instances
+  // 'drone1' / 'drone2' (inst.drone = 1 | 2) with the 'skuld_d' model, left and far-right slots, silent radio, rebuild timer instead of "next mission"
+  function droneWant() { var d = FL.loyalDrones; return d && d.n > 0 ? Math.min(2, d.n | 0) : 0; }
+  function mkInst(key, P, drone) {
+    var inst = { key: key, P: P || null, local: !P, drone: drone || 0, sx: drone === 1 ? -SLOT_X : drone === 2 ? SLOT_X * 2 : SLOT_X, st: newSt(), slot: V(), fS: V(0, 0, -1), rS: V(1, 0, 0), uS: V(0, 1, 0), W: null, O: null };
     inst.W = mkPT(inst);
     inst.O = P ? { pos: P.aim, vel: P.vel, q: P.q, alive: function () { return !!P.alive; }, airborne: function () { return P.airborne !== false; } } : R.opt.player;
     return inst;
   }
   function use(inst) { I = inst; W = inst.W; wd = W.data; st = inst.st; slot = inst.slot; fS = inst.fS; rS = inst.rS; uS = inst.uS; O = inst.O; }
-  function localInst() { for (var i = 0; i < INST.length; i++) if (INST[i].local) return INST[i]; return null; }
+  function localInst() { for (var i = 0; i < INST.length; i++) if (INST[i].local && !INST[i].drone) return INST[i]; return null; }
   function ownerPT() { var A = A_(); return I.local ? A.LP : I.P; }
   function ownerId(inst) { var A = A_(); return inst.local ? A.myId() : inst.P.id; }
   // wingman radio: only the local player's own wingman talks on this machine
-  function wr(key, text, prio, cd, inst) { inst = inst || I; if (inst && inst.local) radio(key, text, prio, cd, 'TWO', VO_TWO); }
+  function wr(key, text, prio, cd, inst) { inst = inst || I; if (inst && inst.local && !inst.drone) radio(key, text, prio, cd, 'TWO', VO_TWO); }
 
   function A_() { return R.combat && R.combat._ally; }
   function world() { var A = A_(); return A ? A.world() : (R.opt && R.opt.world); }
@@ -34142,7 +35200,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
     var c = R.campaign; if (!c || !c.profile) return 0;
     try { var P = c.profile(); return (P && P.upg && P.upg.wingman) | 0; } catch (e) { return 0; }
   }
-  function instLevel(inst) { return inst.local ? campaignLevel() : clamp(inst.P.wingLvl | 0, 0, 5); }
+  function instLevel(inst) { return inst.drone ? (droneWant() >= inst.drone ? 4 : 0) : inst.local ? campaignLevel() : clamp(inst.P.wingLvl | 0, 0, 5); }
   function upgV(key, l) {
     var U = FL.UPGRADES || [], u = null; for (var i = 0; i < U.length; i++) if (U[i].id === 'wingman') u = U[i];
     if (u && u.v && u.v[key]) return u.v[key][clamp(l, 0, 5)];
@@ -34157,6 +35215,13 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
   }
   function setupPilot() {
     var l = st.level = instLevel(I);
+    if (I.drone) {   // loyal drone: fixed fast airframe, good pilot, light armour
+      var td = st.tier = 8, sd = st.skill = 0.9; W.aircraftId = 'skuld_d';
+      st.perf = { cruise: 215 + 12 * td, corner: 185 + 9 * td, maxSpd: 300 + 18 * td, maxG: 9.5, accel: 22 + 2.6 * td, roll: 2.3 + 0.3 * td + 0.6 * sd };
+      wd.cfg = { tactics: 2, skill: sd, look: lerp(0.8, 0.15, sd), spd: st.perf.cruise, corner: st.perf.corner };
+      W.gunSpread = 0.004; W.gunDmg = 12; W.dmgMul = 1; st.armor = 0.85; st.hpMax = 80;
+      return;
+    }
     var cap = upgV('wingTier', l), jet = pickJet(cap), t = Math.min(jet.tier || 3, cap), s = st.skill = upgV('wingSkill', l);
     st.tier = t;
     W.aircraftId = jet.id;
@@ -34173,17 +35238,18 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
     if (h > 0) fS.lerp(tmpA, Math.min(1, h * 4)).normalize(); else fS.copy(tmpA);
     tmpB.crossVectors(fS, UP); if (tmpB.lengthSq() > 1e-4) rS.copy(tmpB.normalize());
     uS.crossVectors(rS, fS).normalize();
-    slot.copy(p.pos).addScaledVector(rS, SLOT_X).addScaledVector(uS, SLOT_Y).addScaledVector(fS, -SLOT_Z);
+    slot.copy(p.pos).addScaledVector(rS, I.sx != null ? I.sx : SLOT_X).addScaledVector(uS, SLOT_Y).addScaledVector(fS, -SLOT_Z);
     var gy = gAt(slot.x, slot.z) + 50; if (slot.y < gy) slot.y = gy;
     return slot;
   }
   function spawnW() {
     var A = A_(); if (!A) return;
     setupPilot();
-    W.id = 'w:' + ownerId(I);
-    W.name = I.local ? 'TWO' : (String(I.P.name || 'PILOT').toUpperCase().slice(0, 10) + ' 2');
+    W.id = 'w:' + ownerId(I) + (I.drone ? ':d' + I.drone : '');
+    W.name = I.drone ? 'DRONE ' + I.drone : I.local ? 'TWO' : (String(I.P.name || 'PILOT').toUpperCase().slice(0, 10) + ' 2');
     frameFromPlayer(0);
-    W.aim.copy(slot).addScaledVector(fS, -650); W.aim.y += 60;
+    if (I.drone) W.aim.copy(O.pos).addScaledVector(uS, -14).addScaledVector(fS, -20 * I.drone);   // out of the bay, under the jet
+    else { W.aim.copy(slot).addScaledVector(fS, -650); W.aim.y += 60; }
     var gy = gAt(W.aim.x, W.aim.z) + 150; if (W.aim.y < gy) W.aim.y = gy;
     W.vel.copy(O.vel); if (W.vel.length() < 150) W.vel.copy(fS).multiplyScalar(180);
     wd.spd = W.vel.length(); wd.up = V(0, 1, 0); wd.wS = fS.clone(); wd.thr = 0.8;
@@ -34215,6 +35281,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
     st.lostNo = missionNo(); st.lostT = clock;
     despawnW(); setState('down');
     wr('down', pick(['Two is going down! Ejecting!', 'Two is hit! I am out! Ejecting!']), 3, 5);
+    if (I.drone) { radio('ddown', 'Drone ' + I.drone + ' lost. Rebuilding.', 2, 4, 'DRONES', VO_TWO); return; }
     if (I.local) after(2, function () { note('WINGMAN: NEXT MISSION'); });
   }
   function updateWreck(dt) {
@@ -34450,7 +35517,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
       if (lvl < 1 || !pAlive || !air) return;
       var agl = p.pos.y - gAt(p.pos.x, p.pos.z);
       if (agl < 100 || p.vel.length() < 100) return;
-      if (st.state === 'down') {
+      if (st.state === 'down' && I.drone) { if (clock - st.lostT < ((FL.loyalDrones && FL.loyalDrones.rebuild) || 60)) return; }
+      else if (st.state === 'down') {
         var no = missionNo(), next = no >= 0 ? no > st.lostNo : clock - st.lostT > 120;
         if (!next || clock - st.lostT < 20) return;
         if (I.local) payRepair();
@@ -34481,13 +35549,14 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
       var P = A.pts[i]; if (P.local || P.ai || (P.wingLvl | 0) < 1) continue;
       if (keys.length < MAXW) { keys.push(P.id); Ps.push(P); } else FULL[P.id] = 1;
     }
+    for (k = 1; k <= droneWant(); k++) { keys.push('drone' + k); Ps.push(null); }
     for (i = INST.length - 1; i >= 0; i--) {
       var ix = keys.indexOf(INST[i].key);
       if (ix < 0 || (INST[i].P && INST[i].P !== Ps[ix])) { use(INST[i]); despawnW(); INST.splice(i, 1); }
     }
     for (i = 0; i < keys.length; i++) {
       var have = false; for (var j = 0; j < INST.length; j++) if (INST[j].key === keys[i]) have = true;
-      if (!have) INST.push(mkInst(keys[i], Ps[i]));
+      if (!have) INST.push(mkInst(keys[i], Ps[i], /^drone/.test(keys[i]) ? +keys[i].slice(5) : 0));
     }
   }
   function updateWings(dt) {
@@ -34586,9 +35655,15 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
     noteEl.textContent = text; noteEl.style.display = 'block'; noteT = 4;
   }
 
-  function command(cmd) {
-    var A = A_(), L = localInst(); if (!A || !L || !L.W.alive) return false;
-    use(L);
+  function command(cmd) {   // own wingman + loyal drones
+    var A = A_(); if (!A) return false;
+    var ok = false, dn = 0, L = localInst();
+    if (L && L.W.alive) { use(L); ok = commandOne(cmd, A); }
+    for (var i = 0; i < INST.length; i++) { var n = INST[i]; if (!n.drone || !n.W.alive) continue; use(n); if (commandOne(cmd, A)) dn++; }
+    if (dn) radio('dcmd', cmd === 'attack' ? 'Drones attacking your target.' : cmd === 'cover' ? 'Drones covering you.' : 'Drones rejoining.', 2, 2, 'DRONES', VO_TWO);
+    return ok || dn > 0;
+  }
+  function commandOne(cmd, A) {
     if (cmd === 'attack') {
       var d = A.desig();
       if (!d || !d.alive) { wr('cmd', 'Two. No target.', 2, 2); return false; }
@@ -35559,6 +36634,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
     var OFFSHORE = opts.offshore || 3000;   // m from the coast to the nearest point of the course
     var headless = typeof document === 'undefined' || !scene || !T;
     SHARED.scene = scene || null; SHARED.fx = fx;
+    root.FL.friendlyCarrierPose = function () { return on ? P : null; };   // ship pose {x, z, vx, vz, psi} (jetsig.js: VTOL hover moves with the deck)
     root.FL.friendlyCarrierPos = function () { return on && course ? { e: course.ce + course.sgn * course.R * course.be, n: course.cn + course.sgn * course.R * course.bn, r: course.Lh + 2 * course.R } : null; };
     var st = phys.st, GEAR_H = phys.GEAR_H || 2.4;
     var baseWorld = null, course = null, on = false, tS = clock();
@@ -43279,7 +44355,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
   var dbgOn = false, dbgT = 0, logLines = [], frameTimes = [];
   try { dbgOn = localStorage.getItem('flk_dbg') === '1'; } catch (e) {}
   function setDbg(v) { dbgOn = v; $('dbg').hidden = !v; $('optDbg').checked = v; try { localStorage.setItem('flk_dbg', v ? '1' : '0'); } catch (e) {} }
-  var fullLog = [], perfStats = { frames: 0, slow: 0, verySlow: 0, worst: 0, sum: 0, samples: [] }, perfSampleT = 0, perfSampleN = 0, perfSampleSum = 0, perfSampleMax = 0;
+  var fullLog = [], perfStats = { frames: 0, slow: 0, verySlow: 0, worst: 0, sum: 0, samples: [], byMap: {} }, perfSampleT = 0, perfSampleN = 0, perfSampleSum = 0, perfSampleMax = 0;
   function glog(msg) {
     var t = (simTime || 0).toFixed(1).padStart(6);
     logLines.push(t + '  ' + msg); if (logLines.length > 14) logLines.shift();
@@ -43317,7 +44393,9 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
     var events = fullLog.slice(Math.max(teleLogIdx, fullLog.length - 300)); teleLogIdx = fullLog.length;
     var perf = { samples: perfStats.samples.slice(telePerfIdx) }; telePerfIdx = perfStats.samples.length;
     var f = perfStats.frames || 1;
-    perf.total = { fps: +(1000 * f / (perfStats.sum || 1)).toFixed(1), slowPct: +(100 * perfStats.slow / f).toFixed(2), verySlowPct: +(100 * perfStats.verySlow / f).toFixed(2), worstMs: Math.round(perfStats.worst), res: resScale, gfx: quality };
+    perf.total = { fps: +(1000 * f / (perfStats.sum || 1)).toFixed(1), slowPct: +(100 * perfStats.slow / f).toFixed(2), verySlowPct: +(100 * perfStats.verySlow / f).toFixed(2), worstMs: Math.round(perfStats.worst), res: resScale, gfx: quality, map: mapId, deg: post && post.getDegrade ? post.getDegrade() : 0, tier: FL.GFX ? FL.GFX.tier : null };
+    // per map + gfx preset since session start: { 'canyon|high': {fps, slowPct, frames} } (a session can fly several maps)
+    perf.byMap = {}; for (var bk in perfStats.byMap) { var bv = perfStats.byMap[bk]; perf.byMap[bk] = { fps: +(1000 * bv.f / (bv.sum || 1)).toFixed(1), slowPct: +(100 * bv.slow / (bv.f || 1)).toFixed(2), frames: bv.f }; }
     if (st) perf.state = { alt: Math.round(st.pos.y), kmh: Math.round(st.speed * 3.6), hp: Math.round(st.health), crashed: st.crashed || '', input: lastDevice };
     var m = campaign && campaign.hud ? campaign.hud() : null;
     if (m) perf.campaign = { mission: m.mission, phase: m.phase, title: m.title, level: m.level, credits: m.credits };
@@ -43395,10 +44473,12 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
     if (started && !paused) {
       var ms = dt * 1000; perfStats.frames++; perfStats.sum += ms; if (ms > 20) perfStats.slow++; if (ms > 50) perfStats.verySlow++;
       if (ms > perfStats.worst) perfStats.worst = ms;
+      var pk = mapId + '|' + quality + (post && post.getDegrade && post.getDegrade() ? '/d' + post.getDegrade() : ''), bm = perfStats.byMap[pk] || (perfStats.byMap[pk] = { f: 0, sum: 0, slow: 0 });   // per map + gfx preset
+      bm.f++; bm.sum += ms; if (ms > 20) bm.slow++;
       perfSampleT += dt; perfSampleN++; perfSampleSum += ms; perfSampleMax = Math.max(perfSampleMax, ms);
       if (perfSampleT >= 10) {
         var info = renderer.info.render;
-        var line = 'perf 10s: ' + (1000 * perfSampleN / (perfSampleSum || 1)).toFixed(0) + ' fps avg, worst frame ' + perfSampleMax.toFixed(0) + ' ms, res ' + Math.round(resScale * 100) + '%, calls ' + info.calls + ', tris ' + Math.round(info.triangles / 1000) + 'k, targets ' + ((combat && combat.hud().targets) || []).length;
+        var line = 'perf 10s: ' + (1000 * perfSampleN / (perfSampleSum || 1)).toFixed(0) + ' fps avg, worst frame ' + perfSampleMax.toFixed(0) + ' ms, res ' + Math.round(resScale * 100) + '%, calls ' + info.calls + ', tris ' + Math.round(info.triangles / 1000) + 'k, targets ' + ((combat && combat.hud().targets) || []).length + ', map ' + mapId + ', gfx ' + quality + (post && post.getDegrade && post.getDegrade() ? '/d' + post.getDegrade() : '');
         perfStats.samples.push(line); perfStats.samples.push(pfLine()); while (perfStats.samples.length > 60) perfStats.samples.shift();
         perfSampleT = 0; perfSampleN = 0; perfSampleSum = 0; perfSampleMax = 0;
       }
@@ -43465,7 +44545,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
   function autoStepDown(med) {
     var deg = post && post.getDegrade ? post.getDegrade() : 0;
     if (quality === 'ultra') { setQuality('high', true); flash('GRAPHICS SET TO HIGH — SLOW GPU'); }
-    else if (quality === 'high' && deg < 1 && post && post.setDegrade) { post.setDegrade(1); }   // MSAA -> FXAA, keeps shadows
+    else if (quality === 'high' && deg < 1 && post && post.setDegrade) { post.setDegrade(1); worldGfx(); }   // MSAA -> FXAA, keeps shadows; cheaper terrain shadow march
     else if (quality === 'high') { setQuality('fast', true); flash('GRAPHICS SET TO FAST — SLOW GPU'); }
     else if (!autoQ.floorLow) autoQ.floorLow = true;
     else return;
@@ -43489,7 +44569,20 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
     applyShadowSize();
     if (fx && fx.setQuality) { try { fx.setQuality(q); } catch (e) {} }
     if (weather && weather.setQuality) { try { weather.setQuality(q); } catch (e) {} }
+    worldGfx();
     var sel = $('optQuality'); if (sel) sel.value = q;
+  }
+  // world graphics tier (world.js FL.GFX): terrain shader variant (canyon shadow march, alpine / canyon detail), terrain
+  // LOD distance, vegetation and city ranges. A tier change recompiles only the tier-dependent terrain programs, warmed here.
+  function worldGfx() {
+    var ch = false;
+    try { ch = !!(FL.setWorldQuality && FL.setWorldQuality(quality, post && post.getDegrade ? post.getDegrade() : 0)); } catch (e) {}
+    if (!ch || !booted || !FL.GFX) return;
+    var ms = FL.GFX.mats || [];
+    warmList.length = 0;
+    scene.traverse(function (o) { if (o.material && ms.indexOf(o.material) >= 0) warmList.push(o); });
+    if (warmList.length) warmShaders('gfx', warmList);
+    warmList.length = 0;
   }
   var sunV = new V3(), sunEnd = new V3(), sunChk = 0, sunVis = 1, sunVisT = 1;
   function postParams(dt) {
@@ -43595,7 +44688,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"f14":{"side":"data:image/webp;base64,UklGRgYlAA
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793180574', updShown = false;
+  var BUILD = '1793183071', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
