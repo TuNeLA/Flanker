@@ -19196,7 +19196,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"uh60m":{"side":"data:image/webp;base64,UklGRgAn
       baseM = a.mass || 22000; S = a.wingArea || 62;
       TMIL = (a.thrustMil || 150000) * tm; TAB = (a.thrustAB || 310000) * tm;
       RR = (a.rollRate || 290) * rm; PR = (a.pitchRate || 115) * rm; YR = (a.yawRate || 50) * rm;
-      var tsm = mods.topSpeedMul || 1; baseM *= (mods.massMul || 1); M = baseM + storesKg;
+      var tsm = (mods.topSpeedMul || 1) * (root.FL.PLAYER_SPEED_MUL || 2); baseM *=   // Chad: player top speed x2 (FL.PLAYER_SPEED_MUL)
+      (mods.massMul || 1); M = baseM + storesKg;
       DRIFT = a.drift || 1; CD0 = (a.cd0 || 0.021) / (tsm * tsm); MACHMAX = (a.machMax || 2.35) * tsm; ROUGH = a.roughness != null ? a.roughness : 0.25;
       // roster signature fields (ROSTER.md / jetsig.js): AoA limit, PSM tier (0 no Cobra, 1 Cobra, 2 2D TVC, 3 3D TVC), Kulbit, Draken "kort parad",
       // supercruise Mach, dash Mach (+ engine heat), thrust altitude floor (F-104 zoom), drift drag
@@ -19246,7 +19247,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"uh60m":{"side":"data:image/webp;base64,UklGRgAn
       up.set(0, 1, 0).applyQuaternion(st.q);
       right.set(1, 0, 0).applyQuaternion(st.q);
     }
-    function thrustN(t) { return t <= 0.8 ? TMIL * t / 0.8 : TMIL + (TAB * (mods.boostMul || 1) - TMIL) * (t - 0.8) / 0.2; }
+    function thrustN(t) { return t <= 0.8 ? TMIL * t / 0.8 : TMIL + (TAB * (mods.boostMul || 1) - TMIL) * (root.FL.PLAYER_BOOST_MUL || 3) * (t - 0.8) / 0.2; }   // Chad: boost (afterburner above MIL) x3
     function crash(why) { if (!st.crashed) st.crashed = why || 'CRASHED'; }
     function heliCtx() {   // closure access for heli.js (made once)
       if (!HX) HX = { T: T, st: st, axes: axes, fwd: fwd, up: up, right: right, crash: crash, hurt: hurt, GEAR_H: GEAR_H,
@@ -52972,7 +52973,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"uh60m":{"side":"data:image/webp;base64,UklGRgAn
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793226773', updShown = false;
+  var BUILD = '1793226855', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
