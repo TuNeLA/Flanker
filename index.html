@@ -19924,7 +19924,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     }
 
     // ------------------------------------------------------------------ host
-    net.host = function (name, aircraftId) {
+    net.host = function (name, aircraftId, wantCode) {   // wantCode: re-open the same room (page update); retried while the old id frees
+      wantCode = wantCode ? String(wantCode).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5) : '';
       if (name) me.name = String(name).slice(0, 24);
       if (aircraftId) me.aircraftId = aircraftId;
       gen++; reset(); closing = false; early.state.length = 0; early.event.length = 0;
@@ -19934,14 +19935,15 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       return new Promise(function (resolve, reject) {
         var tries = 0;
         function attempt() {
-          var code = code5(), done = false;
+          var code = (wantCode && wantCode.length === 5 && tries < 10) ? wantCode : code5(), done = false;
           var p = new P(PREFIX + code.toLowerCase(), opts.peerOptions || {});
           peer = p;
           var to = sT(function () { if (!done) { done = true; fail({ type: 'network' }); } }, 15000);
           function fail(e) {
             cT(to);
             try { p.destroy(); } catch (x) { /* ignore */ }
-            if (e && e.type === 'unavailable-id' && tries++ < 6) { attempt(); return; }
+            if (e && e.type === 'unavailable-id' && wantCode && tries < 10) { tries++; sT(attempt, 1500); return; }
+            if (e && e.type === 'unavailable-id' && tries++ < 16) { attempt(); return; }
             var msg = readable(e); err(e && e.type || 'host', msg); net.isHost = false; reject(new Error(msg));
           }
           p.on('open', function (id) {
@@ -27937,8 +27939,10 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         var yW2 = yb + (locked || kL <= 0.01 ? 4 : 12) * u;
         var dT = null; for (i = 0; i < tg.length; i++) if (tg[i].designated) dT = tg[i];
         if (dT && dT.hp01 != null && showHp(dT)) { var sbh = hx.shadowBlur; hx.shadowBlur = 0; hpBar(dp.x, yW2 - 3 * u, bs * 2, dT.hp01, u); hx.shadowBlur = sbh; yW2 += 9 * u; }
-        if (locked && lk.weaponOK === false) { text(lk.aspectOK === false ? 'GET BEHIND IT' : 'OUT OF RANGE', dp.x, yW2, 11 * u, AMB, 'center'); yW2 += 14 * u; }
-        if ((lk.candidates || 0) > 1) text('◀ ▶', dp.x, yW2, 11 * u, HCdim, 'center');
+        // warnings and the target-switch hint sit right of the box, under the label (never over the nose marks)
+        var yR = dp.y + 22 * u;
+        if (locked && lk.weaponOK === false) { text(lk.aspectOK === false ? 'GET BEHIND IT' : 'OUT OF RANGE', lx2, yR, 11 * u, AMB, 'left'); yR += 14 * u; }
+        if ((lk.candidates || 0) > 1) text('◀ ▶ MORE', lx2, yR, 10 * u, HCdim, 'left');
       } else {
         // designated target off screen: big arrow at the edge
         var ddx2 = dp.x - cxs, ddy2 = dp.y - cys; if (dp.behind) { ddx2 = -ddx2; ddy2 = -ddy2; }
@@ -28751,6 +28755,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     playT += dt; if (playT < 3) return;                                   // ignore loading / first seconds
     rafTimes.push(dt * 1000); if (rafTimes.length > 120) rafTimes.shift();
     perfT += dt; if (perfT < 1.5 || rafTimes.length < 90) return; perfT = 0;
+    applyShadowSize();
     var sorted = rafTimes.slice().sort(function (a, b) { return a - b; });
     refreshMs = Math.min(refreshMs, sorted[Math.floor(sorted.length * 0.1)]); // fastest typical frame ≈ display refresh
     var med = sorted[Math.floor(sorted.length * 0.5)];
@@ -28768,6 +28773,15 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     if (autoQ.slowT >= 4 && Math.abs(playT - autoQ.lastT) > 6) { autoQ.slowT = 0; autoQ.lastT = playT; autoStepDown(med); }
   }
   var autoQ = { slowT: 0, lastT: -99, floorLow: false };
+  // shadow map: 2048 on ultra, 1024 on high (4x less depth fill + PCF cost; the ±60 m box keeps ~12 cm texels). Re-checked
+  // every perf tick because a map change builds a new sun light.
+  function applyShadowSize() {
+    var sh = world && world.sun && world.sun.shadow; if (!sh) return;
+    var want = quality === 'ultra' ? 2048 : 1024;
+    if (sh.mapSize.x === want) return;
+    sh.mapSize.set(want, want);
+    if (sh.map) { sh.map.dispose(); sh.map = null; }
+  }
   // first-run preset by GPU: integrated / mobile / software -> fast, everything else -> high (ultra only by choice)
   function defaultQuality() {
     var g = String(gpuName() || '').toLowerCase();
@@ -28800,6 +28814,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       scene.traverse(function (o) { if (o.material) { (Array.isArray(o.material) ? o.material : [o.material]).forEach(function (m) { m.needsUpdate = true; }); } });
     }
     if (post && post.setQuality) post.setQuality(q === 'fast' ? 'fast' : q);
+    applyShadowSize();
     if (fx && fx.setQuality) { try { fx.setQuality(q); } catch (e) {} }
     if (weather && weather.setQuality) { try { weather.setQuality(q); } catch (e) {} }
     var sel = $('optQuality'); if (sel) sel.value = q;
@@ -28844,24 +28859,32 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     $('coName').addEventListener('change', function () { try { localStorage.setItem('flk_name', $('coName').value.trim() || 'Flanker One'); } catch (e) {} if (combat.setLocalInfo) combat.setLocalInfo({ name: playerName(), aircraftId: aircraftId }); });
     var m = /room-([A-Za-z0-9]{5})/.exec(location.hash || ''); if (m) { $('coCode').value = m[1].toUpperCase(); coStatus('Invite found. Push Join.'); }
     if (!FL.createNet || typeof Peer === 'undefined') { $('bHost').disabled = $('bJoin').disabled = true; coStatus('Co-op needs the internet. Use the game web page. Offline previews cannot connect.', true); return; }
-    $('bHost').addEventListener('click', function () {
-      ensureNet(); coStatus('Opening the room…');
-      net.host(playerName(), aircraftId).then(function (code) {
+    $('bHost').addEventListener('click', function () { doHost(); });
+    $('bJoin').addEventListener('click', function () { doJoin($('coCode').value.trim()); });
+    netSetupRest();
+    resumeAfterUpdate();
+  }
+  function doHost(wantCode, after) {
+      ensureNet(); coStatus(wantCode ? 'Opening room ' + wantCode + ' again…' : 'Opening the room…');
+      net.host(playerName(), aircraftId, wantCode).then(function (code) {
         roomCode = code; $('coCodeBig').textContent = code; combat.setNet(net); if (campaign) campaign.setRole('host');
         warmMates([{ id: 'warm', aircraftId: aircraftId }]);   // compile teammate shaders now, in the lobby
         coStatus('Room open. Send the code or the link to your friends. Select the map and missions. Then push Take off.'); coUi();
-      }).catch(function (e) { coStatus(e && e.message ? e.message : String(e), true); coUi(); });
-    });
-    $('bJoin').addEventListener('click', function () {
-      var code = $('coCode').value.trim(); if (code.length < 5) { coStatus('Type the 5-letter room code.', true); return; }
+        if (after) after(true);
+      }).catch(function (e) { coStatus(e && e.message ? e.message : String(e), true); coUi(); if (after) after(false); });
+  }
+  function doJoin(code, after) {
+      if (!code || code.length < 5) { coStatus('Type the 5-letter room code.', true); if (after) after(false); return; }
       ensureNet(); coStatus('Joining ' + code.toUpperCase() + '…');
       net.join(code, playerName(), aircraftId).then(function () {
-        roomCode = code.toUpperCase(); combat.setNet(net); if (campaign) campaign.setRole('client');
+        roomCode = code.toUpperCase(); lastClientRoom = roomCode; combat.setNet(net); if (campaign) campaign.setRole('client');
         warmMates(net.peers);
         coStatus('Joined. The host selects the map and the missions. Go back. Push Take off.'); coUi();
         if (hostMapId) followHostMap(hostMapId);
-      }).catch(function (e) { coStatus(e && e.message ? e.message : String(e), true); coUi(); });
-    });
+        if (after) after(true);
+      }).catch(function (e) { coStatus(e && e.message ? e.message : String(e), true); coUi(); if (after) after(false); });
+  }
+  function netSetupRest() {
     $('bLeave').addEventListener('click', function () { leaveRoom('You left the room.'); });
     addEventListener('pagehide', function () { try { if (net && net.connected) net.leave(); } catch (e) {} });   // tab closed: say bye so the room updates now, not after the 8 s timeout
     $('bCopy').addEventListener('click', function () {
@@ -28869,8 +28892,64 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(link).then(function () { coStatus('Link copied: ' + link); }, function () { coStatus('Copy this link: ' + link); });
       else coStatus('Copy this link: ' + link);
     });
-    combat.on('net', function (e) { if (e.type === 'end') { leaveRoom(e.reason || 'Disconnected from the room.'); flash((e.reason || 'DISCONNECTED').toUpperCase()); } });
+    combat.on('net', function (e) {
+      if (e.type !== 'end') return;
+      var wasClient = !!(net && !net.isHost && roomCode), code = roomCode;
+      leaveRoom(e.reason || 'Disconnected from the room.');
+      if (wasClient && code) { flash('HOST LOST — TRYING TO REJOIN'); rejoinLoop(code, 14); }
+      else flash((e.reason || 'DISCONNECTED').toUpperCase());
+    });
   }
+  // ---- client: try to rejoin the same room (host reloads for an update, short network loss)
+  var lastClientRoom = '';
+  function rejoinLoop(code, left) {
+    if (left <= 0 || roomCode) { if (left <= 0) coStatus('Could not rejoin room ' + code + '. Join again when the host is back.', true); return; }
+    setTimeout(function () {
+      if (roomCode) return;
+      doJoin(code, function (ok) { if (ok) { flash('REJOINED ROOM ' + code); if (started && st && !st.crashed) {} } else rejoinLoop(code, left - 1); });
+    }, 3000);
+  }
+  // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
+  //      into the same room (host re-opens the same code; clients rejoin) and into the air.
+  var BUILD = '1793150592', updShown = false;
+  function checkUpdate() {
+    if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
+    fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+      if (j && j.v && String(j.v) !== BUILD) showUpdate();
+    }).catch(function () {});
+  }
+  function showUpdate() {
+    updShown = true;
+    var b = document.createElement('button');
+    b.id = 'updBtn'; b.textContent = 'NEW VERSION · UPDATE';
+    b.title = 'Load the new version. You stay in your room.';
+    b.style.cssText = 'position:fixed;top:max(10px,env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);z-index:80;' +
+      'font:700 12px Oxanium,system-ui,sans-serif;letter-spacing:.12em;padding:7px 14px;border-radius:999px;cursor:pointer;' +
+      'background:rgba(9,20,22,.88);color:#93ffc4;border:1px solid rgba(147,255,196,.6);box-shadow:0 0 12px rgba(147,255,196,.25)';
+    b.addEventListener('click', doUpdate);
+    document.body.appendChild(b);
+    glog('new version available');
+  }
+  function doUpdate() {
+    try {
+      sessionStorage.setItem('flk_resume', JSON.stringify({ t: Date.now(), room: roomCode || '', host: !!(net && net.isHost && roomCode), flying: !!(started && st && !st.crashed), map: mapId }));
+    } catch (e) {}
+    try { if (net && net.connected) net.leave(); } catch (e) {}
+    location.reload();
+  }
+  function resumeAfterUpdate() {
+    var r = null;
+    try { r = JSON.parse(sessionStorage.getItem('flk_resume') || 'null'); sessionStorage.removeItem('flk_resume'); } catch (e) { r = null; }
+    if (!r || Date.now() - r.t > 5 * 60000) return;
+    glog('resume after update: room ' + (r.room || '-') + (r.host ? ' (host)' : ''));
+    var fly = function () { if (r.flying && !started) setTimeout(function () { startGame(r.host || !r.room ? 'air' : 'runway'); }, 600); };
+    if (r.room && r.host) doHost(r.room, function () { fly(); });
+    else if (r.room) {
+      var tries = 0;
+      (function go() { doJoin(r.room, function (ok) { if (ok) setTimeout(fly, 1500); else if (++tries < 12) setTimeout(go, 3000); }); })();
+    } else fly();
+  }
+  setInterval(checkUpdate, 60000); setTimeout(checkUpdate, 8000);
   function ensureNet() {
     if (net) return;
     net = FL.createNet();
