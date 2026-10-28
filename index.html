@@ -50804,8 +50804,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"uh60m":{"side":"data:image/webp;base64,UklGRgAn
       cobCam += ((st.cobraK || 0) - cobCam) * (1 - Math.exp(-dt * 3));
       eul.set(lookS.p - cobCam * 0.08, lookS.y + cobCam * 0.45, 0, 'YXZ'); lookQ.setFromEuler(eul);
       camQL.copy(camQ).multiply(lookQ);
-      // distance spring: boost pushes the camera back a little, then it catches up
-      spring(distS, 'x', 'v', dist + st.ab * 5 + Math.max(0, Math.abs(st.gLoad) - 4) * 0.6 + cobCam * 8, 6, dt);
+      // distance spring: boost pulls the camera in a little (with the wider boost FOV below)
+      spring(distS, 'x', 'v', dist - st.ab * 3.5 + Math.max(0, Math.abs(st.gLoad) - 4) * 0.6 + cobCam * 8, 6, dt);
       tgtPos.set(0, hgt, distS.x).applyQuaternion(camQL);
       camera.position.copy(p).add(tgtPos);
       var gy = world.groundY(camera.position.x, -camera.position.z) + 3;
@@ -50826,7 +50826,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"uh60m":{"side":"data:image/webp;base64,UklGRgAn
       camera.position.add(tmp.set(nx, ny, nz).multiplyScalar(amt * (mode === 'COCKPIT' ? 0.06 : 0.5)));
       camera.rotateX(ny * amt * 0.008); camera.rotateY(nx * amt * 0.008); camera.rotateZ(nz * amt * 0.012);
     }
-    fov += st.ab * 2 + trauma * 1.5 * shakeScale;
+    fov += st.ab * 12 + trauma * 1.5 * shakeScale;   // Chad: boost = camera a bit closer + much wider FOV (speed feel)
     // drift feel: FOV kick on drift entry, wider on the exit boost; shake on terrain scrapes
     if (st.driftKickT > 0) fov += 3;
     if (st.driftBoostT > 0) fov += 2 + 2 * (st.driftBoostLvl || 1);
@@ -52973,7 +52973,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"uh60m":{"side":"data:image/webp;base64,UklGRgAn
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793226855', updShown = false;
+  var BUILD = '1793227029', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
