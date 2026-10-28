@@ -15983,7 +15983,7 @@ body.flk-cover > .xm-pop, body.flk-cover > .xm-ban, body.flk-cover > .xm-card { 
   function nacelle(P, x, y, z0, z1, r, o) {
     o = o || {};
     const S = [[z0, y, r * 0.78, r * 0.78, r * 0.78, 2], [z0 + 0.2, y, r * 0.95, r * 0.95, r * 0.92, 2], [z0 + 0.7, y, r, r, r, 2.2], [z1 - 0.7, y + (o.rise || 0), r * 0.95, r * 0.95, r * 0.9, 2.2], [z1, y + (o.rise || 0), r * 0.72, r * 0.72, r * 0.7, 2]];
-    P.body.push(loft(S, 18, 3, x));
+    P.body.push(loft(S, 14, 3, x));
     if (o.intake !== false) intake(P, S[0], x, { lip: 0.04, depth: 0.7, shrink: 0.8, lipCol: [0.5, 0.52, 0.53] });
     if (o.filter) P.metal.push(paint(ell(r * 0.72, 1, 1, 0.55, x, y, z0 - 0.08), 0.24, 0.25, 0.25));
   }
@@ -16073,7 +16073,7 @@ body.flk-cover > .xm-pop, body.flk-cover > .xm-ban, body.flk-cover > .xm-card { 
     HM = {
       tex,
       metal: new T.MeshStandardMaterial({ vertexColors: true, metalness: 0.55, roughness: 0.42 }),
-      blade: new T.MeshStandardMaterial({ vertexColors: true, metalness: 0.25, roughness: 0.55, side: T.DoubleSide }),
+      blade: new T.MeshStandardMaterial({ vertexColors: true, metalness: 0.1, roughness: 0.85, side: T.DoubleSide }),
       flash: new T.MeshBasicMaterial({ color: 0xffc860, transparent: true, opacity: 0.9, depthWrite: false, blending: T.AdditiveBlending }),
       flashGeo: nonIdx(new T.ConeGeometry(0.12, 0.7, 6, 1, true)).rotateX(-PI / 2).translate(0, 0, -0.35),
       geo: {},
@@ -19271,7 +19271,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"volga2":{"side":"data:image/webp;base64,UklGRjY
         st.vel.set(0, 0, 0); st.thr = 0; st.gearDown = true; st.gearT = 1; st.onGround = true;
       }
       if (WIG) wigReset(kind, sp); else { st.wigFly = false; st.wig = null; }
-      if (HELI && root.FL.heliReset) root.FL.heliReset(heliCtx(), kind, sp); else st.heli = false;
+      if (HELI && root.FL.heliReset) root.FL.heliReset(heliCtx(), kind, sp); else { st.heli = false; st.heliOk = false; }
     }
 
     function startCobra() {
@@ -28367,8 +28367,9 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"volga2":{"side":"data:image/webp;base64,UklGRjY
   function scratch(T) { return { td: new T.Vector3(), F: new T.Vector3(), eul: new T.Euler(), dq: new T.Quaternion(), om: new T.Vector3(), turb: new T.Vector3(), p0: new T.Vector3(), v0: new T.Vector3(), q0: new T.Quaternion(), bad: 0 }; }
   FL.heliReset = function (H, kind) {
     var st = H.st, sp = H.spec() || {}, hs = sp.heli || {};
-    st.heli = true; st.rpm = kind === 'air' ? 1 : 0.85; st.coll = 0; st.torque = 0; st.holdY = null; st.hhW = 0; st.hhold = false; st.vrs = 0;
+    st.heli = true; st.heliOk = true; st.rpm = kind === 'air' || kind === 'keep' ? 1 : 0.85; st.coll = 0; st.torque = 0; st.holdY = null; st.hhW = 0; st.hhold = false; st.vrs = 0;
     st.heliEngOut = false; st.heliPush = 0; st.hFlipT = 0; st.hFlipDir = 1; st.hover = false; st.hoverW = 0; st.leverPct = -1;
+    if (kind === 'keep') { st.holdY = st.onGround ? null : st.pos.y; return; }   // the heli was switched in without a reset (hangar): keep the motion
     if (kind === 'air') {
       var v = st.vel.length(), cap = (hs.maxKmh || 300) / 3.6 * 0.55;
       if (v > cap) st.vel.multiplyScalar(cap / v);
@@ -28381,6 +28382,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"volga2":{"side":"data:image/webp;base64,UklGRjY
     H.axes();
     var fwd = H.fwd, up = H.up, right = H.right, M = H.mass(), M0 = sp.mass || M;
     S.p0.copy(st.pos); S.v0.copy(st.vel); S.q0.copy(st.q);
+    if (st.heliOk !== true) FL.heliReset(H, 'keep');
     var speed = st.vel.length(); st.speed = speed;
     st.heli = true; st.drift = false; st.cobra = false; st.cobraPhase = ''; st.aoa = 0; st.beta = 0; st.slip = 0; st.ab = 0; st.hover = false; st.hoverW = 0;
     st.driftKickT = 0; st.driftBoostT = 0; st.supercruise = false;
@@ -28421,7 +28423,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"volga2":{"side":"data:image/webp;base64,UklGRjY
       var ah = Math.hypot(aim.x, aim.z), el = Math.atan2(aim.y, ah), ye = ah > 0.05 ? wrapPi(Math.atan2(aim.x, -aim.z) - Math.atan2(hx, -hz)) : 0;
       rC = clamp(ye * 3.0, -1, 1) * yawMax + yw * yawMax;
       var eld = Math.abs(el) > 3 * DEG ? el - (el > 0 ? 3 : -3) * DEG : 0;
-      thT = clamp(eld, -tiltF, hh > 0.5 ? 25 * DEG : tiltB);
+      thT = clamp(eld * (hh > 0.5 ? 1 : 1.4), -tiltF, hh > 0.5 ? 25 * DEG : tiltB);   // aim 25 deg low = full forward push
       if (Math.abs(p) > 0.04) thT = p > 0 ? p * tiltB : p * tiltF;               // arrow keys own the nose
       phT = clamp(Math.atan(Math.max(0, vF) * rC / G), -bankMax, bankMax) * sstep(12, 30, vF) + r * bankMax * 0.8;
       idle = Math.abs(thT) < 0.03 && Math.abs(r) < 0.05;
@@ -28434,10 +28436,10 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"volga2":{"side":"data:image/webp;base64,UklGRjY
     }
     if (vH > 15 && vF > 0) rC += clamp(Math.atan2(vR, vF) * 1.2, -0.6, 0.6) * sstep(20, 45, vH) * (aim ? 0.3 : 1);   // weathervane: the fin pulls the nose onto the path
     // auto-hover (stick let go, slow) and hover hold (drift key): velocity hold relative to the ground / deck
-    var hovW = idle ? sstep(28, 14, vH) : 0, aF = 0, aR = 0;
+    var hovW = idle ? sstep(45, 20, vH) : 0, aF = 0, aR = 0;   // let go of the stick: brake toward a hover below ~160 km/h
     if (hovW > 0 || hh > 0) {
       var tF = hh > 0 && !aim ? -p * 12 : 0, tR = hh > 0 ? r * 14 : 0;
-      aF = clamp(1.1 * (tF - vF), -7, 7); aR = clamp(1.3 * (tR - vR), -7, 7);
+      aF = clamp(1.1 * (tF - vF), -9, 9); aR = clamp(1.3 * (tR - vR), -8, 8);
       var cw = hovW * (1 - hh);
       thT += (-Math.atan(aF / G) - thT) * cw; phT += (Math.atan(aR / G) - phT) * cw;
       if (hh > 0) { if (!aim) thT *= 1 - hh; phT *= 1 - hh; }
@@ -28447,10 +28449,10 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"volga2":{"side":"data:image/webp;base64,UklGRjY
     if (lev != null && !engOut) { coll = clamp(lev, 0, 1) * 1.0 + (wantBoost ? 0.15 : 0); st.holdY = null; }
     else if (engOut) { vc = gas > 0.1 ? -1 : -clamp((st.agl - 2.4) * 0.42, 1.2, 12); st.holdY = null; }    // autorotation assist: steady descent, flare at the bottom
     else if (gas > 0.05) { vc = gas * climb * (wantBoost ? 1.5 : 1); st.holdY = null; }
-    else if (brk > 0.05) { vc = -brk * 10; st.holdY = null; }
+    else if (brk > 0.05) { vc = Math.max(-brk * 10, -(1.6 + Math.max(0, st.agl - 2.4) * 0.45)); st.holdY = null; }   // arcade: the descent eases near the ground (soft touchdown)
     else if (st.onGround) { vc = -1.5; st.holdY = null; }
     else {
-      if (st.holdY == null) st.holdY = st.pos.y + clamp(vy, -6, 6) * 0.5;
+      if (st.holdY == null) st.holdY = st.pos.y + clamp(vy * Math.abs(vy) / 24, -10, 10);   // stop where the climb / sink can stop smoothly
       if (vH > 15) {   // terrain floor at speed: never hold into a hill
         var ax = st.pos.x + st.vel.x * 2.5, az = st.pos.z + st.vel.z * 2.5, ahg = w.isWater(ax, -az) ? 0 : w.sampleH(ax, -az);
         st.holdY = Math.max(st.holdY, ahg + 12, surf + 10);
@@ -28660,7 +28662,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"volga2":{"side":"data:image/webp;base64,UklGRjY
             if ((inp.roll || 0) > 0.3) H.funDir = 1; else if ((inp.roll || 0) < -0.3) H.funDir = -1;
             var dx = tgtP.x - st.pos.x, dz = tgtP.z - st.pos.z, dd = Math.hypot(dx, dz) || 1, fx = ax.fwd.x, fz = ax.fwd.z, fl = Math.hypot(fx, fz) || 1;
             var yerr = Math.atan2(fx / fl * dz / dd - fz / fl * dx / dd, fx / fl * dx / dd + fz / fl * dz / dd);   // + = target to the right
-            inp.hAim = null; inp.hTurn = false; inp.yaw = clamp(yerr * 3, -1, 1); inp.roll = 0.75 * H.funDir; inp.pitch = clamp((H.funR - dd) / 300, -0.5, 0.5) * 0.6; inp.drift = false;
+            inp.hAim = null; inp.hTurn = false; inp.yaw = clamp(yerr * 3, -1, 1); inp.roll = 0.55 * H.funDir; inp.pitch = clamp((H.funR - dd) / 300, -0.5, 0.5) * 0.6; inp.drift = false;
             S.label = 'FUNNEL ' + (dd / 1000).toFixed(1) + ' KM'; S.act = 0.2;
           } else S.label = 'FUNNEL: NO TARGET';
         } else H.fun = false;
@@ -28689,8 +28691,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"volga2":{"side":"data:image/webp;base64,UklGRjY
         H.board = atBase ? H.board + dt : 0;
         if (H.board > 5) { H.board = 0; H.troops = 8; J.flash('8 TROOPS ON BOARD'); }
         if (!S.label) S.label = H.troops > 0 ? 'TROOPS 8' : 'NO TROOPS';
-      } else if (sig === 'havoc') {
-        o.armor *= 0.7;
+      } else if (sig === 'havoc') {   // armoured cockpit: spec.armor 0.7
         if (edge) { if (S.cd > 0) J.flash('BREAK: ' + Math.ceil(S.cd) + ' S'); else if (!st.onGround && st.agl > 25) { st.hFlipT = 1.1; st.hFlipDir = (inp.roll || 0) < 0 ? -1 : 1; S.cd = 18 * cdMul; S.act = 1.1; var nb = 0; try { nb = c.heliFlareBurst ? c.heliFlareBurst(2500) : 0; c.dropFlares(); } catch (e) { nb = 0; } J.flash(nb ? 'BREAK! ' + nb + (nb > 1 ? ' MISSILES' : ' MISSILE') + ' LOST' : 'BREAK!'); } else J.flash('BREAK: CLIMB ABOVE 25 M'); }
       } else if (sig === 'longbow') {
         if (edge) { if (S.cd > 0) J.flash('LONGBOW: ' + Math.ceil(S.cd) + ' S'); else { var nl = 0; try { nl = c && c.sigRecon ? c.sigRecon({ center: st.pos, radius: pow > 1 ? 12000 : 8000, dur: 45 }) : 0; } catch (e) { nl = 0; } S.act = 45; S.cd = 35 * cdMul; J.flash(nl ? 'LONGBOW: ' + nl + ' TARGETS MARKED' : 'LONGBOW: NO NEW TARGETS'); } }
@@ -34324,7 +34325,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"volga2":{"side":"data:image/webp;base64,UklGRjY
     czFlak:   { look: { s: 0.5, air: true, fx: 'flak', sparks: 30 }, sound: { size: 0.7, kind: 'aircraft', lvl: 0.8, pitch: 1.2, nearR: 800, layers: ['flak', 'frag'] }, shake: { i: 0.15, r: 400, dur: 0.05 } },
     czHydra:  { look: { s: 0.35, air: true, fx: 'pop', sparks: 14 }, sound: { size: 0.6, kind: 'aircraft', lvl: 0.75, pitch: 1.3, nearR: 700, layers: ['pops', 'crack'] }, shake: { i: 0.08, r: 500, dur: 0 } },
     czThermo: { look: { s: 3.6, fx: 'thermo', light: 5 }, sound: { size: 3.6, kind: 'bomb', lvl: 1.25, pitch: 0.62, nearR: 2600, pre: 0.35, layers: ['vacuum', 'crack', 'debris', 'rumble'] }, shake: { i: 1.0, r: 4200, dur: 1.0 } },
-    czSuck:   { look: { s: 0, fx: 'emp', light: 0 }, sound: { size: 1.2, kind: 'aircraft', lvl: 0.8, pitch: 0.55, nearR: 1500, noBoom: true, layers: ['vacuum', 'sweep'] }, shake: { i: 0.2, r: 1200, dur: 0.4 } },
+    czSuck:   { look: { s: 0 }, sound: { size: 1.2, kind: 'aircraft', lvl: 0.8, pitch: 0.55, nearR: 1500, noBoom: true, layers: ['vacuum', 'sweep'] }, shake: { i: 0.2, r: 1200, dur: 0.4 } },
     czMole:   { look: { s: 1.9, fx: 'collapse', plume: 2.4, scorch: 26, smoke: 22, light: 1.2 }, sound: { size: 2.5, kind: 'bomb', lvl: 1.12, pitch: 0.58, nearR: 1500, layers: ['deep', 'debris', 'rumble'] }, shake: { i: 0.85, r: 2600, dur: 0.9 } },
     czSplash: { look: { s: 1.7, fx: 'ship', smoke: 6, light: 0.6 }, sound: { size: 2.3, kind: 'water', lvl: 1.05, pitch: 0.72, nearR: 1500, layers: ['deep', 'secondary'] }, shake: { i: 0.6, r: 2000, dur: 0.5 } },
     czSkip:   { look: { s: 0.3 }, sound: { size: 0.45, kind: 'water', lvl: 0.6, pitch: 1.3, nearR: 500, layers: ['crack'] }, shake: { i: 0.05, r: 200, dur: 0 } },
@@ -34956,7 +34957,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"volga2":{"side":"data:image/webp;base64,UklGRjY
       else if (cz === 'cannon' || cz === 'flak' || cz === 'scatter') {
         v = visPool.glow.pop() || new THREE.Sprite(glowMat(cz === 'flak' ? 0xffc070 : 0xff9040)); kind = 'glow';
         v.material = glowMat(cz === 'flak' ? 0xffc070 : cz === 'scatter' ? 0xfff0a0 : 0xff8030);
-        var gs = cz === 'cannon' ? 9 : 5; v.scale.set(gs, gs, 1); m.mis.visible = false;
+        var gs = cz === 'cannon' ? 24 : 14; v.scale.set(gs, gs, 1); m.mis.visible = false;
       } else if (cz === 'mine') { v = visPool.glow.pop() || new THREE.Sprite(glowMat(0xff3020)); kind = 'glow'; v.material = glowMat(0xff3020); v.scale.set(3, 3, 1); }
       else if (cz === 'blackhole') { v = visPool.glow.pop() || new THREE.Sprite(glowMat(0xb070ff)); kind = 'glow'; v.material = glowMat(0xb070ff); v.scale.set(5, 5, 1); }
       else if (cz === 'tesla') { v = visPool.glow.pop() || new THREE.Sprite(glowMat(0x70e0ff)); kind = 'glow'; v.material = glowMat(0x70e0ff); v.scale.set(4, 4, 1); v.position.set(0, 0, -1.5); }
@@ -35146,6 +35147,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"volga2":{"side":"data:image/webp;base64,UklGRjY
       for (var j = 0; j < icptWrap.length; j++) { var Wj = icptWrap[j]; if (Wj.busy && (!Wj.czM || !Wj.czM.alive)) { Wj.alive = false; } }
     }
     function icptRelease() {   // wrappers are free when no live interceptor uses them
+      if (!icptWrap.length) return;
       for (var j = 0; j < icptWrap.length; j++) icptWrap[j].busy = false;
       for (var i = 0; i < missiles.length; i++) { var m = missiles[i]; if (m.alive && m.czWrap && m.T && m.T.cz === 'intercept') m.czWrap.busy = true; }
     }
@@ -47890,6 +47892,16 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"volga2":{"side":"data:image/webp;base64,UklGRjY
     return base;
   }
 
+  // chase camera sized to the plane (main.js asks FL.ekrCam for a craft-sized chase: { dist, hgt, fov }); 56 m span = ~2.5x the jet chase
+  var oEk = FL.ekrCam, HCAM = { dist: 22, hgt: 4.6, fov: 0 };
+  FL.ekrCam = function (st, mode, id) {
+    var r = oEk ? oEk(st, mode, id) : null; if (r) return r;
+    var d = FL.HEAVY_DEFS && FL.HEAVY_DEFS[id]; if (!d || mode === 'REAR') return null;
+    var k = 1 + Math.max(0, (d.hs || 7.4) - 7.4) / 14, far = mode === 'FAR CHASE', sp = st.speed || 0;
+    HCAM.dist = (far ? 62 : 22 + clamp(sp / 400, 0, 1) * 4) * k; HCAM.hgt = (far ? 13 : 4.6) * k * 1.15; HCAM.fov = 0;
+    return HCAM;
+  };
+
   // =================================================================== 6. start point / carrier: big jets that cannot use the deck
   function curSpec() {
     var s = HV.phys && HV.phys.spec ? HV.phys.spec() : null;
@@ -52228,7 +52240,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"volga2":{"side":"data:image/webp;base64,UklGRjY
       if (id === 'special') { var jh = jsig ? jsig.hud() : null; if (!jh || !jh.key) continue; }   // only jets with a special key
       var tgt = (KH.used[id] || 0) >= 2 ? 0 : 1;
       KH.ra[id] = KH.ra[id] == null ? tgt : KH.ra[id] + clamp(tgt - KH.ra[id], -0.02, 0.05);
-      if (KH.ra[id] > 0.01) rows.push([id, KH_ROWS[i][1], key, KH.ra[id]]);
+      if (KH.ra[id] > 0.01) rows.push([id, st.heli && id === 'drift' ? 'HOVER HOLD' : KH_ROWS[i][1], key, KH.ra[id]]);   // helicopter: the drift key holds the hover
     }
     if (!rows.length) return;
     var rh = 17 * u, top = yBottom - (rows.length - 1) * rh;
@@ -52929,7 +52941,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"volga2":{"side":"data:image/webp;base64,UklGRjY
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793207534', updShown = false;
+  var BUILD = '1793208163', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
