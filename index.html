@@ -24642,24 +24642,27 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
 <script>
 /* ---- weather.js ---- */
 /* Flanker — weather (host-chosen presets).
-   FL.createWeather({scene, camera, renderer, world, audio?, onThunder?}) -> weather
+   FL.createWeather({scene, camera, renderer, world, fx?, audio?, onThunder?, onStrikePlane?}) -> weather
      weather.set(id, {instant, save})   id: clear|scattered|overcast|heavy|thunderstorm|fog|snow|sunset|night
      weather.preset                     current target id
      weather.presets                    [{id, name, desc}]   (also FL.WEATHER_PRESETS)
-     weather.update(dt, camState)       optional per frame; camState {vel: Vector3} (player velocity, for rain streaks)
+     weather.update(dt, camState)       per frame; camState {vel, pos} = player velocity + position (rain streaks, cloud push, strikes)
      weather.onWorldChanged(world)      call right after FL.buildWorld (map change)
      weather.netState() -> {t:'wx', id} ; weather.applyNetState(s)
-     weather.onThunder(cb(distanceM, posVector3))
-     weather.turbulence  0..1  (physics buffet / camera shake), weather.gust Vector3 (m/s^2), weather.wind Vector3 (m/s)
-     weather.flash01     lightning flash at the camera 0..1 (can feed post flash01)
-     weather.rain01 / weather.snow01  precipitation at the camera 0..1 (for audio)
+     weather.onThunder(cb(distanceM, posVector3, delayS))  fires AT THE FLASH; the caller (audio.thunder) applies the sound delay
+     weather.setFx(fx)                  fx.explosion / fx.groundDust for ground strikes (or pass fx in opts)
+     weather.turbulence 0..1, weather.gust Vector3 (m/s^2), weather.wind Vector3 (m/s)
+     weather.flash01 lightning flash at the camera 0..1;  weather.rain01 / snow01 precipitation 0..1
      weather.setQuality('fast'|'high'|'ultra'), weather.dispose()
-   Tricks (DCS / War Thunder / AC7 style, all cheap): flat 2D overcast deck (2 big quads, tiling noise, coverage threshold),
-   sprite cumulonimbus towers + rain shafts under them, fog + sky + IBL retint per preset, rain = camera-local wrapped
-   line streaks stretched by the jet's relative velocity (GPU only, no CPU per drop), lightning = ribbon bolt + ambient
-   flash + glow in the cloud deck + delayed thunder (343 m/s).
-   Patches world.update / world.cloudDensity / world.lineOfSight / world.dispose on the world object (restored on detach),
-   so combat cloud masking follows the weather. Does not edit world.js. No per-frame allocations. */
+   Clouds: overcast / heavy / storm / snow skies are a camera-centred field of the same soft sprite puffs as the world's
+   cumulus (same atlas + lighting formula), depth-sorted on the CPU every ~150 m, soft near the camera and near the
+   ground, plus dark cumulonimbus towers. The jet pushes puffs aside (vertex shader, trail of 12 points in uniforms;
+   the world cumulus get the same push by a guarded shader patch). Cloud sprites draw BEFORE the fx particles
+   (renderOrder 0.5) so vapor / smoke are never painted over by clouds behind them.
+   Lightning: ribbon bolt cloud base -> ground / sea, often 300–3000 m from the player, ground flash + fx.explosion
+   + dust, ambient flash, cloud glow; rare direct hit on the aircraft (onStrikePlane).
+   Patches world.update / cloudDensity / lineOfSight / dispose on the world object (restored on detach), so combat
+   cloud masking follows the weather. Does not edit world.js. No per-frame allocations. */
 (function () {
   'use strict';
   window.FL = window.FL || {};
@@ -24667,11 +24670,12 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   const LS_KEY = 'flanker.weather';
 
   // ------------------------------------------------------------------ presets
-  // Every numeric / [r,g,b] field is blended during a transition. Colors: fogCol / inCol are sRGB-ish hex numbers
-  // (same space as world fog), zen / deck / rain are linear pre-tonemap values (same space as world sky + cloud shaders).
+  // Every numeric / [r,g,b] field is blended during a transition. fogCol / inCol: hex (same space as world fog);
+  // zen / rain: linear pre-tonemap (same space as the world sky shader). cloudTint multiplies the cloud lit/shadow colours.
+  // f*: puff field (the layered cloud sky): fOp 0..1, fCover 0..1, fBase / fThick m, fSize m (puff sprite size).
   const BASE = {
     cloudOp: 1, cloudDen: 1, cloudTint: [1, 1, 1],
-    deckOp: 0, deckCover: 0, deckBase: 2400, deckThick: 900, deckBot: [0.45, 0.47, 0.5], deckTop: [1.0, 0.98, 0.95],
+    fOp: 0, fCover: 0, fBase: 2200, fThick: 800, fSize: 1500,
     fogMul: 1, fogAdd: 0, fogLowAlt: 0, fogMix: 0, fogCol: 0xb0b6bc, inCol: 0xdde1e6,
     skyMix: 0, zen: [0.3, 0.32, 0.35], glowMul: 1, diskMul: 1,
     sunMul: 1, sunTint: [1, 1, 1], hemiMul: 1, hemiTint: [1, 1, 1], amb: 0, sunElMix: 0, sunEl: 4,
@@ -24682,16 +24686,16 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     { id: 'clear', name: 'Clear', desc: 'Blue sky, no clouds, long visibility.',
       p: { cloudOp: 0, cloudDen: 0, fogMul: 0.7, glowMul: 1.05, sunMul: 1.06, windSpd: 3 } },
     { id: 'scattered', name: 'Scattered clouds', desc: 'The map’s own sky: puffy cumulus you can hide in.', p: {} },
-    { id: 'overcast', name: 'Overcast', desc: 'Grey cloud deck at 2,400 m. Climb through it to find the sun.',
-      p: { cloudOp: 0.85, cloudTint: [0.6, 0.62, 0.66], deckOp: 1, deckCover: 0.9, deckBase: 2400, deckThick: 900, deckBot: [0.36, 0.38, 0.41],
+    { id: 'overcast', name: 'Overcast', desc: 'Grey layer of soft clouds at 2,200 m. Climb through it to find the sun.',
+      p: { cloudOp: 0, cloudDen: 0, cloudTint: [0.62, 0.64, 0.68], fOp: 1, fCover: 0.84, fBase: 2200, fThick: 700, fSize: 1500,
         fogMul: 1.7, fogMix: 0.85, fogCol: 0xa7aeb4, inCol: 0xc9ced3, skyMix: 0.9, zen: [0.3, 0.32, 0.35], glowMul: 0.25, diskMul: 0.1,
         sunMul: 0.4, sunTint: [0.9, 0.93, 1.0], hemiMul: 0.95, env: true, turb: 0.12, windSpd: 7 } },
-    { id: 'heavy', name: 'Heavy clouds', desc: 'Low, thick, dark deck at 1,600 m, towering cells and light rain.',
-      p: { cloudOp: 0.9, cloudTint: [0.32, 0.34, 0.38], deckOp: 1, deckCover: 0.97, deckBase: 1600, deckThick: 1500, deckBot: [0.2, 0.215, 0.24], deckTop: [0.95, 0.95, 0.95],
+    { id: 'heavy', name: 'Heavy clouds', desc: 'Low, thick, dark clouds at 1,500 m, towering cells and light rain.',
+      p: { cloudOp: 0, cloudDen: 0, cloudTint: [0.34, 0.36, 0.4], fOp: 1, fCover: 0.93, fBase: 1500, fThick: 1200, fSize: 1700,
         fogMul: 2.4, fogAdd: 0.00001, fogMix: 0.95, fogCol: 0x80888f, inCol: 0x9aa1a8, skyMix: 1, zen: [0.16, 0.17, 0.19], glowMul: 0.1, diskMul: 0,
         sunMul: 0.22, sunTint: [0.85, 0.9, 1.0], hemiMul: 0.75, env: true, rain: 0.3, cells: 1, turb: 0.35, windSpd: 11 } },
-    { id: 'thunderstorm', name: 'Thunderstorm', desc: 'Black sky, heavy rain, lightning and thunder, rough air.',
-      p: { cloudOp: 0.9, cloudTint: [0.13, 0.14, 0.17], deckOp: 1, deckCover: 1, deckBase: 1300, deckThick: 2300, deckBot: [0.075, 0.082, 0.1], deckTop: [0.8, 0.8, 0.82],
+    { id: 'thunderstorm', name: 'Thunderstorm', desc: 'Black sky, heavy rain, lightning that hits the ground near you, rough air.',
+      p: { cloudOp: 0, cloudDen: 0, cloudTint: [0.15, 0.16, 0.19], fOp: 1, fCover: 1, fBase: 1200, fThick: 1700, fSize: 1900,
         fogMul: 3.2, fogAdd: 0.00004, fogMix: 1, fogCol: 0x454c55, inCol: 0x5a6068, skyMix: 1, zen: [0.035, 0.04, 0.05], glowMul: 0.03, diskMul: 0,
         sunMul: 0.08, sunTint: [0.8, 0.86, 1.0], hemiMul: 0.42, hemiTint: [0.8, 0.85, 0.95], env: true, envGnd: [0.03, 0.03, 0.03],
         rain: 1, rainCol: [0.42, 0.45, 0.5], lightning: 10, cells: 1, turb: 0.7, windSpd: 16 } },
@@ -24699,7 +24703,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       p: { cloudOp: 0.7, fogMul: 1.2, fogAdd: 0.00034, fogLowAlt: 1, fogMix: 1, fogCol: 0xb9bfc4, inCol: 0xd0d4d8, skyMix: 0.75, zen: [0.42, 0.45, 0.5],
         glowMul: 0.35, diskMul: 0.25, sunMul: 0.6, hemiMul: 1.05, env: true, windSpd: 1.5 } },
     { id: 'snow', name: 'Snow', desc: 'Grey winter sky and falling snow. Best on the Norway fjords.',
-      p: { cloudOp: 0.8, cloudTint: [0.7, 0.72, 0.77], deckOp: 1, deckCover: 0.82, deckBase: 1900, deckThick: 1100, deckBot: [0.42, 0.44, 0.48],
+      p: { cloudOp: 0, cloudDen: 0, cloudTint: [0.72, 0.74, 0.79], fOp: 1, fCover: 0.72, fBase: 1900, fThick: 800, fSize: 1500,
         fogMul: 2.2, fogAdd: 0.00006, fogMix: 0.95, fogCol: 0xb4bbc3, inCol: 0xd3d8dd, skyMix: 0.9, zen: [0.34, 0.36, 0.4], glowMul: 0.2, diskMul: 0.05,
         sunMul: 0.35, sunTint: [0.9, 0.95, 1.05], hemiMul: 1.0, env: true, snow: 1, turb: 0.15, windSpd: 6 } },
     { id: 'sunset', name: 'Sunset', desc: 'Low orange sun, long shadows, pink clouds.',
@@ -24731,7 +24735,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   }
   const s2l = (c) => (c <= 0.04045 ? c * 0.0773993808 : Math.pow(c * 0.9478672986 + 0.0521327014, 2.4));
 
-  // tileable value-noise fBm, 0..1 (shared by GPU texture and CPU density so combat and visuals agree)
+  // tileable value-noise fBm, 0..1 — decides where the cloud field has clouds (same function for visuals and combat density)
   const NN = 256;
   function makeNoise(seed) {
     const R = rng(seed), out = new Float32Array(NN * NN);
@@ -24751,7 +24755,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     for (let i = 0; i < out.length; i++) out[i] = (out[i] - mn) / (mx - mn);
     return out;
   }
-  function noiseAt(N, u, v) { // bilinear, wrap; texel centres like GL LinearFilter
+  function noiseAt(N, u, v) { // bilinear, wrap
     let x = u * NN - 0.5, y = v * NN - 0.5;
     x -= Math.floor(x / NN) * NN; y -= Math.floor(y / NN) * NN;
     const ix = x | 0, iy = y | 0, tx = x - ix, ty = y - iy, ix1 = (ix + 1) % NN, iy1 = (iy + 1) % NN;
@@ -24761,13 +24765,32 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
 
   const LOGV = ['#include <common>', '#include <logdepthbuf_pars_vertex>'];
   const LOGF = ['#include <logdepthbuf_pars_fragment>'];
+  const NTRAIL = 12;
+  // cloud push: puffs near the jet's recent path move sideways (+ a little swirl) and thin out, then drift back as the trail ages
+  const PUSH_GLSL = [
+    'uniform vec4 uTrail[' + NTRAIL + ']; uniform vec3 uTrailV; uniform float uPush; uniform float uPushR;',
+    'vec3 wxPush(vec3 c, float size, out float hole){',
+    '  vec3 o = vec3(0.0); hole = 0.0;',
+    '  for (int i = 0; i < ' + NTRAIL + '; i++) {',
+    '    vec4 t = uTrail[i]; if (t.w <= 0.001) continue;',
+    '    vec3 d = c - t.xyz; float r = uPushR + size * 0.45; float q = dot(d, d) / (r * r);',
+    '    if (q > 4.0) continue;',
+    '    float k = t.w * exp(-q);',
+    '    vec3 dn = d / (length(d) + 1.0); dn -= uTrailV * dot(dn, uTrailV);',
+    '    o += (dn * 0.9 + cross(uTrailV, dn) * 0.35) * k * size * uPush;',
+    '    hole = max(hole, k * 0.6);',
+    '  }',
+    '  return o;',
+    '}'].join('\n');
 
   // ================================================================== create
   FL.createWeather = function (opt) {
     opt = opt || {};
     const scene = opt.scene, camera = opt.camera, renderer = opt.renderer, audio = opt.audio || null;
+    let fxRef = opt.fx || null;
     const V3 = THREE.Vector3;
     const thunderCbs = []; if (typeof opt.onThunder === 'function') thunderCbs.push(opt.onThunder);
+    const onStrikePlane = typeof opt.onStrikePlane === 'function' ? opt.onStrikePlane : null;
     let quality = 1;
 
     // ---- blended parameter state (no per-frame allocation: fixed key lists)
@@ -24785,66 +24808,164 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     }
     function copyP(dst, src) { for (const k of NUM) dst[k] = src[k]; for (const k of VEC) { dst[k][0] = src[k][0]; dst[k][1] = src[k][1]; dst[k][2] = src[k][2]; } dst.env = src.env; dst.envGnd = src.envGnd; }
     function mkP() { const o = {}; for (const k of NUM) o[k] = 0; for (const k of VEC) o[k] = [0, 0, 0]; o.env = false; return o; }
-    const P = mkP(), PA = mkP();  // P = current blended, PA = blend start
+    const P = mkP(), PA = mkP();
     let PB = RES.scattered, curId = 'scattered', tBlend = 1, blendDur = 4, midDone = true;
 
     const weather = {
       presets: FL.WEATHER_PRESETS, preset: 'scattered',
       turbulence: 0, gust: new V3(), wind: new V3(), flash01: 0, rain01: 0, snow01: 0, inCloud: 0,
-      stats: { strikes: 0 }
+      stats: { strikes: 0, groundStrikes: 0, planeHits: 0, puffs: 0, sortMs: 0 }
     };
 
-    // ---- shared uniforms / textures
     const noise = makeNoise(7331);
-    const noiseTex = (function () {
-      const d = new Uint8Array(NN * NN * 4);
-      for (let i = 0; i < NN * NN; i++) { const v = Math.round(noise[i] * 255); d[i * 4] = v; d[i * 4 + 1] = v; d[i * 4 + 2] = v; d[i * 4 + 3] = 255; }
-      const t = new THREE.DataTexture(d, NN, NN, THREE.RGBAFormat);
-      t.wrapS = t.wrapT = THREE.RepeatWrapping; t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true; t.needsUpdate = true;
-      return t;
-    })();
-    const DECK_SCALE = 14000, DECK_SCALE2 = DECK_SCALE * 0.37, DECK_R = 42000, DECK_SOFT = 0.07;
+    const NSCALE = 14000, NSCALE2 = NSCALE * 0.37;
     const off1 = new THREE.Vector2(), off2 = new THREE.Vector2(1234, 5678);
     const flashPos = new V3(0, -1e6, 0);
-    const DU = {
-      tNoise: { value: noiseTex }, uOff1: { value: off1 }, uOff2: { value: off2 }, uScale: { value: DECK_SCALE }, uScale2: { value: DECK_SCALE2 },
-      uCover: { value: 0 }, uSoft: { value: DECK_SOFT }, uCam: { value: new V3() }, uR: { value: DECK_R }, uOpacity: { value: 0 },
-      uFlashPos: { value: flashPos }, uFlash: { value: 0 }, uFlashCol: { value: new V3(0.75, 0.8, 1.0) }
-    };
 
-    // ---- cloud deck: two big quads that follow the camera (bottom faces down, top faces up)
-    const deckVS = LOGV.concat(['#include <fog_pars_vertex>', 'varying vec3 vW;', 'void main(){',
-      '  vec4 wp = modelMatrix * vec4(position, 1.0); vW = wp.xyz;', '  vec4 mvPosition = viewMatrix * wp;',
-      '  gl_Position = projectionMatrix * mvPosition;', '  #include <logdepthbuf_vertex>', '  #include <fog_vertex>', '}']).join('\n');
-    const deckFS = ['#include <common>', '#include <fog_pars_fragment>'].concat(LOGF, [
-      'uniform sampler2D tNoise; uniform vec2 uOff1; uniform vec2 uOff2; uniform float uScale; uniform float uScale2; uniform float uCover; uniform float uSoft;',
-      'uniform vec3 uCol; uniform float uTop; uniform vec3 uCam; uniform float uR; uniform float uOpacity; uniform vec3 uFlashPos; uniform float uFlash; uniform vec3 uFlashCol;',
-      'varying vec3 vW;', 'void main(){', '  #include <logdepthbuf_fragment>',
-      '  vec2 q = vW.xz;',
-      '  float n = texture2D(tNoise, (q + uOff1) / uScale).r * 0.62 + texture2D(tNoise, (q + uOff2) / uScale2).r * 0.38;',
-      '  float th = 1.0 - uCover;',
-      '  float a = smoothstep(th - uSoft, th + uSoft, n);',
-      '  float d = length(q - uCam.xz);',
-      // coverage is cut hard at 0.5 so the deck can write depth (hides cumulus / towers behind it); soft only by distance + opacity
-      '  if (!(a > 0.5)) discard;',
-      '  a = smoothstep(0.5, 0.8, a) * (1.0 - smoothstep(uR * 0.72, uR * 0.98, d)) * uOpacity;',
-      '  if (!(a > 0.004)) discard;',
-      '  float thick = clamp((n - th) / max(1.0 - th, 0.05), 0.0, 1.0);',
-      '  vec3 col = uTop > 0.5 ? uCol * (0.8 + 0.28 * thick) : uCol * (1.15 - 0.45 * thick);',
-      '  col += uFlashCol * uFlash * exp(-length(vW - uFlashPos) / 3200.0);',
-      '  gl_FragColor = vec4(max(col, vec3(0.0)), clamp(a, 0.0, 1.0));',
-      '  #include <tonemapping_fragment>', '  #include <encodings_fragment>', '  #include <fog_fragment>',
-      '  #ifdef USE_FOG',
-      '  gl_FragColor.rgb = mix(gl_FragColor.rgb, fogColor, 0.85 * smoothstep(uR * 0.3, uR * 0.9, d));',   // far deck melts into the horizon colour
-      '  #endif', '}']).join('\n');
-    function deckMat(top) {
-      const u = Object.assign({}, THREE.UniformsUtils.clone(THREE.UniformsLib.fog), DU, { uCol: { value: new V3(0.4, 0.4, 0.4) }, uTop: { value: top ? 1 : 0 } });
-      return new THREE.ShaderMaterial({ uniforms: u, vertexShader: deckVS, fragmentShader: deckFS, transparent: true, depthWrite: true, depthTest: true, fog: true, side: THREE.FrontSide });
+    // ================================================================ cloud puff field
+    const FR = 21000;                       // field radius around the camera (m); pattern repeats every 2*FR
+    const NCAND = 4200, NTOW = 7, TOW_P = 39, CAP = NCAND + NTOW * TOW_P;
+    const cand = (function () {             // stratified candidates in the 2FR x 2FR tile, two height levels
+      const R = rng(2468), g = Math.ceil(Math.sqrt(NCAND / 2)), cell = 2 * FR / g, c = { x: new Float32Array(NCAND), z: new Float32Array(NCAND), h: new Float32Array(NCAND), s: new Float32Array(NCAND), r: new Float32Array(NCAND), t: new Uint8Array(NCAND), q: new Float32Array(NCAND) };
+      for (let i = 0; i < NCAND; i++) {
+        const k = i % (g * g), lev = (i / (g * g)) | 0;
+        c.x[i] = ((k % g) + R()) * cell; c.z[i] = (((k / g) | 0) + R()) * cell;
+        c.h[i] = lev ? 0.45 + R() * 0.55 : R() * 0.5; c.s[i] = 0.75 + R() * 0.5; c.r[i] = R() * 6.283; c.t[i] = (R() * 4) | 0; c.q[i] = R();
+      }
+      return c;
+    })();
+    const PU = {                             // shared by the field material and (patched) world cloud material
+      uTrail: { value: [] }, uTrailV: { value: new V3(0, 0, -1) }, uPush: { value: 0.32 }, uPushR: { value: 160 }
+    };
+    for (let i = 0; i < NTRAIL; i++) PU.uTrail.value.push(new THREE.Vector4(0, -1e6, 0, 0));
+    const fieldU = Object.assign({}, THREE.UniformsUtils.clone(THREE.UniformsLib.fog), PU, {
+      map: { value: null }, uSunDir: { value: new V3(0, 1, 0) }, uLit: { value: new V3(1.05, 0.97, 0.88) }, uShadow: { value: new V3(0.3, 0.335, 0.4) },
+      uOpacity: { value: 0.92 }, uFar: { value: FR }, uFlashPos: { value: flashPos }, uFlash: { value: 0 }, uFlashCol: { value: new V3(0.7, 0.75, 1.0) }
+    });
+    const fieldMat = new THREE.ShaderMaterial({
+      uniforms: fieldU,
+      vertexShader: ['#include <common>', '#include <fog_pars_vertex>', '#include <logdepthbuf_pars_vertex>', PUSH_GLSL,
+        'attribute vec3 iPos; attribute vec4 iData; attribute vec2 iExt;',
+        'uniform float uFar; uniform vec3 uFlashPos; uniform float uFlash;',
+        'varying vec2 vUv; varying vec2 vP; varying float vShade; varying float vAlpha; varying vec3 vVd; varying float vGy; varying float vFl;',
+        'void main(){',
+        '  float size = iData.x; float hole;',
+        '  vec3 c = iPos + wxPush(iPos, size, hole);',
+        '  vec4 mv = modelViewMatrix * vec4(c, 1.0);',
+        '  float dist = length(mv.xyz);',
+        '  vAlpha = smoothstep(size * 0.22, size * 0.95, dist) * (1.0 - smoothstep(uFar * 0.72, uFar * 0.97, length(c.xz - cameraPosition.xz))) * (1.0 - hole) * iExt.y;',
+        '  float cr = cos(iData.y), sr = sin(iData.y);',
+        '  vec2 p = position.xy; vec2 pr = vec2(cr * p.x - sr * p.y, sr * p.x + cr * p.y);',
+        '  mv.xy += pr * size; vP = pr * 2.0;',
+        '  float tl = iData.w; vUv = (uv + vec2(mod(tl, 2.0), floor(tl / 2.0))) * 0.5;',
+        '  vShade = iData.z; vVd = normalize(c - cameraPosition);',
+        '  float wy = c.y + (pr.x * viewMatrix[1][0] + pr.y * viewMatrix[1][1]) * size;',   // world y of this corner (camera right.y / up.y)
+        '  vGy = (wy - iExt.x) / (size * 0.3);',
+        '  vFl = uFlash * exp(-length(c - uFlashPos) / 3500.0);',
+        '  vec4 mvPosition = mv;',
+        '  gl_Position = projectionMatrix * mv;',
+        '  #include <logdepthbuf_vertex>',
+        '  #include <fog_vertex>',
+        '  if (vAlpha < 0.002) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);',
+        '}'].join('\n'),
+      fragmentShader: ['#include <common>', '#include <fog_pars_fragment>', '#include <logdepthbuf_pars_fragment>',
+        'uniform sampler2D map; uniform vec3 uSunDir; uniform vec3 uLit; uniform vec3 uShadow; uniform float uOpacity; uniform vec3 uFlashCol;',
+        'varying vec2 vUv; varying vec2 vP; varying float vShade; varying float vAlpha; varying vec3 vVd; varying float vGy; varying float vFl;',
+        'void main(){',
+        '  #include <logdepthbuf_fragment>',
+        '  vec4 tx = texture2D(map, vUv);',
+        '  float a = tx.a * vAlpha * uOpacity * smoothstep(0.0, 1.0, vGy);',   // soft where the puff meets the ground
+        '  if (!(a > 0.006)) discard;',
+        '  vec3 nv = normalize(vec3(vP, 0.75));',
+        '  vec3 nw = inverseTransformDirection(nv, viewMatrix);',
+        '  float ndl = dot(nw, uSunDir) * 0.5 + 0.5;',
+        '  float l = clamp(ndl * 0.6 + vShade * 0.55 - 0.18 + (tx.r - 0.6) * 0.7, 0.0, 1.0);',
+        '  l = l * l * (3.0 - 2.0 * l);',
+        '  vec3 col = mix(uShadow, uLit, l);',
+        '  float fw = pow(max(dot(vVd, uSunDir), 0.0), 6.0);',
+        '  col += uLit * fw * (1.0 - tx.a) * 0.9;',
+        '  col += uFlashCol * vFl * (0.4 + tx.r);',
+        '  gl_FragColor = vec4(max(col, 0.0), clamp(a, 0.0, 1.0));',
+        '  #include <tonemapping_fragment>',
+        '  #include <encodings_fragment>',
+        '  #include <fog_fragment>',
+        '}'].join('\n'),
+      transparent: true, depthWrite: false, depthTest: true, fog: true
+    });
+    const fGeo = new THREE.InstancedBufferGeometry();
+    fGeo.setAttribute('position', new THREE.Float32BufferAttribute([-0.5, -0.5, 0, 0.5, -0.5, 0, 0.5, 0.5, 0, -0.5, 0.5, 0], 3));
+    fGeo.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 1, 1, 0, 1], 2));
+    fGeo.setIndex([0, 1, 2, 0, 2, 3]);
+    const iPos = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 3), 3), iData = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 4), 4), iExt = new THREE.InstancedBufferAttribute(new Float32Array(CAP * 2), 2);
+    for (const a of [iPos, iData, iExt]) a.setUsage(THREE.DynamicDrawUsage);
+    fGeo.setAttribute('iPos', iPos); fGeo.setAttribute('iData', iData); fGeo.setAttribute('iExt', iExt); fGeo.instanceCount = 0;
+    const field = new THREE.Mesh(fGeo, fieldMat);
+    field.frustumCulled = false; field.renderOrder = 0.5; field.visible = false; field.name = 'wx-clouds'; scene.add(field);
+    // fallback atlas (if a map has no cloud mesh to borrow it from)
+    let ownAtlas = null;
+    function fallbackAtlas() {
+      if (ownAtlas) return ownAtlas;
+      const S = 256, T = 128, cv = document.createElement('canvas'); cv.width = cv.height = S; const g = cv.getContext('2d'), R = rng(7);
+      for (let t = 0; t < 4; t++) {
+        const ox = (t % 2) * T, oy = ((t / 2) | 0) * T;
+        for (let k = 0; k < 40; k++) {
+          const a = R() * 6.283, rr = Math.sqrt(R()), x = ox + 64 + Math.cos(a) * rr * 34, y = oy + 64 + Math.sin(a) * rr * 24, r = (11 + R() * 22) * (1 - rr * 0.45);
+          const gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, 'rgba(255,255,255,0.34)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(x - r, y - r, 2 * r, 2 * r);
+        }
+      }
+      ownAtlas = new THREE.CanvasTexture(cv); return ownAtlas;
     }
-    const deckGeo = new THREE.PlaneGeometry(DECK_R * 2, DECK_R * 2, 1, 1);
-    const deckBot = new THREE.Mesh(deckGeo, deckMat(false)); deckBot.rotation.x = Math.PI / 2;   // normal -Y
-    const deckTop = new THREE.Mesh(deckGeo, deckMat(true)); deckTop.rotation.x = -Math.PI / 2;   // normal +Y
-    for (const m of [deckBot, deckTop]) { m.frustumCulled = false; m.renderOrder = 4; m.visible = false; m.name = 'wx-deck'; scene.add(m); }
+
+    // ---- sorting / rebuilding the visible field (CPU, every ~150 m or 0.6 s; not per frame)
+    const key = new Float64Array(CAP), ord = new Uint32Array(CAP);
+    const tmpP = new Float32Array(CAP * 3), tmpD = new Float32Array(CAP * 4), tmpE = new Float32Array(CAP * 2);
+    const cmpKey = (a, b) => key[b] - key[a];
+    let lastSortPos = new V3(1e9, 0, 0), sortT = 9, fieldDirty = true;
+    function covAt(x, z) {
+      return noiseAt(noise, (x + off1.x) / NSCALE, (z + off1.y) / NSCALE) * 0.62 + noiseAt(noise, (x + off2.x) / NSCALE2, (z + off2.y) / NSCALE2) * 0.38;
+    }
+    function rebuildField(cp) {
+      const t0 = performance.now();
+      let n = 0;
+      const th = 1 - P.fCover, on = P.fOp > 0.01 && P.fCover > 0.01, gY = W && W.groundY;
+      const step = quality < 0.6 ? 2 : 1, sz0 = P.fSize * (step === 2 ? 1.3 : 1);
+      if (on) for (let i = 0; i < NCAND; i += step) {
+        let rx = cand.x[i] - cp.x + FR; rx -= Math.floor(rx / (2 * FR)) * 2 * FR; rx -= FR;
+        let rz = cand.z[i] - cp.z + FR; rz -= Math.floor(rz / (2 * FR)) * 2 * FR; rz -= FR;
+        if (rx * rx + rz * rz > FR * FR) continue;
+        const x = cp.x + rx, z = cp.z + rz;
+        const cv = sstep(th - 0.1, th + 0.1, covAt(x, z));
+        if (cv < 0.04) continue;
+        const sz = sz0 * cand.s[i] * (0.55 + 0.45 * cv);
+        const y = P.fBase + sz * 0.3 + cand.h[i] * Math.max(0, P.fThick - sz * 0.45);
+        const dy = y - cp.y;
+        tmpP[n * 3] = x; tmpP[n * 3 + 1] = y; tmpP[n * 3 + 2] = z;
+        tmpD[n * 4] = sz; tmpD[n * 4 + 1] = cand.r[i]; tmpD[n * 4 + 2] = 0.08 + cand.h[i] * 0.8; tmpD[n * 4 + 3] = cand.t[i];
+        tmpE[n * 2] = gY ? gY(x, -z) : 0; tmpE[n * 2 + 1] = Math.min(1, P.fOp) * (0.6 + 0.4 * cv);
+        key[n] = rx * rx + rz * rz + dy * dy; ord[n] = n; n++;
+      }
+      if (cells && P.cells > 0.5) for (let i = 0; i < cells.puffs.length; i++) {
+        const p = cells.puffs[i], dx = p[0] - cp.x, dy = p[1] - cp.y, dz = p[2] - cp.z;
+        tmpP[n * 3] = p[0]; tmpP[n * 3 + 1] = p[1]; tmpP[n * 3 + 2] = p[2];
+        tmpD[n * 4] = p[3]; tmpD[n * 4 + 1] = p[4]; tmpD[n * 4 + 2] = p[5]; tmpD[n * 4 + 3] = p[6];
+        tmpE[n * 2] = p[7]; tmpE[n * 2 + 1] = 1;
+        key[n] = dx * dx + dy * dy + dz * dz; ord[n] = n; n++;
+      }
+      ord.subarray(0, n).sort(cmpKey);
+      const A = iPos.array, D = iData.array, E = iExt.array;
+      for (let k = 0; k < n; k++) {
+        const j = ord[k];
+        A[k * 3] = tmpP[j * 3]; A[k * 3 + 1] = tmpP[j * 3 + 1]; A[k * 3 + 2] = tmpP[j * 3 + 2];
+        D[k * 4] = tmpD[j * 4]; D[k * 4 + 1] = tmpD[j * 4 + 1]; D[k * 4 + 2] = tmpD[j * 4 + 2]; D[k * 4 + 3] = tmpD[j * 4 + 3];
+        E[k * 2] = tmpE[j * 2]; E[k * 2 + 1] = tmpE[j * 2 + 1];
+      }
+      fGeo.instanceCount = n;
+      iPos.updateRange.count = n * 3; iData.updateRange.count = n * 4; iExt.updateRange.count = n * 2;
+      iPos.needsUpdate = iData.needsUpdate = iExt.needsUpdate = true;
+      field.visible = n > 0;
+      weather.stats.puffs = n; weather.stats.sortMs = Math.round((performance.now() - t0) * 10) / 10;
+      lastSortPos.copy(cp); sortT = 0; fieldDirty = false;
+    }
 
     // ---- precipitation: camera-local wrapped box, GPU only
     const RAIN_N = 7000, SNOW_N = 6000;
@@ -24894,7 +25015,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     for (const m of [rainMesh, snowMesh]) { m.frustumCulled = false; m.renderOrder = 8; m.visible = false; m.name = 'wx-precip'; scene.add(m); }
 
     // ---- lightning bolt: camera-facing ribbon, additive, HDR bright (bloom picks it up)
-    const MAIN_SEG = 44, BR_SEG = 12, NBR = 3, NSEG = MAIN_SEG + NBR * BR_SEG;
+    const MAIN_SEG = 48, BR_SEG = 12, NBR = 4, NSEG = MAIN_SEG + NBR * BR_SEG;
     const boltPos = new Float32Array(NSEG * 4 * 3), boltDir = new Float32Array(NSEG * 4 * 3), boltSide = new Float32Array(NSEG * 4), boltW = new Float32Array(NSEG * 4);
     const boltIdx = []; for (let s = 0; s < NSEG; s++) { const b = s * 4; boltIdx.push(b, b + 1, b + 2, b + 2, b + 1, b + 3); }
     const boltGeo = new THREE.BufferGeometry();
@@ -24905,7 +25026,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       uniforms: { uI: { value: 0 }, uCol: { value: new V3(0.8, 0.85, 1.0) } },
       vertexShader: LOGV.concat(['attribute vec3 aDir; attribute float aSide; attribute float aW; varying float vS; varying float vW;', 'void main(){',
         '  vec3 tc = cameraPosition - position; float dist = length(tc);', '  vec3 sd = cross(aDir, tc / max(dist, 1.0)); float sl = length(sd); sd = sl > 1e-4 ? sd / sl : vec3(1.0, 0.0, 0.0);',
-        '  float w = aW * max(4.0, dist * 0.0022);', '  vS = aSide; vW = aW;', '  vec4 mvPosition = modelViewMatrix * vec4(position + sd * aSide * w, 1.0);',
+        '  float w = aW * max(2.5, dist * 0.0022);', '  vS = aSide; vW = aW;', '  vec4 mvPosition = modelViewMatrix * vec4(position + sd * aSide * w, 1.0);',
         '  gl_Position = projectionMatrix * mvPosition;', '  #include <logdepthbuf_vertex>', '}']).join('\n'),
       fragmentShader: LOGF.concat(['uniform float uI; uniform vec3 uCol; varying float vS; varying float vW;', 'void main(){', '  #include <logdepthbuf_fragment>',
         '  float c = 1.0 - vS * vS; c = c * c;', '  vec3 col = uCol * uI * (0.35 + 1.6 * c) * (0.4 + 0.6 * vW);', '  gl_FragColor = vec4(max(col, vec3(0.0)), 1.0);', '}']).join('\n'),
@@ -24928,20 +25049,16 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       return m;
     })();
 
-    // ---- shafts texture (rain curtains under storm cells)
+    // ---- rain curtains under storm cells (soft at the silhouette, the ground and the cloud base)
     const shaftTex = (function () {
-      const cv = document.createElement('canvas'); cv.width = 128; cv.height = 64; const g = cv.getContext('2d'), R = rng(555);
-      const img = g.createImageData(128, 64);
+      const cv = document.createElement('canvas'); cv.width = 128; cv.height = 4; const g = cv.getContext('2d'), R = rng(555);
+      const img = g.createImageData(128, 4);
       const col = new Float32Array(128); for (let x = 0; x < 128; x++) col[x] = 0.45 + R() * 0.55;
       for (let x = 0; x < 128; x++) col[x] = (col[x] + col[(x + 1) % 128] + col[(x + 127) % 128]) / 3;
-      for (let y = 0; y < 64; y++) for (let x = 0; x < 128; x++) {
-        const a = col[x] * 255;   // vertical streaks only; vertical fades are in the shader
-        const i = (y * 128 + x) * 4; img.data[i] = img.data[i + 1] = img.data[i + 2] = a; img.data[i + 3] = 255;
-      }
+      for (let y = 0; y < 4; y++) for (let x = 0; x < 128; x++) { const i = (y * 128 + x) * 4; img.data[i] = img.data[i + 1] = img.data[i + 2] = col[x] * 255; img.data[i + 3] = 255; }
       g.putImageData(img, 0, 0);
       const t = new THREE.CanvasTexture(cv); t.wrapS = THREE.RepeatWrapping; return t;
     })();
-    // soft curtain: fades at the silhouette (view-angle), at the ground and into the cloud base, so no hard cylinder shows
     const shaftMat = new THREE.ShaderMaterial({
       uniforms: Object.assign(THREE.UniformsUtils.clone(THREE.UniformsLib.fog), { tS: { value: shaftTex }, uOpacity: { value: 0 }, uCol: { value: new V3(0.035, 0.04, 0.05) } }),
       vertexShader: LOGV.concat(['#include <fog_pars_vertex>', 'varying vec2 vUv; varying vec3 vW; varying vec3 vN;', 'void main(){', '  vUv = uv;',
@@ -24960,10 +25077,28 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     // ================================================================ world attach / detach
     let W = null, ORIG = null, cells = null;
     const B0 = { fogD: 0.00001, fogCol: new THREE.Color(), sunI: 2.5, sunCol: new THREE.Color(), hemiI: 0.35, hemiCol: new THREE.Color(), hemiGnd: new THREE.Color(),
-      zen: new V3(), hor: new V3(), glow: new V3(), disk: 40, white: new V3(), sunDir: new V3(), env: null, clouds: [] };
+      zen: new V3(), hor: new V3(), glow: new V3(), disk: 40, white: new V3(), sunDir: new V3(), env: null, clouds: [], lit: new V3(1.05, 0.97, 0.88), shadow: new V3(0.3, 0.335, 0.4) };
     let skyU = null, hemi = null, ourEnv = null, envFor = '';
-    const tmpC = new THREE.Color(), tmpV = new V3(), tmpV2 = new V3(), sunDirTmp = new V3();
+    const tmpV = new V3(), tmpV2 = new V3(), sunDirTmp = new V3();
 
+    // guarded patch of the world cumulus shader: same push as the field, and draw before the fx particles
+    const A_MV = '  vec4 mv = modelViewMatrix * vec4(iPos, 1.0);', A_AL = '  vAlpha = smoothstep(size*0.22, size*0.95, dist);', A_MAIN = 'void main(){';
+    function patchCloudMat(c) {
+      const m = c.mesh.material;
+      c.vs = m.vertexShader; c.order = c.mesh.renderOrder;
+      c.mesh.renderOrder = 0.5;
+      const vs = m.vertexShader;
+      if (vs.indexOf(A_MV) < 0 || vs.indexOf(A_AL) < 0 || vs.indexOf(A_MAIN) < 0 || vs.indexOf('wxPush') >= 0) return;
+      for (const k in PU) m.uniforms[k] = PU[k];
+      m.vertexShader = vs.replace(A_MAIN, PUSH_GLSL + '\n' + A_MAIN)
+        .replace(A_MV, '  float wxH; vec3 wxC = iPos + wxPush(iPos, iData.x, wxH);\n  vec4 mv = modelViewMatrix * vec4(wxC, 1.0);')
+        .replace(A_AL, '  vAlpha = smoothstep(size*0.22, size*0.95, dist) * (1.0 - wxH);');
+      m.needsUpdate = true; c.patched = true;
+    }
+    function unpatchCloudMat(c) {
+      c.mesh.renderOrder = c.order;
+      if (c.patched) { c.mesh.material.vertexShader = c.vs; c.mesh.material.needsUpdate = true; c.patched = false; }
+    }
     function findSceneBits() {
       skyU = null; hemi = null; B0.clouds.length = 0;
       for (const o of scene.children) {
@@ -24971,7 +25106,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         else if (o.isHemisphereLight && !hemi) hemi = o;
         else if (o.name === 'clouds' && o.material && o.material.uniforms && o.material.uniforms.uLit) {
           const u = o.material.uniforms;
-          B0.clouds.push({ mesh: o, u: u, lit: u.uLit.value.clone(), shadow: u.uShadow.value.clone(), op: u.uOpacity.value, sun: u.uSunDir ? u.uSunDir.value.clone() : null });
+          B0.clouds.push({ mesh: o, u: u, lit: u.uLit.value.clone(), shadow: u.uShadow.value.clone(), op: u.uOpacity.value, sun: u.uSunDir ? u.uSunDir.value.clone() : null, vs: null, order: 5, patched: false });
         }
       }
     }
@@ -24987,12 +25122,18 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       if (skyU) { B0.zen.copy(skyU.uZenith.value); B0.hor.copy(skyU.uHorizon.value); B0.glow.copy(skyU.uGlow.value); B0.disk = skyU.uSunDisk.value; B0.white.copy(skyU.uWhiteCol.value); }
       if (w.sunDir) B0.sunDir.copy(w.sunDir);
       B0.env = scene.environment; envFor = '';
+      if (B0.clouds.length) {
+        const u = B0.clouds[0].u; B0.lit.copy(B0.clouds[0].lit); B0.shadow.copy(B0.clouds[0].shadow);
+        fieldU.map.value = u.map.value || fallbackAtlas(); fieldU.uOpacity.value = Math.max(0.85, u.uOpacity.value || 0.92);
+      } else { fieldU.map.value = fallbackAtlas(); B0.lit.set(1.05, 0.97, 0.88); B0.shadow.set(0.3, 0.335, 0.4); }
+      for (const c of B0.clouds) patchCloudMat(c);
       buildCells(w);
       w.update = function (dt, cam) { ORIG.update.call(w, dt, cam); try { step(dt, cam || camera); } catch (e) { if (!weather._err) { weather._err = String(e && e.stack || e); console.warn('weather', e); } } };
       w.cloudDensity = cloudDensityW; w.lineOfSight = losW;
       w.dispose = function () { const d = ORIG.dispose; detach(); return d.apply(w, arguments); };
       tBlend = 1; copyP(P, PB); midDone = false; applyDiscrete(); midDone = true;
-      prevCam.copy(camera.position); camVel.set(0, 0, 0); white = 0;
+      prevCam.copy(camera.position); camVel.set(0, 0, 0); white = 0; fieldDirty = true;
+      for (let i = 0; i < NTRAIL; i++) PU.uTrail.value[i].w = 0;
     }
     function detach() {
       if (!W) return;
@@ -25002,29 +25143,29 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       if (hemi) { hemi.intensity = B0.hemiI; hemi.color.copy(B0.hemiCol); hemi.groundColor.copy(B0.hemiGnd); }
       if (skyU) { skyU.uZenith.value.copy(B0.zen); skyU.uHorizon.value.copy(B0.hor); skyU.uGlow.value.copy(B0.glow); skyU.uSunDisk.value = B0.disk; skyU.uWhiteCol.value.copy(B0.white); if (skyU.uSunDir) skyU.uSunDir.value.copy(B0.sunDir); }
       if (w.sunDir) w.sunDir.copy(B0.sunDir);
-      for (const c of B0.clouds) { c.u.uLit.value.copy(c.lit); c.u.uShadow.value.copy(c.shadow); c.u.uOpacity.value = c.op; c.mesh.visible = true; if (c.sun) c.u.uSunDir.value.copy(c.sun); }
+      for (const c of B0.clouds) { c.u.uLit.value.copy(c.lit); c.u.uShadow.value.copy(c.shadow); c.u.uOpacity.value = c.op; c.mesh.visible = true; if (c.sun) c.u.uSunDir.value.copy(c.sun); unpatchCloudMat(c); }
       if (scene.fog) { scene.fog.density = B0.fogD; scene.fog.color.copy(B0.fogCol); }
       if (ourEnv && scene.environment === ourEnv.texture) scene.environment = B0.env;
       if (ourEnv) { ourEnv.dispose(); ourEnv = null; } envFor = '';
       removeCells();
+      field.visible = false; fGeo.instanceCount = 0;
       W = null; ORIG = null; skyU = null; hemi = null; B0.clouds.length = 0;
     }
 
-    // ---- storm cells: cumulonimbus towers (sprites share the world cloud material, so they get its lighting + tint)
+    // ---- storm cells: cumulonimbus towers (puffs go into the same sorted field mesh)
     function removeCells() {
       if (!cells) return;
-      if (cells.mesh) { scene.remove(cells.mesh); cells.mesh.geometry.dispose(); }
       for (const s of cells.shafts) scene.remove(s);
       cells = null;
     }
     function buildCells(w) {
       removeCells();
-      const R = rng(9001 + ((w.mapId || 'x').charCodeAt(0) * 131 + (w.mapId || 'x').length * 7)), towers = [], puffs = [];
+      const id = w.mapId || 'x', R = rng(9001 + id.charCodeAt(0) * 131 + id.length * 7), towers = [], puffs = [];
       const sp = w.spawn ? new V3(w.spawn.e, 0, -w.spawn.n) : new V3();
-      for (let t = 0; t < 7; t++) {
+      for (let t = 0; t < NTOW; t++) {
         let x = 0, z = 0;
         for (let k = 0; k < 20; k++) { x = (R() - 0.5) * 64000; z = (R() - 0.5) * 64000; if (Math.hypot(x - sp.x, z - sp.z) > 5000 && towers.every((o) => Math.hypot(o.x - x, o.z - z) > 11000)) break; }
-        const base = 1300, top = 8000 + R() * 2500, H = top - base, rad = 2600 + R() * 1000;
+        const base = 1200, top = 8000 + R() * 2500, H = top - base, rad = 2600 + R() * 1000;
         const g = w.groundY ? w.groundY(x, -z) : 0;
         towers.push({ x: x, z: z, base: base, top: top, r: rad, g: g,
           cores: [[x, base + H * 0.22, z, rad * 1.0], [x, base + H * 0.55, z, rad * 0.9], [x + rad * 0.8, top - H * 0.1, z, rad * 1.9]] });
@@ -25033,49 +25174,27 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
           const h = i / (np - 1), y = base + 350 + h * (H - 500);
           let rr = rad * (0.8 + 0.2 * Math.sin(h * 2.6)); if (h > 0.75) rr += (h - 0.75) * 7 * rad;   // anvil spreads downwind
           for (let k = 0; k < 3; k++) {
-            const a = R() * 6.283, o = (0.2 + R() * 0.5) * rr;
-            puffs.push([x + Math.cos(a) * o + (h > 0.75 ? (h - 0.75) * 4 * rad : 0), y + (R() - 0.5) * 300, z + Math.sin(a) * o, rr * (1.3 + R() * 0.4), R() * 6.283, 0.05 + h * 0.9, Math.floor(R() * 4)]);
+            const a = R() * 6.283, o = (0.2 + R() * 0.5) * rr, px = x + Math.cos(a) * o + (h > 0.75 ? (h - 0.75) * 4 * rad : 0), pz = z + Math.sin(a) * o;
+            puffs.push([px, y + (R() - 0.5) * 300, pz, rr * (1.3 + R() * 0.4), R() * 6.283, 0.05 + h * 0.9, Math.floor(R() * 4), w.groundY ? w.groundY(px, -pz) : 0]);
           }
         }
       }
-      cells = { towers: towers, puffs: puffs, mesh: null, shafts: [], lastSort: new V3(1e9, 0, 0) };
-      const cm = B0.clouds.length ? B0.clouds[0].mesh : null;
-      if (cm && cm.geometry && cm.geometry.attributes.position) {
-        const NP = puffs.length, src = cm.geometry, g = new THREE.InstancedBufferGeometry();
-        g.setAttribute('position', src.attributes.position); g.setAttribute('uv', src.attributes.uv); g.setIndex(src.index);
-        const iPos = new THREE.InstancedBufferAttribute(new Float32Array(NP * 3), 3), iData = new THREE.InstancedBufferAttribute(new Float32Array(NP * 4), 4);
-        iPos.setUsage(THREE.DynamicDrawUsage); iData.setUsage(THREE.DynamicDrawUsage);
-        g.setAttribute('iPos', iPos); g.setAttribute('iData', iData); g.instanceCount = NP;
-        const mesh = new THREE.Mesh(g, cm.material); mesh.frustumCulled = false; mesh.renderOrder = 5; mesh.visible = false; mesh.name = 'wx-cells';
-        scene.add(mesh);
-        const key = new Float64Array(NP), order = []; for (let i = 0; i < NP; i++) order.push(i);
-        const cmp = (a, b) => key[b] - key[a];
-        cells.mesh = mesh;
-        cells.sort = function (cp) {
-          for (let i = 0; i < NP; i++) { const p = puffs[i], dx = p[0] - cp.x, dy = p[1] - cp.y, dz = p[2] - cp.z; key[i] = dx * dx + dy * dy + dz * dz; }
-          order.sort(cmp);
-          const A = iPos.array, D = iData.array;
-          for (let k = 0; k < NP; k++) { const p = puffs[order[k]]; A[k * 3] = p[0]; A[k * 3 + 1] = p[1]; A[k * 3 + 2] = p[2]; D[k * 4] = p[3]; D[k * 4 + 1] = p[4]; D[k * 4 + 2] = p[5]; D[k * 4 + 3] = p[6]; }
-          iPos.needsUpdate = true; iData.needsUpdate = true;
-        };
-        cells.sort(camera.position);
-      }
+      cells = { towers: towers, puffs: puffs, shafts: [] };
       for (const t of towers) {
         const h = t.base - t.g + 60, s = new THREE.Mesh(shaftGeo, shaftMat);
-        s.scale.set(t.r * 1.1, h, t.r * 1.1); s.position.set(t.x, t.g - 60 + h / 2, t.z); s.renderOrder = 4.5; s.visible = false; s.name = 'wx-shaft';
+        s.scale.set(t.r * 1.1, h, t.r * 1.1); s.position.set(t.x, t.g - 60 + h / 2, t.z); s.renderOrder = 0.6; s.visible = false; s.name = 'wx-shaft';
         scene.add(s); cells.shafts.push(s);
       }
     }
 
     // ================================================================ density / LOS (used by combat through the world object)
-    function deckAt(x, y, z) {
-      if (P.deckOp < 0.05 || P.deckCover < 0.02) return 0;
-      const b = P.deckBase, t = b + P.deckThick;
-      if (y < b - 120 || y > t + 120) return 0;
-      const band = sstep(b - 120, b + 160, y) * (1 - sstep(t - 160, t + 120, y));
-      const n = noiseAt(noise, (x + off1.x) / DECK_SCALE, (z + off1.y) / DECK_SCALE) * 0.62 + noiseAt(noise, (x + off2.x) / DECK_SCALE2, (z + off2.y) / DECK_SCALE2) * 0.38;
-      const th = 1 - P.deckCover;
-      return band * sstep(th - DECK_SOFT, th + DECK_SOFT, n) * Math.min(1, P.deckOp);
+    function fieldAt(x, y, z) {
+      if (P.fOp < 0.05 || P.fCover < 0.02) return 0;
+      const b = P.fBase, t = b + P.fThick, pad = P.fSize * 0.25;
+      if (y < b - pad || y > t + pad) return 0;
+      const band = sstep(b - pad, b + pad, y) * (1 - sstep(t - pad, t + pad, y));
+      const th = 1 - P.fCover;
+      return band * sstep(th - 0.06, th + 0.12, covAt(x, z)) * Math.min(1, P.fOp);
     }
     function cellsAt(x, y, z) {
       if (!cells || P.cells < 0.5) return 0;
@@ -25094,7 +25213,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     }
     function cloudDensityW(p) {
       let d = P.cloudDen > 0.5 && ORIG ? ORIG.cloudDensity(p) : 0;
-      const a = deckAt(p.x, p.y, p.z); if (a > d) d = a;
+      const a = fieldAt(p.x, p.y, p.z); if (a > d) d = a;
       const c = cellsAt(p.x, p.y, p.z); if (c > d) d = c;
       return d;
     }
@@ -25111,8 +25230,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     function losW(a, b) {
       if (!ORIG) return true;
       if (!ORIG.lineOfSight(a, b)) { if (P.cloudDen > 0.5 || !terrainSolidLos(a, b)) return false; }
-      if (P.deckOp > 0.3 && P.deckCover > 0.05) {
-        const lo = P.deckBase + P.deckThick * 0.12, hi = P.deckBase + P.deckThick * 0.88, dy = b.y - a.y;
+      if (P.fOp > 0.3 && P.fCover > 0.05) {
+        const lo = P.fBase + P.fThick * 0.1, hi = P.fBase + P.fThick * 0.9, dy = b.y - a.y;
         let t0 = 0, t1 = 1;
         if (Math.abs(dy) < 1e-6) { if (a.y < lo || a.y > hi) t1 = -1; }
         else { let u0 = (lo - a.y) / dy, u1 = (hi - a.y) / dy; if (u0 > u1) { const s = u0; u0 = u1; u1 = s; } t0 = Math.max(0, u0); t1 = Math.min(1, u1); }
@@ -25120,7 +25239,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
           const L = Math.hypot(b.x - a.x, dy, b.z - a.z) * (t1 - t0), ns = Math.min(8, 2 + Math.ceil(L / 1500));
           for (let i = 0; i < ns; i++) {
             const t = t0 + (t1 - t0) * (i + 0.5) / ns;
-            if (deckAt(a.x + (b.x - a.x) * t, a.y + dy * t, a.z + (b.z - a.z) * t) > 0.55) return false;
+            if (fieldAt(a.x + (b.x - a.x) * t, a.y + dy * t, a.z + (b.z - a.z) * t) > 0.55) return false;
           }
         }
       }
@@ -25161,18 +25280,20 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     }
     function applyDiscrete() {   // things that switch instead of blend (at the middle of a transition)
       if (W && envFor !== curId) makeEnv(curId);
-      if (cells) { const on = PB.cells > 0.5; if (cells.mesh) cells.mesh.visible = on; for (const s of cells.shafts) s.visible = on; }
+      if (cells) { const on = PB.cells > 0.5; for (const s of cells.shafts) s.visible = on; }
       stars.visible = PB.stars > 0.5;
+      fieldDirty = true;
     }
 
     // ================================================================ per-frame step (runs right after world.update)
-    const prevCam = new V3(), camVel = new V3(), relV = new V3(), sunDirW = new V3();
-    let white = 0, time = 0, camVelExt = null;
-    // lightning state
+    const prevCam = new V3(), camVel = new V3(), relV = new V3(), planePos = new V3();
+    let white = 0, time = 0, camVelExt = null, camPosExt = null, trailT = 0, trailI = 0;
+    const trailAge = new Float32Array(NTRAIL).fill(99);
     const strike = { t: 9, k: 0, pulses: [0, 0.09, 0.2], np: 1, bolt: false, dist: 1e9 };
-    const thunderQ = []; for (let i = 0; i < 10; i++) thunderQ.push({ t: -1, d: 0, pos: new V3() });
     let nextStrike = 4, R = rng(Date.now() & 0xffff);
     const gustS = [R() * 10, R() * 10, R() * 10];
+    const precipStep = new V3();
+    function modp(a, m) { a %= m; return a < 0 ? a + m : a; }
 
     function step(dt, cam) {
       dt = Math.min(Math.max(dt || 0, 0), 0.1); time += dt;
@@ -25185,15 +25306,30 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         for (const k of VEC) { const a = PA[k], b = PB[k], o = P[k]; o[0] = a[0] + (b[0] - a[0]) * e; o[1] = a[1] + (b[1] - a[1]) * e; o[2] = a[2] + (b[2] - a[2]) * e; }
         if (!midDone && tBlend >= 0.5) { midDone = true; applyDiscrete(); }
       }
-      // ---- camera velocity (for rain streaks)
+      // ---- camera / plane motion
       if (camVelExt) camVel.copy(camVelExt);
       else if (dt > 0) { tmpV.subVectors(cp, prevCam).divideScalar(dt); if (tmpV.lengthSq() > 4e6) tmpV.set(0, 0, 0); camVel.lerp(tmpV, Math.min(1, dt * 8)); }
       prevCam.copy(cp);
-      // ---- wind (fixed direction from the WSW), deck drift
+      planePos.copy(camPosExt || cp);
+      // ---- wind, cloud drift
       const wa = 4.3;
       weather.wind.set(Math.sin(wa) * -P.windSpd, 0, Math.cos(wa) * P.windSpd);
-      off1.x = (off1.x - weather.wind.x * dt * 3) % DECK_SCALE; off1.y = (off1.y - weather.wind.z * dt * 3) % DECK_SCALE;
-      off2.x = (off2.x - weather.wind.x * dt * 4) % DECK_SCALE2; off2.y = (off2.y - weather.wind.z * dt * 4) % DECK_SCALE2;
+      off1.x = (off1.x - weather.wind.x * dt) % NSCALE; off1.y = (off1.y - weather.wind.z * dt) % NSCALE;
+      off2.x = (off2.x - weather.wind.x * dt * 1.3) % NSCALE2; off2.y = (off2.y - weather.wind.z * dt * 1.3) % NSCALE2;
+
+      // ---- cloud push trail (12 uniforms; no loop over puffs)
+      trailT += dt;
+      const spd = camVel.length();
+      if (trailT > 0.55 && spd > 25) {
+        trailT = 0; trailI = (trailI + 1) % NTRAIL;
+        PU.uTrail.value[trailI].set(planePos.x, planePos.y, planePos.z, 0); trailAge[trailI] = 0;
+      }
+      if (spd > 1) PU.uTrailV.value.copy(camVel).multiplyScalar(1 / spd);
+      const spK = clamp(spd / 200, 0.25, 1.4);
+      for (let i = 0; i < NTRAIL; i++) {
+        const a = trailAge[i] += dt;
+        PU.uTrail.value[i].w = a > 9 ? 0 : sstep(0, 0.9, a) * Math.pow(1 - a / 9, 2) * spK;
+      }
 
       // ---- lightning sim
       let fl = 0;
@@ -25209,39 +25345,28 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       weather.flash01 = clamp(fl, 0, 1);
       boltMesh.visible = strike.bolt && strike.t < 0.6 && fl > 0.01;
       boltMat.uniforms.uI.value = boltMesh.visible ? Math.min(8, 3 + 9 * fl / Math.max(strike.k, 0.05)) : 0;
-      for (let i = 0; i < thunderQ.length; i++) {
-        const q = thunderQ[i]; if (q.t < 0) continue;
-        q.t -= dt;
-        if (q.t <= 0) { q.t = -1; fireThunder(q.d, q.pos); }
-      }
 
-      // ---- world clouds (opacity / tint / flash glow)
+      // ---- cloud colours (world cumulus + field share the tint), flash glow
+      const gl = 1 + fl * 1.5, tn = P.cloudTint;
       for (let i = 0; i < B0.clouds.length; i++) {
-        const c = B0.clouds[i], u = c.u, gl = 1 + fl * 2.5;
-        u.uLit.value.set(c.lit.x * P.cloudTint[0] * gl, c.lit.y * P.cloudTint[1] * gl, c.lit.z * P.cloudTint[2] * gl);
-        u.uShadow.value.set(c.shadow.x * P.cloudTint[0] * (1 + fl), c.shadow.y * P.cloudTint[1] * (1 + fl), c.shadow.z * P.cloudTint[2] * (1 + fl));
+        const c = B0.clouds[i], u = c.u;
+        u.uLit.value.set(c.lit.x * tn[0] * gl, c.lit.y * tn[1] * gl, c.lit.z * tn[2] * gl);
+        u.uShadow.value.set(c.shadow.x * tn[0] * (1 + fl), c.shadow.y * tn[1] * (1 + fl), c.shadow.z * tn[2] * (1 + fl));
         u.uOpacity.value = c.op * P.cloudOp;
-        c.mesh.visible = P.cloudOp > 0.01 || (cells && cells.mesh && cells.mesh.visible);
+        c.mesh.visible = P.cloudOp > 0.01;
         if (c.sun) u.uSunDir.value.copy(W ? W.sunDir : c.sun);
       }
-      if (cells && cells.mesh && cells.mesh.visible && cells.lastSort.distanceToSquared(cp) > 10000) { cells.sort(cp); cells.lastSort.copy(cp); }
-      if (cells) shaftMat.uniforms.uOpacity.value = 0.7 * P.cells * (1 - 0.6 * sstep(P.deckBase - 300, P.deckBase + 400, cp.y));
-
-      // ---- deck
-      const dOn = P.deckOp > 0.01 && P.deckCover > 0.01;
-      deckBot.visible = deckTop.visible = dOn;
-      if (dOn) {
-        deckBot.position.set(cp.x, P.deckBase, cp.z); deckTop.position.set(cp.x, P.deckBase + P.deckThick, cp.z);
-        DU.uCam.value.copy(cp); DU.uCover.value = P.deckCover; DU.uOpacity.value = Math.min(1, P.deckOp);
-        DU.uFlash.value = fl * 3.0;
-        const sc = W && W.sun ? W.sun.color : B0.sunCol, sm = 0.55 + 0.45 * Math.min(1, P.sunMul * 2.5);
-        deckBot.material.uniforms.uCol.value.set(P.deckBot[0], P.deckBot[1], P.deckBot[2]);
-        deckTop.material.uniforms.uCol.value.set(P.deckTop[0] * sc.r * sm, P.deckTop[1] * sc.g * sm, P.deckTop[2] * sc.b * sm);
-      }
+      fieldU.uLit.value.set(B0.lit.x * tn[0], B0.lit.y * tn[1], B0.lit.z * tn[2]);
+      fieldU.uShadow.value.set(B0.shadow.x * tn[0] * 0.85, B0.shadow.y * tn[1] * 0.85, B0.shadow.z * tn[2] * 0.85);
+      fieldU.uFlash.value = fl * 2.2;
+      if (W && W.sunDir) fieldU.uSunDir.value.copy(W.sunDir);
+      sortT += dt;
+      if (fieldDirty || lastSortPos.distanceToSquared(cp) > 22500 || (sortT > 0.6 && (tBlend < 1 || P.fOp > 0.01))) rebuildField(cp);
+      if (cells) shaftMat.uniforms.uOpacity.value = 0.7 * P.cells * (1 - 0.6 * sstep(P.fBase - 300, P.fBase + 400, cp.y));
 
       // ---- camera in cloud
       const wc = W ? (W.cameraCloud || 0) * (P.cloudDen > 0.5 ? 1 : 0) : 0;
-      const mine = Math.max(deckAt(cp.x, cp.y, cp.z), cellsAt(cp.x, cp.y, cp.z));
+      const mine = Math.max(fieldAt(cp.x, cp.y, cp.z), cellsAt(cp.x, cp.y, cp.z));
       white += (mine - white) * Math.min(1, dt * 5); if (white < 0.001) white = 0;
       const wh = Math.max(wc, white);
       weather.inCloud = wh;
@@ -25273,8 +25398,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         const zm = P.skyMix, z = skyU.uZenith.value, h = skyU.uHorizon.value, fm = P.fogMix;
         z.set(B0.zen.x + (P.zen[0] - B0.zen.x) * zm + fl * 0.35, B0.zen.y + (P.zen[1] - B0.zen.y) * zm + fl * 0.37, B0.zen.z + (P.zen[2] - B0.zen.z) * zm + fl * 0.45);
         h.set(B0.hor.x + (P.hor[0] - B0.hor.x) * fm + fl * 0.3, B0.hor.y + (P.hor[1] - B0.hor.y) * fm + fl * 0.32, B0.hor.z + (P.hor[2] - B0.hor.z) * fm + fl * 0.4);
-        const gw = P.sunElMix > 0.5 ? P.glowMul : P.glowMul;
-        skyU.uGlow.value.set(B0.glow.x * gw * (P.sunElMix > 0.01 ? 1 + 0.3 * P.sunElMix : 1), B0.glow.y * gw, B0.glow.z * gw * (P.sunElMix > 0.01 ? 1 - 0.4 * P.sunElMix : 1));
+        const gw = P.glowMul, se = P.sunElMix;
+        skyU.uGlow.value.set(B0.glow.x * gw * (1 + 0.3 * se), B0.glow.y * gw, B0.glow.z * gw * (1 - 0.4 * se));
         skyU.uSunDisk.value = B0.disk * P.diskMul;
         if (skyU.uSunDir && W) skyU.uSunDir.value.copy(W.sunDir);
       }
@@ -25287,14 +25412,14 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
 
       // ---- precipitation
       const pr = P.rain * quality, ps = P.snow * quality;
-      const topY = dOn ? P.deckBase + P.deckThick * 0.3 : 1e5;
+      const fOn = P.fOp > 0.01 && P.fCover > 0.01;
+      const topY = fOn ? P.fBase + P.fThick * 0.3 : 1e5;
       const B = precipU.uBox.value;
       const above = cp.y - B.y * 0.5 > topY;
       weather.rain01 = above ? 0 : P.rain; weather.snow01 = above ? 0 : P.snow;
       rainMesh.visible = pr > 0.01 && !above; snowMesh.visible = ps > 0.01 && !above;
       if (rainMesh.visible || snowMesh.visible) {
         const fall = rainMesh.visible ? 9 : 1.3, Of = precipU.uOff.value;
-        // world-space drop drift, wrapped; the box is camera-relative: p = mod(base + drift - cam, box) - box/2
         precipStep.x = (precipStep.x + weather.wind.x * dt) % B.x; precipStep.y = (precipStep.y - fall * dt) % B.y; precipStep.z = (precipStep.z + weather.wind.z * dt) % B.z;
         Of.set(modp(precipStep.x - cp.x + B.x * 0.5, B.x), modp(precipStep.y - cp.y + B.y * 0.5, B.y), modp(precipStep.z - cp.z + B.z * 0.5, B.z));
         relV.set(weather.wind.x, -fall, weather.wind.z).sub(camVel);
@@ -25307,13 +25432,12 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         const lv = 0.45 + 0.55 * Math.min(1, P.hemiMul) + fl * 2;
         if (rainMesh.visible) { precipU.uCol.value.set(P.rainCol[0] * lv, P.rainCol[1] * lv, P.rainCol[2] * lv); precipU.uAlpha.value = 0.3; }
         else { precipU.uCol.value.set(0.8 * lv, 0.82 * lv, 0.86 * lv); precipU.uAlpha.value = 0.75; }
-        const hpx = (renderer && renderer.domElement ? renderer.domElement.height : 720) * 0.5 / Math.tan((cam.fov || 60) * Math.PI / 360);
-        precipU.uPx.value = hpx;
+        precipU.uPx.value = (renderer && renderer.domElement ? renderer.domElement.height : 720) * 0.5 / Math.tan((cam.fov || 60) * Math.PI / 360);
         rainMesh.position.copy(cp); snowMesh.position.copy(cp);
       }
 
       // ---- turbulence + gusts
-      const near = cellsAt(cp.x, Math.max(cp.y, (cells && cells.towers.length ? cells.towers[0].base : 0) + 400), cp.z);
+      const near = cellsAt(cp.x, Math.max(cp.y, 1600), cp.z);
       const turb = clamp(P.turb + wh * (0.25 + P.turb * 0.5) + near * 0.4 * P.cells, 0, 1);
       weather.turbulence += (turb - weather.turbulence) * Math.min(1, dt * 2);
       const g = weather.turbulence * 6;
@@ -25322,38 +25446,54 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         (Math.sin(time * 2.3 + gustS[1]) + Math.sin(time * 5.3 + gustS[2]) * 0.6) * g * 0.8,
         (Math.sin(time * 1.3 + gustS[2]) + Math.sin(time * 3.7 + gustS[0]) * 0.5) * g);
     }
-    const precipStep = new V3();
-    function modp(a, m) { a %= m; return a < 0 ? a + m : a; }
 
     // ---- lightning
+    const strikeGround = new V3(), dustVel = new V3();
     function doStrike(cp) {
-      let top = tmpV2, bot = tmpV;
-      let tower = null, bd = 1e18;
-      if (cells && P.cells > 0.5) for (const T of cells.towers) {   // nearest tower in a sensible range
-        const d = Math.hypot(T.x - cp.x, T.z - cp.z); const sc = d < 1200 ? 1e9 : d;
-        if (sc < bd && d < 30000) { bd = sc; tower = T; }
+      const top = tmpV2, bot = tmpV, pp = planePos;
+      const base = P.fOp > 0.3 ? P.fBase + 100 : 1500;
+      const belowClouds = pp.y < base + P.fThick * 0.5;
+      const ground = (x, z) => (W && W.groundY ? W.groundY(x, -z) : 0);
+      let mode = 'far', r = R();
+      if (onStrikePlane && camPosExt && P.lightning >= 8 && (weather.inCloud > 0.15 || pp.y > base - 400) && r < 0.05) mode = 'plane';
+      else if (belowClouds && r < 0.62) mode = 'near';
+      if (mode === 'plane') {
+        bot.copy(pp); top.set(pp.x + (R() - 0.5) * 300, Math.max(base, pp.y + 350), pp.z + (R() - 0.5) * 300);
+      } else if (mode === 'near') {
+        const a = R() * 6.283, d = R() < 0.18 ? 150 + R() * 300 : 300 + Math.pow(R(), 1.5) * 2700;
+        const x = pp.x + Math.cos(a) * d, z = pp.z + Math.sin(a) * d;
+        bot.set(x, ground(x, z), z); top.set(x + (R() - 0.5) * 900, base, z + (R() - 0.5) * 900);
+      } else {
+        let tower = null, bd = 1e18;
+        if (cells && P.cells > 0.5) for (let i = 0; i < cells.towers.length; i++) { const T = cells.towers[i], d = Math.hypot(T.x - cp.x, T.z - cp.z); if (d < bd && d > 1500 && d < 30000) { bd = d; tower = T; } }
+        if (tower && R() < 0.6) { const a = R() * 6.283, rr = R() * tower.r * 0.9; top.set(tower.x + Math.cos(a) * rr, base, tower.z + Math.sin(a) * rr); }
+        else { const a = R() * 6.283, rr = 3000 + R() * 12000; top.set(cp.x + Math.cos(a) * rr, base, cp.z + Math.sin(a) * rr); }
+        bot.set(top.x + (R() - 0.5) * 1200, 0, top.z + (R() - 0.5) * 1200); bot.y = ground(bot.x, bot.z);
       }
-      const base = P.deckOp > 0.3 ? P.deckBase : 1500;
-      if (tower && R() < 0.65) {
-        const a = R() * 6.283, r = R() * tower.r * 0.9;
-        top.set(tower.x + Math.cos(a) * r, base + 150, tower.z + Math.sin(a) * r);
-      } else {   // somewhere in the storm around the player
-        const a = R() * 6.283, r = 2500 + R() * 12000;
-        top.set(cp.x + Math.cos(a) * r, base + 150, cp.z + Math.sin(a) * r);
-      }
-      const ground = W && W.groundY ? W.groundY(top.x, -top.z) : 0;
-      const cloudOnly = R() < 0.3 || cp.y > base + P.deckThick * 0.6;  // above the deck you only see the glow
-      bot.set(top.x + (R() - 0.5) * 1200, ground, top.z + (R() - 0.5) * 1200);
+      const cloudOnly = mode === 'far' && (R() < 0.25 || !belowClouds);
       strike.t = 0; strike.np = 1 + Math.floor(R() * 3); strike.pulses[1] = 0.06 + R() * 0.06; strike.pulses[2] = 0.15 + R() * 0.1;
-      const dist = Math.hypot(top.x - cp.x, (top.y + ground) * 0.5 - cp.y, top.z - cp.z);
-      strike.dist = dist; strike.k = clamp(1 / (1 + (dist / 7000) * (dist / 7000)), 0.05, 1) * (cloudOnly ? 0.6 : 1);
+      const dist = Math.hypot(bot.x - cp.x, (top.y + bot.y) * 0.5 - cp.y, bot.z - cp.z), dGround = Math.hypot(bot.x - cp.x, bot.y - cp.y, bot.z - cp.z);
+      strike.dist = dist;
+      strike.k = clamp(1 / (1 + (Math.min(dist, dGround) / 5000) * (Math.min(dist, dGround) / 5000)), 0.05, 1) * (cloudOnly ? 0.6 : 1);
       strike.bolt = !cloudOnly;
       flashPos.copy(top);
       if (!cloudOnly) buildBolt(top, bot);
       weather.stats.strikes++;
-      for (let i = 0; i < thunderQ.length; i++) if (thunderQ[i].t < 0) { const q = thunderQ[i]; q.t = dist / 343; q.d = dist; q.pos.copy(top).lerp(bot, 0.5); break; }
+      if (mode === 'plane') {
+        weather.stats.planeHits++;
+        try { onStrikePlane(pp.clone()); } catch (e) { /* ignore */ }
+      } else if (!cloudOnly && dGround < 9000) {
+        weather.stats.groundStrikes++;
+        const water = W && W.isWater ? W.isWater(bot.x, -bot.z) : false;
+        strikeGround.copy(bot);
+        if (fxRef && fxRef.explosion) { try { fxRef.explosion(strikeGround, 0.6, { air: false, water: water, lightning: true }); } catch (e) { /* ignore */ } }
+        if (fxRef && fxRef.groundDust && !water) { try { for (let i = 0; i < 6; i++) { dustVel.set((R() - 0.5) * 30, 10, (R() - 0.5) * 30); fxRef.groundDust(strikeGround, 1, dustVel); } } catch (e) { /* ignore */ } }
+      }
+      const thunderD = mode === 'plane' ? 0 : Math.min(dist, dGround);
+      for (let i = 0; i < thunderCbs.length; i++) { try { thunderCbs[i](thunderD, mode === 'plane' ? pp : bot, thunderD / 343); } catch (e) { /* ignore */ } }
+      if (audio && audio.thunder) { try { audio.thunder(thunderD); } catch (e) { /* ignore */ } }
     }
-    const segA = new V3(), segB = new V3(), dirT = new V3();
+    const dirT = new V3();
     let segN = 0;
     function putSeg(ax, ay, az, bx, by, bz, w0, w1) {
       if (segN >= NSEG) return;
@@ -25378,7 +25518,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       }
       for (let i = 0; i < MAIN_SEG; i++) { const a = i * 3, b = a + 3; putSeg(mainPts[a], mainPts[a + 1], mainPts[a + 2], mainPts[b], mainPts[b + 1], mainPts[b + 2], 1, 1); }
       for (let br = 0; br < NBR; br++) {
-        const s = Math.floor(MAIN_SEG * (0.12 + R() * 0.45)) * 3, ang = R() * 6.283, bl = L * (0.12 + R() * 0.15) / BR_SEG;
+        const s = Math.floor(MAIN_SEG * (0.08 + R() * 0.5)) * 3, ang = R() * 6.283, bl = L * (0.1 + R() * 0.15) / BR_SEG;
         let x = mainPts[s], y = mainPts[s + 1], z = mainPts[s + 2]; const dx = Math.cos(ang), dz = Math.sin(ang);
         for (let k = 0; k < BR_SEG; k++) {
           const w0 = 0.55 * (1 - k / BR_SEG), w1 = 0.55 * (1 - (k + 1) / BR_SEG);
@@ -25388,10 +25528,6 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       }
       for (let s = segN; s < NSEG; s++) for (let k = 0; k < 4; k++) { const j = (s * 4 + k) * 3; boltPos[j] = boltPos[j + 1] = boltPos[j + 2] = 0; boltW[s * 4 + k] = 0; }
       boltGeo.attributes.position.needsUpdate = true; boltGeo.attributes.aDir.needsUpdate = true; boltGeo.attributes.aW.needsUpdate = true;
-    }
-    function fireThunder(d, pos) {
-      for (let i = 0; i < thunderCbs.length; i++) { try { thunderCbs[i](d, pos); } catch (e) { /* ignore */ } }
-      if (audio && audio.play) { try { audio.play('thunder', { distance: d, pos: pos, volume: clamp(1.3 / (1 + d / 3000), 0.08, 1) }); } catch (e) { /* ignore */ } }
     }
 
     // ================================================================ public API
@@ -25405,28 +25541,31 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       copyP(PA, P); PB = RES[id];
       if (o.instant || !W) { tBlend = 1; copyP(P, PB); midDone = false; applyDiscrete(); midDone = true; }
       else { tBlend = 0; blendDur = o.duration || 4; midDone = false; }
-      if (PB.lightning > 0) nextStrike = Math.min(nextStrike, 3 + R() * 4);
+      fieldDirty = true;
+      if (PB.lightning > 0) nextStrike = Math.min(nextStrike, 2 + R() * 3);
       return id;
     };
-    weather.update = function (dt, camState) { camVelExt = camState && camState.vel ? camState.vel : null; };
+    weather.update = function (dt, camState) { camVelExt = camState && camState.vel ? camState.vel : null; camPosExt = camState && camState.pos ? camState.pos : null; };
     weather.onWorldChanged = function (w) { attach(w); };
     weather.netState = function () { return { t: 'wx', id: curId }; };
     weather.applyNetState = function (s) { if (s && s.id && RES[s.id]) weather.set(s.id, { save: false }); };
     weather.saved = function () { try { const v = localStorage.getItem(LS_KEY); return RES[v] ? v : 'scattered'; } catch (e) { return 'scattered'; } };
     weather.restoreLocal = function () { return weather.set(weather.saved(), { save: false }); };
     weather.onThunder = function (cb) { if (typeof cb === 'function') thunderCbs.push(cb); };
+    weather.setFx = function (f) { fxRef = f || null; };
     weather.strike = function () { if (W) doStrike(camera.position); };   // test / cinematic hook
-    weather.setQuality = function (q) { quality = q === 'fast' ? 0.45 : q === 'ultra' ? 1 : 0.8; };
+    weather.setQuality = function (q) { quality = q === 'fast' ? 0.45 : q === 'ultra' ? 1 : 0.8; fieldDirty = true; };
     weather.debug = function () {
       return { preset: curId, blend: tBlend, fog: scene.fog ? { d: scene.fog.density, r: scene.fog.color.r, g: scene.fog.color.g, b: scene.fog.color.b } : null,
-        sun: W && W.sun ? W.sun.intensity : null, hemi: hemi ? hemi.intensity : null, flash: flashLight.intensity, deck: deckBot.visible, rain: rainMesh.visible, snow: snowMesh.visible,
-        bolt: boltMesh.visible, turb: weather.turbulence, inCloud: weather.inCloud, strikes: weather.stats.strikes, err: weather._err || null,
+        sun: W && W.sun ? W.sun.intensity : null, hemi: hemi ? hemi.intensity : null, flash: flashLight.intensity, puffs: weather.stats.puffs, sortMs: weather.stats.sortMs,
+        rain: rainMesh.visible, snow: snowMesh.visible, bolt: boltMesh.visible, turb: weather.turbulence, inCloud: weather.inCloud, strikes: weather.stats.strikes,
+        ground: weather.stats.groundStrikes, planeHits: weather.stats.planeHits, patched: B0.clouds.filter((c) => c.patched).length, err: weather._err || null,
         zen: skyU ? skyU.uZenith.value.toArray() : null, hor: skyU ? skyU.uHorizon.value.toArray() : null, env: !!ourEnv && scene.environment === (ourEnv && ourEnv.texture) };
     };
     weather.dispose = function () {
       detach();
-      for (const m of [deckBot, deckTop, rainMesh, snowMesh, boltMesh, stars]) { scene.remove(m); m.geometry.dispose && m.geometry !== deckGeo && m.geometry.dispose(); m.material.dispose(); }
-      deckGeo.dispose(); scene.remove(flashLight); noiseTex.dispose(); shaftTex.dispose(); shaftMat.dispose(); shaftGeo.dispose(); envMat.dispose();
+      for (const m of [field, rainMesh, snowMesh, boltMesh, stars]) { scene.remove(m); m.geometry.dispose(); m.material.dispose(); }
+      scene.remove(flashLight); shaftTex.dispose(); shaftMat.dispose(); shaftGeo.dispose(); envMat.dispose(); if (ownAtlas) ownAtlas.dispose();
     };
 
     weather.setQuality('high');
@@ -29409,12 +29548,26 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   // ---------------------------------------------------------------- spawn / crash
   var AIR_SPAWN = { e: -7000, n: 6000, alt: 1300, hdgDeg: 35, speed: 200 };
   var camReset = true;
+  // co-op: each pilot gets its own spot (staggered on the runway, spread out in the air) so jets do not overlap
+  function mySlot() {
+    if (!net || !net.connected || !net.peers || !net.peers.length) return 0;
+    var ids = net.peers.map(function (p) { return p.id; }).sort(), i = ids.indexOf(net.myId);
+    return i < 0 ? 0 : i % 4;
+  }
+  function slotOffset(sp, side, back) {
+    var k = mySlot(); if (!k) return sp;
+    var h = (sp.hdgDeg || 0) * DEG, fe = Math.sin(h), fn = Math.cos(h), o = {};
+    for (var key in sp) o[key] = sp[key];
+    var lat = k === 3 ? 0 : (k === 1 ? 1 : -1) * side, row = k === 3 ? 2 : 1;      // echelon: 1 right, 2 left, 3 behind the lead
+    o.e = sp.e - fe * back * row + fn * lat; o.n = sp.n - fn * back * row - fe * lat;
+    return o;
+  }
   function spawn(kind, pt) {
     if (combat && !(campaign && campaign.active)) combat.stop();
     if (kind === 'rejoin') phys.reset('air', pt);
-    else if (kind === 'air') phys.reset('air', mapId === 'lax' ? AIR_SPAWN : (world.airSpawn || { e: world.spawn.e, n: world.spawn.n, alt: world.airportH + 1300, hdgDeg: world.spawn.hdgDeg, speed: 200 }));
-    else if (kind === 'carrier' && carrier && carrier.available()) carrier.spawn(0);
-    else phys.reset('runway', { e: world.spawn.e, n: world.spawn.n, h: world.airportH, hdgDeg: world.spawn.hdgDeg });
+    else if (kind === 'air') { var as0 = mapId === 'lax' ? AIR_SPAWN : (world.airSpawn || { e: world.spawn.e, n: world.spawn.n, alt: world.airportH + 1300, hdgDeg: world.spawn.hdgDeg, speed: 200 }); phys.reset('air', slotOffset(as0, 140, 90)); }
+    else if (kind === 'carrier' && carrier && carrier.available()) carrier.spawn(Math.min(2, mySlot()));
+    else phys.reset('runway', slotOffset({ e: world.spawn.e, n: world.spawn.n, h: world.airportH, hdgDeg: world.spawn.hdgDeg }, 16, 40));
     plane.group.visible = true; crashHandled = false; crashT = 0; if (kind !== 'rejoin') lastSpawn = kind; camReset = true; hitFlash = 0; syncLever();
     resetAim(); glog('spawn ' + kind + ' (' + aircraftId + ')');
     if (typeof HS !== "undefined" && HS) { HS.mslMax = 0; HS.flrMax = 0; }
@@ -30320,9 +30473,9 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     hx.globalAlpha = TRK.on * blink;
     if (t.pos) {
       var p = projTo(t.pos, trkP), dx = p.x - W / 2, dy = p.y - H / 2; if (p.behind) { dx = -dx; dy = -dy; }
-      var a = Math.atan2(dy, dx), r = Math.min(W, H) * 0.31, cp = new Path2D();
-      chevron(cp, W / 2 + Math.cos(a) * r, H / 2 + Math.sin(a) * r, a, 11 * u);
-      ln(AMB, 2.6); hx.stroke(cp);
+      var a = Math.atan2(dy, dx), r = Math.min(W, H) * 0.31, cp = new Path2D(), chx = W / 2 + Math.cos(a) * r, chy = H / 2 + Math.sin(a) * r;
+      // skip the bearing chevron where it would sit on the top text stack (the RWR line on the radar still shows it)
+      if (!(chy < (HS.upBottom || 0) + 12 * u && Math.abs(chx - W / 2) < Math.min(W, H) * 0.28)) { chevron(cp, chx, chy, a, 11 * u); ln(AMB, 2.6); hx.stroke(cp); }
     }
     hx.globalAlpha = 1;
   }
@@ -30896,8 +31049,14 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         var m = projTo(inc[i].pos, P1), mdx = m.x - cxs, mdy = m.y - cys;
         if (m.behind) { mdx = -mdx; mdy = -mdy; }
         var ma = Math.atan2(mdy, mdx), kk = clamp(1.7 - inc[i].dist / 4000, 0.9, 1.7) * u, cs = Math.cos(ma), sn = Math.sin(ma);
+        // keep the chevrons off the text stacks: slide them along their bearing out of the lower / upper stack
+        var rB = r2, hw2 = 150 * u, ey = cys + sn * rB;
+        if (Math.abs(cs * rB) < hw2 + 20 * u) {
+          if (sn > 0.05 && HS.lowBot > HS.lowTop && ey > HS.lowTop - 20 * u && ey < HS.lowBot + 10 * u) rB = Math.max(rB, (HS.lowBot + 14 * u - cys) / sn);
+          if (sn < -0.05 && HS.upBottom && ey < HS.upBottom + 10 * u) rB = Math.min(rB, (cys - HS.upBottom - 24 * u) / -sn);
+        }
         for (var z = 0; z < 2; z++) {
-          var rr2 = r2 + z * 10 * kk, tx = cxs + cs * (rr2 + 11 * kk), ty2 = cys + sn * (rr2 + 11 * kk);
+          var rr2 = rB + z * 10 * kk, tx = cxs + cs * (rr2 + 11 * kk), ty2 = cys + sn * (rr2 + 11 * kk);
           var bx = cxs + cs * rr2, by = cys + sn * rr2, nx = cxs + cs * (rr2 + 4 * kk), ny = cys + sn * (rr2 + 4 * kk);
           mp.moveTo(tx, ty2); mp.lineTo(bx - sn * 9 * kk, by + cs * 9 * kk); mp.lineTo(nx, ny); mp.lineTo(bx + sn * 9 * kk, by - cs * 9 * kk); mp.closePath();
         }
@@ -31465,7 +31624,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       hx.globalAlpha = 1; yb = sy - 12 * u;
     }
     // ---- upper stack (top-down) from under the heading tape to above the seeker zone
-    var y0 = hy + 22 * u, yMaxUp = H / 2 - mn * 0.19;
+    var y0 = hy + 28 * u, yMaxUp = H / 2 - mn * 0.19;
     // DOM toasts (campaign rank toast, extras medal toasts) take their place in the stack: the HUD moves them
     var dom = [document.querySelector('.flc-toast'), document.querySelector('.flx-toasts')];
     var upL = SLOT.up, i, it;
@@ -31485,6 +31644,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     var yMinLow = H / 2 + mn * 0.13, yPref = H / 2 + mn * 0.19, yMaxLow = yb - gap;
     var fl = pickFit(SLOT.low, yMaxLow - yMinLow, gap);
     y = clamp(yPref, yMinLow, Math.max(yMinLow, yMaxLow - fl.h));
+    HS.lowTop = y; HS.lowBot = y + fl.h; HS.upTop = y0;
     for (i = 0; i < fl.items.length; i++) {
       it = fl.items[i];
       var mw2 = y < HS.tapeTop + 250 * u && y + it.h > HS.tapeTop ? Math.min(maxW, HS.gapW) : maxW;
@@ -31942,7 +32102,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793152241', updShown = false;
+  var BUILD = '1793152630', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
