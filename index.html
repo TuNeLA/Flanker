@@ -16398,7 +16398,9 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
         hvv.set(fwd.x, 0, fwd.z); if (hvv.lengthSq() < 1e-6) hvv.set(-up.x, 0, -up.z); hvv.normalize();
         var rvx = st.vel.x - (st.hoverRefX || 0), rvz = st.vel.z - (st.hoverRefZ || 0);   // relative to the ground under you (carrier deck: jetsig.js)
         var hvf = rvx * hvv.x + rvz * hvv.z, hvr = rvx * -hvv.z + rvz * hvv.x;
-        var af = clamp(1.2 * (-(inp.pitch || 0) * 25 - hvf), -5, 5), ar = clamp(1.2 * ((inp.roll || 0) * 18 - hvr), -5, 5);
+        // F-35B: the lift fan + 3BSM nozzle convert fast: up to ~1.1 g of fore-aft braking / push while the speed error is big (Harrier: 5 m/s2)
+        var aLim = VT === 'f35' ? 5 + clamp((Math.abs(-(inp.pitch || 0) * 25 - hvf) - 8) * 0.3, 0, 6) : 5;
+        var af = clamp(1.2 * (-(inp.pitch || 0) * 25 - hvf), -aLim, aLim), ar = clamp(1.2 * ((inp.roll || 0) * 18 - hvr), -5, 5);
         F.x += M * hw * (af * hvv.x - ar * hvv.z); F.z += M * hw * (af * hvv.z + ar * hvv.x);
         st.hoverAF = af; st.hoverAR = ar;
       }
@@ -20871,7 +20873,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
   }
   var WEAPON_LIST = [
     W({ id: 'gsh23', weight: 0.33, name: 'GSh-23 23 mm', type: 'gun', range: 1000, speed: 715, damage: 6, rate: 40, ammo: 900, price: 0, unlockLevel: 1, desc: 'MiG-21 twin-barrel gun. Fast fire, light hits.' }),
-    W({ id: 'hispano4', weight: 0.25, name: '4x Hispano Mk V 20 mm', type: 'gun', range: 900, speed: 840, damage: 5, rate: 44, ammo: 600, price: 0, unlockLevel: 1, desc: 'Vampire nose guns. Four barrels, 600 rounds. Short range.' }),
+    W({ id: 'hispano4', weight: 0.25, name: '4x Hispano Mk V 20 mm', type: 'gun', range: 900, speed: 840, damage: 5, rate: 44, ammo: 600, price: 0, unlockLevel: 1, desc: 'Four 20 mm Hispano cannons, 600 rounds. Short range. Free starter gun.' }),
     W({ id: 'aden', weight: 0.37, name: 'ADEN 30 mm', type: 'gun', range: 1100, speed: 790, damage: 13, rate: 20, ammo: 900, price: 2500, unlockLevel: 2, desc: 'Saab cannon. Good hits. Medium rate of fire.' }),
     W({ id: 'gsh30', weight: 0.39, name: 'GSh-30-1 30 mm', type: 'gun', range: 1300, speed: 870, damage: 14, rate: 25, ammo: 700, blast: 2, price: 6000, unlockLevel: 6, desc: 'Flanker cannon. Slow fire. Heavy hits.' }),
     W({ id: 'm61', weight: 0.26, name: 'M61 Vulcan 20 mm', type: 'gun', range: 1000, speed: 1030, damage: 4, rate: 100, ammo: 2400, price: 8000, unlockLevel: 8, desc: 'Six barrels. Very fast fire.' }),
@@ -23290,7 +23292,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     recon: { name: 'Recon run + D-21', key: true, desc: 'Tap: 4 s camera run, keep the wings level. Every enemy in a 40 km cone ahead is marked for the team for 60 s (lock range x1.5, lock time -40%, +10% damage). Hold 0.6 s: launch the D-21 drone at your target.' },
     morph: { name: 'Morphing wing', key: true, desc: 'Press to change the wing: DOGFIGHT (25°, tight turns) → CRUISE (45°) → DASH (65°, tips fold down, top speed). The big special bay carries twice the special ammo.' },
     laser: { name: 'Built-in laser', desc: 'The laser is your gun: own slot, no pylon. Hold fire to cut. It overheats after 3.5 s. The engine refills its energy as you fly (faster at full power).' },
-    gunship: { name: 'Orbit gunship', key: true, desc: 'Press: the autopilot flies a left-hand circle (2.5 km) around your ground target or the point to your left. The 40 mm turret aims by itself; the stick moves the aim point. The hive builds a new drone every 25 s.' },
+    gunship: { name: 'Orbit gunship', key: true, desc: 'Press: the autopilot flies a left-hand circle (2.5 km) around your ground target or the point to your left. The 40 mm turret aims by itself; the stick (or the mouse crosshair) moves the aim point. The throttle trims the orbit speed. The hive builds a new drone every 25 s.' },
     loyal: { name: 'Loyal wingmen', desc: 'Two drone wingmen fly with you. Y = drones attack your target, U = drones cover you. A lost drone rebuilds in 60 s.' }
   };
   FL.SIG_INFO = SIG;
@@ -23399,20 +23401,20 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     return d;
   }
   var NEW_W = [
-    W({ id: 'gau8', type: 'gun', weight: 0.9, name: 'GAU-8/A Avenger 30 mm', targets: ['air', 'ground', 'sea'], range: 1500, speed: 1010, damage: 9, rate: 65, ammo: 1150, blast: 2, groundMul: 3, spread: 0.005, price: 30000, unlockLevel: 10, jet: ['a10'], desc: 'A-10 only. Seven barrels, 3,900 rounds a minute. x3 damage to ground targets. The recoil slows the jet.' }),
-    W({ id: 'gsh302', type: 'gun', weight: 0.39, name: 'GSh-30-2 30 mm', targets: ['air', 'ground', 'sea'], range: 1200, speed: 870, damage: 15, rate: 50, ammo: 250, blast: 2, groundMul: 1.3, price: 7000, unlockLevel: 8, jet: ['su25'], desc: 'Su-25 only. Twin-barrel 30 mm. Heavy hits, short bursts.' }),
-    W({ id: 'gunpack8', type: 'gun', weight: 0.12, name: 'Gun pack 8 x 13.2 mm', targets: ['air', 'ground', 'sea'], range: 900, speed: 800, damage: 3.5, rate: 75, ammo: 1400, spread: 0.016, groundMul: 1.3, price: 4000, unlockLevel: 2, jet: ['saab21r'], desc: 'Saab 21R only. Eight guns in a belly pack: a wide cone of lead for strafing.' }),
-    W({ id: 'gsh623', type: 'gun', weight: 0.26, name: 'GSh-6-23 23 mm', targets: ['air', 'ground', 'sea'], range: 1100, speed: 1050, damage: 5, rate: 100, ammo: 260, price: 9000, unlockLevel: 20, jet: ['mig31'], desc: 'MiG-31 only. Six barrels, 6,000 rounds a minute, 260 rounds.' }),
+    W({ id: 'gau8', type: 'gun', weight: 0.9, name: 'GAU-8/A Avenger 30 mm', targets: ['air', 'ground', 'sea'], range: 1500, speed: 1010, damage: 9, rate: 65, ammo: 1150, blast: 2, groundMul: 3, spread: 0.005, price: 30000, unlockLevel: 10, desc: 'Seven barrels, 3,900 rounds a minute. x3 damage to ground targets. The recoil slows the jet.' }),
+    W({ id: 'gsh302', type: 'gun', weight: 0.39, name: 'GSh-30-2 30 mm', targets: ['air', 'ground', 'sea'], range: 1200, speed: 870, damage: 15, rate: 50, ammo: 250, blast: 2, groundMul: 1.3, price: 7000, unlockLevel: 8, desc: 'Twin-barrel 30 mm. Heavy hits, short bursts.' }),
+    W({ id: 'gunpack8', type: 'gun', weight: 0.12, name: 'Gun pack 8 x 13.2 mm', targets: ['air', 'ground', 'sea'], range: 900, speed: 800, damage: 3.5, rate: 75, ammo: 1400, spread: 0.016, groundMul: 1.3, price: 4000, unlockLevel: 2, desc: 'Eight guns in a belly pack: a wide cone of lead for strafing.' }),
+    W({ id: 'gsh623', type: 'gun', weight: 0.26, name: 'GSh-6-23 23 mm', targets: ['air', 'ground', 'sea'], range: 1100, speed: 1050, damage: 5, rate: 100, ammo: 260, price: 9000, unlockLevel: 20, desc: 'Six barrels, 6,000 rounds a minute, 260 rounds.' }),
     W({ id: 'r33', type: 'missile', weight: 490, name: 'R-33 Amos', guidance: 'radar', targets: ['air'], range: 60000, minRange: 2000, speed: 1150, g: 18, sustain: 8, seekMul: 3, lockTimeMul: 1.5, damage: 130, blast: 25, autoLock: 4, autoCone: 30, station: 'wing belly', price: 40000, unlockLevel: 20, jet: ['mig31'], desc: 'MiG-31 only. Zaslon salvo: one press fires up to four missiles at four targets. Very long range.' }),
     W({ id: 'r40', type: 'missile', weight: 475, name: 'R-40R Acrid', guidance: 'sarh', targets: ['air'], range: 30000, minRange: 1500, speed: 1250, g: 15, seekMul: 2, lockTimeMul: 1.5, damage: 140, blast: 28, station: 'wing', price: 20000, unlockLevel: 11, jet: ['mig25', 'mig31'], desc: 'Foxbat / Foxhound only. Huge long-range missile. Keep the lock until it hits. It turns badly.' }),
     W({ id: 'rb04', type: 'missile', weight: 600, name: 'Rb 04E', guidance: 'antiship', targets: ['sea'], range: 32000, minRange: 1500, speed: 280, g: 10, damage: 400, blast: 25, needsBombsOK: true, price: 11000, unlockLevel: 4, desc: 'Swedish anti-ship missile. It skims the waves. One hit sinks a frigate.' }),
-    W({ id: 'gian30', type: 'gun', weight: 0.27, name: 'GIAT 30M791 30 mm', targets: ['air', 'ground', 'sea'], range: 1300, speed: 1025, damage: 9, rate: 41, ammo: 125, blast: 2, price: 9000, unlockLevel: 23, jet: ['rafale'], desc: 'Rafale only. 2,500 rounds a minute of 30 mm, 125 rounds.' }),
-    W({ id: 'bk27', type: 'gun', weight: 0.26, name: 'Mauser BK-27 27 mm', targets: ['air', 'ground', 'sea'], range: 1300, speed: 1025, damage: 12, rate: 28, ammo: 150, blast: 1, price: 8000, unlockLevel: 11, jet: ['typhoon', 'jas39'], desc: 'Typhoon / Gripen only. Revolver cannon: fast spin-up, hard hits.' }),
+    W({ id: 'gian30', type: 'gun', weight: 0.27, name: 'GIAT 30M791 30 mm', targets: ['air', 'ground', 'sea'], range: 1300, speed: 1025, damage: 9, rate: 41, ammo: 125, blast: 2, price: 9000, unlockLevel: 23, desc: '2,500 rounds a minute of 30 mm, 125 rounds.' }),
+    W({ id: 'bk27', type: 'gun', weight: 0.26, name: 'Mauser BK-27 27 mm', targets: ['air', 'ground', 'sea'], range: 1300, speed: 1025, damage: 12, rate: 28, ammo: 150, blast: 1, price: 8000, unlockLevel: 11, desc: 'Revolver cannon: fast spin-up, hard hits.' }),
     W({ id: 'pl15', type: 'missile', weight: 210, name: 'PL-15', guidance: 'radar', targets: ['air'], range: 50000, minRange: 1500, speed: 1300, g: 30, sustain: 7, seekMul: 3, lockTimeMul: 1.45, damage: 115, blast: 22, multi: true, price: 30000, unlockLevel: 33, jet: ['j20'], desc: 'J-20 only. Dual-pulse long-range radar missile. Fits the bays.' }),
     W({ id: 'mica', type: 'missile', weight: 112, name: 'MICA EM', guidance: 'radar', targets: ['air'], range: 25000, minRange: 400, speed: 1100, g: 50, lockTimeMul: 1.0, damage: 100, blast: 14, multi: true, price: 20000, unlockLevel: 23, jet: ['rafale'], desc: 'Rafale only. Light dual-seeker missile: quick lock, agile, short to medium range.' }),
     // roster batch 3: jet guns (owned with the jet) and built-in weapons (spec.builtIn: own slot, no pylon, not in the shop)
-    W({ id: 'gau12', type: 'gun', weight: 0.58, name: 'GAU-12/U Equalizer 25 mm', targets: ['air', 'ground', 'sea'], range: 1300, speed: 1050, damage: 6.5, rate: 60, ammo: 300, blast: 1, price: 9000, unlockLevel: 10, jet: ['harrier'], desc: 'Harrier only. Five barrels, 3,600 rounds a minute, in the belly pods.' }),
-    W({ id: 'gau22', type: 'gun', weight: 0.6, name: 'GAU-22/A 25 mm', targets: ['air', 'ground', 'sea'], range: 1400, speed: 1080, damage: 7, rate: 55, ammo: 220, blast: 1, price: 12000, unlockLevel: 29, jet: ['f35b'], desc: 'F-35B only. Four barrels in a stealthy belly pod. 220 rounds.' }),
+    W({ id: 'gau12', type: 'gun', weight: 0.58, name: 'GAU-12/U Equalizer 25 mm', targets: ['air', 'ground', 'sea'], range: 1300, speed: 1050, damage: 6.5, rate: 60, ammo: 300, blast: 1, price: 9000, unlockLevel: 10, desc: 'Five barrels, 3,600 rounds a minute, in the belly pods.' }),
+    W({ id: 'gau22', type: 'gun', weight: 0.6, name: 'GAU-22/A 25 mm', targets: ['air', 'ground', 'sea'], range: 1400, speed: 1080, damage: 7, rate: 55, ammo: 220, blast: 1, price: 12000, unlockLevel: 29, desc: 'Four barrels in a stealthy belly pod. 220 rounds.' }),
     W({ id: 'turret40', type: 'gun', weight: 2, name: '40 mm turret', targets: ['air', 'ground', 'sea'], range: 3000, speed: 1400, damage: 42, rate: 2.5, ammo: 240, blast: 8, groundMul: 1.4, spread: 0.002, price: 30000, unlockLevel: 50, jet: ['kraken'], desc: 'Kraken only. The turret aims by itself at your target, at up to 3 km. Heavy explosive shells.' }),
     W({ id: 'd21', type: 'missile', builtIn: true, special: true, topLaunch: true, weight: 5000, name: 'D-21 drone', short: 'D-21', guidance: 'radar', targets: ['air', 'ground', 'sea'], range: 80000, minRange: 3000, speed: 1150, g: 12, sustain: 60, life: 80, seekMul: 4, lockTimeMul: 0.5, damage: 450, blast: 45, needsBombsOK: true, ammo: 1, price: 0, unlockLevel: 38, jet: ['sr71'], desc: 'SR-71 built in. Hold the special: a Mach 3 drone flies to your target (or the mission zone) and strikes. Its camera marks the area for the team.' }),
     W({ id: 'vlaser', type: 'beam', builtIn: true, name: 'Valravn laser', short: 'LSR', targets: ['air', 'ground', 'sea'], range: 2200, speed: 0, damage: 80, burst: 3.5, ammo: 14, price: 0, unlockLevel: 48, jet: ['valravn'], desc: 'Valravn built in. Hold fire. The engine refills the energy.' }),
@@ -23705,11 +23707,11 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
           else { S.stovl = !S.stovl; S.holdY = null; flash(S.stovl ? 'STOVL MODE — LIFT FAN OPEN' : 'CONVENTIONAL MODE'); }
         }
         if (S.stovl && speed > 165 && !st.onGround) { S.stovl = false; flash('CONVENTIONAL MODE — TOO FAST FOR STOVL'); }
-        S.aux.lift = near(S.aux.lift, S.stovl || S.nozV > 0.02 ? 1 : 0, dt * 0.8);   // doors open first, the nozzle swivels after
+        S.aux.lift = near(S.aux.lift, S.stovl || S.nozV > 0.02 ? 1 : 0, dt * 1.6);   // doors open first (~0.6 s), the nozzle swivels after
         tg = S.stovl && S.aux.lift > 0.85 ? 90 / nzD : 0;   // the jet slows down on the nozzle; the hover law takes over below ~110 m/s
         st.sigDrag *= 1 + 0.8 * (S.aux.lift || 0);         // open lift-fan doors and inlet
       }
-      S.nozV = near(S.nozV, tg, dt * (harr ? 1.0 : 0.55));
+      S.nozV = near(S.nozV, tg, dt * (harr ? 1.0 : 0.9));   // F-35B: 3BSM swivel ~1.1 s
       st.nozzle = S.nozV; S.aux.nozzle = S.nozV;
       var deg = Math.round(S.nozV * nzD);
       // jet-borne: throttle = climb, brake = sink, boost = max climb; the F-35B holds its height
@@ -23813,7 +23815,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       if (edge) {
         if (S.orbit) { S.orbit = false; flash('ORBIT OFF'); }
         else if (!st.onGround && speed > 50) {
-          S.orbit = true; S.oI = 0; V.aoff.set(0, 0, 0);
+          S.orbit = true; S.oI = 0; V.aoff.set(0, 0, 0); S.oV = clamp(speed, 100, 125); S.oLv = inp.lever;
           var gh = w && w.sampleH ? Math.max(0, w.sampleH(st.pos.x, -st.pos.z)) : 0;
           S.oAlt = Math.max(st.pos.y, gh + 700);
           if (des && des.cat !== 'air') V.oc.copy(des.designated); else V.oc.set(st.pos.x + fz * 2500, 0, st.pos.z - fx * 2500);   // 2.5 km to the left
@@ -23833,15 +23835,21 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
         S.oI = clamp(S.oI + (vsT - st.vel.y) * 0.03 * dt, -0.3, 0.6);
         var ap = clamp(0.1 + S.oI + 0.06 * (vsT - st.vel.y) + 0.6 * (1 / Math.max(0.5, Math.cos(rollA)) - 1), -1, 1);
         var ar = clamp(2.2 * (rollT - rollA) - 0.35 * st.w.z, -1, 1);
-        // speed hold ~400 km/h (the 2.5 km circle needs ~30 deg of bank)
-        var gw = clamp(0.35 + (112 - speed) * 0.04, 0, 1), bw = speed > 125 ? clamp((speed - 125) * 0.04, 0, 0.7) : 0;
+        // speed hold (start ~400 km/h; the 2.5 km circle needs ~30 deg of bank). The pilot trims it with the throttle, 330..540 km/h:
+        // hold gas = faster, hold brake = slower (Sim lever: the lever position sets it once it moves)
+        var rg = inp.gas || 0, rb = inp.brake || 0;
+        if (inp.lever != null) { if (S.oLv == null) S.oLv = inp.lever; if (Math.abs(inp.lever - S.oLv) > 0.02) { S.oLv = -9; S.oV = 92 + 58 * clamp(inp.lever, 0, 1); } }
+        else S.oV += ((rg > 0.05 ? rg : 0) - (rb > 0.05 ? rb : 0)) * 12 * dt;
+        S.oV = clamp(S.oV || 112, 92, 150);
+        var gw = clamp(0.35 + (S.oV - speed) * 0.04, 0, 1), bw = speed > S.oV + 3 ? clamp((speed - S.oV - 3) * 0.06, 0, 0.7) : 0;   // idle is 42 % in the air: the airbrake holds the top
         S.apR = S.apR || [0, 0, 0, 0, 0, 0]; S.apR[0] = rawP; S.apR[1] = rawR; S.apR[2] = rawY; S.apR[3] = inp.gas; S.apR[4] = inp.brake; S.apR[5] = inp.lever;
         inp.pitch = ap; inp.roll = ar; inp.yaw = 0; inp.gas = gw; inp.brake = bw; inp.boost = false; if (inp.lever != null) inp.lever = gw;
         S.apW = S.apW || [0, 0, 0, 0]; S.apW[0] = ap; S.apW[1] = ar; S.apW[2] = 0; S.apW[3] = gw;
-        // the stick moves the aim point on the ground (no target designated)
-        V.aoff.x += (rawR * -fz - rawP * fx) * 260 * dt; V.aoff.z += (rawR * fx - rawP * fz) * 260 * dt;
-        var al = Math.hypot(V.aoff.x, V.aoff.z); if (al > 1800) { V.aoff.x *= 1800 / al; V.aoff.z *= 1800 / al; }
-        S.label = 'ORBIT ' + (d / 1000).toFixed(1) + ' KM' + (des ? ' · TRACKING' : '');
+        // the stick moves the aim point on the ground (no target designated); mouse aim: the crosshair ray picks the ground point (setAimRay)
+        if (S.clock - (S.rayT || -9) < 0.3 && rayGround(w, V.p)) { V.aoff.x = V.p.x - V.oc.x; V.aoff.z = V.p.z - V.oc.z; }
+        else { V.aoff.x += (rawR * -fz - rawP * fx) * 260 * dt; V.aoff.z += (rawR * fx - rawP * fz) * 260 * dt; }
+        var al = Math.hypot(V.aoff.x, V.aoff.z), aMx = S.clock - (S.rayT || -9) < 0.3 ? 3500 : 1800; if (al > aMx) { V.aoff.x *= aMx / al; V.aoff.z *= aMx / al; }
+        S.label = 'ORBIT ' + (d / 1000).toFixed(1) + ' KM · ' + Math.round(S.oV * 3.6) + ' KM/H' + (des ? ' · TRACKING' : '');
       } else { S.apW = null; S.label = des ? 'TURRET · TRACKING' : 'TURRET'; }
       // turret: aim point -> body azimuth / elevation (limits -180..+30, -85..+15) -> combat gun direction
       var aim = null;
@@ -23868,6 +23876,14 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       if (S.hiveT >= 25 * cdMul) { S.hiveT = 0; var fr = -1; try { fr = c && c.sigRefill ? c.sigRefill('kdrones', 1) : -1; } catch (e) { fr = -1; } if (fr > 0 && fr < 1.01) S.doorT.hive = Math.max(S.doorT.hive || 0, 0.8); }
       S.aux.hive = near(S.aux.hive, (S.doorT.hive || 0) > 0 ? 1 : 0, dt * 3);
     }
+    // mouse-aim crosshair ray -> ground point (3 refinement steps on the terrain height); false = the ray does not reach the ground
+    function rayGround(w, out) {
+      var V = V3, o = V.ro, d = V.rd; if (!o || d.y > -0.03) return false;
+      var h = w && w.sampleH ? Math.max(0, w.sampleH(V.oc.x, -V.oc.z)) : 0, t = 0;
+      for (var i = 0; i < 3; i++) { t = (o.y - h) / -d.y; if (!(t > 0) || t > 12000) return false; out.copy(o).addScaledVector(d, t); h = w && w.sampleH ? Math.max(0, w.sampleH(out.x, -out.z)) : 0; }
+      out.y = h + 2; return true;
+    }
+    function setAimRay(o, d) { var V = v3(); if (!V || !o || !d) { S.rayT = -9; return; } if (!V.ro) { V.ro = o.clone(); V.rd = d.clone(); } V.ro.copy(o); V.rd.copy(d); S.rayT = S.clock; }
     function b3Loyal(dt, cdMul) {
       var L = FL.loyalDrones = FL.loyalDrones || { n: 0, rebuild: 60 };
       L.n = 2; L.rebuild = 60 * cdMul;
@@ -23915,7 +23931,10 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       for (var i = 0; i < n; i++) NET[2 + i] = Math.round(clamp(S.aux[names[i]] || 0, 0, 1) * 255);
       return n || NET[0] || NET[1] ? NET : null;
     }
-    return { update: update, hud: hud, saveFromDeath: saveFromDeath, netState: netState, state: function () { return S; } };
+    // Kraken orbit (main.js camera / mouse aim): { on, cx, cz } of the orbit centre; setAimRay(origin, unitDir) each frame while the mouse aims
+    var ORB = { on: false, cx: 0, cz: 0 };
+    function orbit() { ORB.on = !!S.orbit; if (V3) { ORB.cx = V3.oc.x; ORB.cz = V3.oc.z; } return ORB; }
+    return { update: update, hud: hud, saveFromDeath: saveFromDeath, netState: netState, state: function () { return S; }, orbit: orbit, setAimRay: setAimRay };
   };
   var NONE = [];
   // co-op mates (main.js updateTeammates): show a teammate's swing wings, bay doors, hook ... from his net bytes
@@ -27149,7 +27168,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
         if (ad > 1 && asT.dot(pF) > 0) asD.lerp(asT.divideScalar(ad), A.f * (0.82 + 0.15 * Math.min(aaVal(), 1))).normalize();
       }
       tB.copy(asD).addScaledVector(pR, rand(-sp, sp)).addScaledVector(pU, rand(-sp, sp)).normalize();
-      tC.copy(pF).multiplyScalar(noseSpeed()).addScaledVector(tB, spd);
+      if (tur) tC.copy(tB).multiplyScalar(spd);                         // turret: the fire control allows for own motion, the shell flies down the aim line
+      else tC.copy(pF).multiplyScalar(noseSpeed()).addScaledVector(tB, spd);
       var col = TR_COL[cls], size = TR_SIZE[cls];
       if (client) { if (fx.tracer) fx.tracer(from.clone(), tC.clone(), col, size); }
       else {
@@ -27195,7 +27215,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       if (client && (sig !== gunSig || (gunAimOn && sig && time - gunAimSent > 0.2))) {   // turret: resend the aim while firing
         gunSig = sig; LP.gun = sig > 0; gunAimSent = time;
         net.sendEvent({ t: 'gun', on: sig > 0, T: net.now(), pos: v3a(player.pos), vel: v3a(player.vel), q: [r4(player.q.x), r4(player.q.y), r4(player.q.z), r4(player.q.w)], ad: gunAimOn ? [r4(gunAimV.x), r4(gunAimV.y), r4(gunAimV.z)] : null,
-                        r: Math.round((gunCan ? rate : 0) + (podCan ? podRate : 0)), d: (gs.damage || 12) * LO.gunDamageMul * PERK.gun * SIGM.gun, s: gs.spread != null ? gs.spread : 0.004, sp: gs.speed || C.gunSpeed });
+                        r: Math.round((gunCan ? rate : 0) + (podCan ? podRate : 0)), d: (gs.damage || 12) * LO.gunDamageMul * PERK.gun * SIGM.gun, s: gs.spread != null ? gs.spread : 0.004, sp: gs.speed || C.gunSpeed,
+                        w: gunCan && !podCan ? (gs.base || gs.id) : undefined });   // w: the host uses the base spec (blast, ground x, range, calibre)
       }
       if (gunCan) {
         gunHeat += GUN_HEAT_PS * (LO.gunHeatMul || 1) * h;
@@ -27248,8 +27269,9 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
           tA.set(1.1, 0.25, -6).applyQuaternion(P.q).add(P.aim);
           tB.copy(rgF).addScaledVector(rgR, rand(-sp, sp)).addScaledVector(rgU, rand(-sp, sp)).normalize();
           var bl = pBul.add();
-          bl.pos.copy(tA); bl.prev.copy(tA); bl.vel.copy(P.vel).addScaledVector(tB, P.gunSpeed || C.gunSpeed); bl.life = 2; bl.src = null; bl.owner = P;
-          bl.dmg = P.gunDmg || C.gunDmg; bl.spec = null; bl.cls = bl.dmg >= 9 ? 2 : bl.dmg <= 4.5 ? 0 : 1;
+          bl.pos.copy(tA); bl.prev.copy(tA); if (P.gunAd) bl.vel.copy(tB).multiplyScalar(P.gunSpeed || C.gunSpeed); else bl.vel.copy(P.vel).addScaledVector(tB, P.gunSpeed || C.gunSpeed); bl.src = null; bl.owner = P;
+          var rs = P.gunSpec; bl.dmg = P.gunDmg || C.gunDmg; bl.spec = rs; bl.cls = rs ? gunClass(rs) : bl.dmg >= 9 ? 2 : bl.dmg <= 4.5 ? 0 : 1;
+          bl.life = rs ? clamp((rs.range || 1000) * 1.6 / (P.gunSpeed || C.gunSpeed), 1.2, 2.2) : 2;
           if (fx.tracer) fx.tracer(bl.pos.clone(), bl.vel.clone(), TR_COL[bl.cls], TR_SIZE[bl.cls]);
           netTracer(bl.pos, bl.vel, 0, P.id); stats.remoteRounds++;
         }
@@ -27277,8 +27299,9 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
             var cl = bl.cls != null ? bl.cls : 1;
             tA.subVectors(bl.prev, ep); var tl = tA.length(); tA.multiplyScalar(tl > 1e-3 ? Math.min(tl, r * 0.5) / tl : 0).add(ep);   // on the target's skin
             hitFx(tA, e.cat === 'air' || e.cat === 'sea' ? 'metal' : 'vehicle', cl, (gunHitN++ & 1) === 0);
-            var gm = e.cat !== 'air' && bl.owner && bl.owner.local ? (LO.gunGroundMul || 1) * ((bl.spec && bl.spec.groundMul) || 1) : 1;
+            var gm = e.cat !== 'air' ? shellGroundMul(bl) : 1;
             damageTarget(e, bl.dmg * gm * (e.kind === 'heli' ? C.heliGunDmg / C.gunDmg : e.kind === 'sam' ? 1.5 : 1), 'gun', bl.owner, bl.spec);
+            if (bl.spec && bl.spec.blast >= 5) shellBlast(tA, bl, e);
           }
         }
         if (!hit) {
@@ -27288,7 +27311,9 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
             var cg = bl.cls != null ? bl.cls : 1, wet = !sld && isWater(bl.pos.x, bl.pos.z);
             // terrain / water: fx tracers make their own dust / splash (fx.setWorld); add the calibre-specific part here
             if (sld || !fx.setWorld) hitFx(bl.pos, sld ? 'metal' : wet ? 'water' : 'ground', cg, true);
+            else if (bl.spec && bl.spec.blast >= 5) fxImpact('he30', bl.pos, HE40_FX, false);   // 40 mm HE shell (co-op: mirrored, ~2.5 per s per turret)
             else if (cg === 2 && (gunHitN++ % 3) === 0) fxImpact('he30', bl.pos, { air: false }, true);   // 30 mm HE pop
+            if (bl.spec && bl.spec.blast >= 5) shellBlast(bl.pos, bl, null);
           }
         }
         if (hit || bl.life <= 0) pBul.kill(i);
@@ -27307,6 +27332,19 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
         }
         if (!dead && (bl.pos.y <= gAt(bl.pos.x, bl.pos.z) || solid(bl.pos))) { dead = true; fxPuff(bl.pos, 4, 1.5, 0.6); }
         if (dead) eBul.kill(i);
+      }
+    }
+    // ground x for gun rounds: base spec groundMul (all shooters) x the local campaign upgrade
+    var HE40_FX = { air: false, scale: 1.6 };
+    function shellGroundMul(bl) { var g = (bl.spec && bl.spec.groundMul) || 1; return bl.owner && bl.owner.local ? (LO.gunGroundMul || 1) * g : g; }
+    // explosive shells (gun spec.blast >= 5 m, Kraken 40 mm): half damage in the blast radius to every other target (host / solo; same for client shells)
+    function shellBlast(p, bl, skip) {
+      if (client) return;
+      var R = bl.spec.blast, base = bl.dmg * 0.5;
+      for (var i = 0; i < tgts.length; i++) {
+        var s = tgts[i]; if (!s.alive || s === skip || (s.reg && s.reg.targetable === false)) continue;
+        var d = Math.max(0, s.aim.distanceTo(p) - s.hitR * 0.6);
+        if (d < R) damageTarget(s, base * (s.cat !== 'air' ? shellGroundMul(bl) : 1) * (1 - d / R * 0.6), 'gun', bl.owner, bl.spec);
       }
     }
     // short position history per target (host lag compensation for remote shooters)
@@ -28135,7 +28173,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
         w: [Math.round(angW.x * 1000) / 1000, Math.round(angW.y * 1000) / 1000, Math.round(angW.z * 1000) / 1000],
         a: [Math.round(localVis.thr * 100), Math.round(localVis.ab * 100), Math.round(localVis.gearT * 100)],
         al: pAlive ? 1 : 0, ab: player.airborne && !player.airborne() ? 0 : 1, hp: Math.round(player.health || 0), g: localVis.sg || undefined,
-        dm: LO.detectMul * PERK.detect * SIGM.detect, vd: Math.round(viewDelayMs()), lk: lockId, ld: locked ? 1 : 0, n: stateSeq % C.stateHz === 1 ? localInfo.name : undefined, ac: stateSeq % C.stateHz === 1 ? localInfo.aircraftId : undefined, wl: stateSeq % C.stateHz === 1 ? (localInfo.wingLvl | 0) : undefined });
+        dm: LO.detectMul * PERK.detect * SIGM.detect, vd: Math.round(viewDelayMs()), lk: lockId, ld: locked ? 1 : 0, n: stateSeq % C.stateHz === 1 ? localInfo.name : undefined, ac: stateSeq % C.stateHz === 1 ? localInfo.aircraftId : undefined, wl: stateSeq % C.stateHz === 1 ? (localInfo.wingLvl | 0) : undefined,
+        dn: stateSeq % C.stateHz === 1 && localInfo.drones > 0 ? [localInfo.drones, localInfo.droneRb || 60] : undefined });   // Skuld drones (wingman.js): the host flies them
     }
     function viewDelayMs() { return client ? snapClock.base + snapClock.delay : 0; }
     function syncPeers() {
@@ -28169,6 +28208,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
         P.stAlive = !!msg.al; P.airborne = !!msg.ab; P.hp = msg.hp; P.detectMul = msg.dm || 1; P.viewDelay = (msg.vd || 0) / 1000;
         P.thr = msg.a[0] / 100; P.ab = msg.a[1] / 100; P.gearT = msg.a[2] / 100; P.lockId = msg.lk; P.locked = !!msg.ld; P.sg = Array.isArray(msg.g) && msg.g.length <= 6 ? msg.g : null;
         if (msg.n) P.name = String(msg.n).slice(0, 24); if (msg.ac) P.aircraftId = String(msg.ac).slice(0, 24); if (msg.wl != null) P.wingLvl = clamp(msg.wl | 0, 0, 5);
+        if (msg.ac) P.drones = 0; if (Array.isArray(msg.dn)) { P.drones = clamp(msg.dn[0] | 0, 0, 2); P.droneRb = clamp(+msg.dn[1] || 60, 20, 120); }   // dn comes with ac (1 Hz)
         P.lastRx = now;
       } else if (msg.k === 's' && client) {
         if (msg.i <= lastSnapI && lastSnapI - msg.i < 1000) return;    // older than what we have
@@ -28181,7 +28221,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     function applySnapshot(msg) {
       var T = msg.T, i, row, t;
       if (msg.pl) lastPl = msg.pl; else msg.pl = lastPl || [];
-      if (combat._wingApply) { try { combat._wingApply(msg.wg || null, T); } catch (e) { /* ignore */ } }   // wingmen (wingman.js)
+      if (combat._wingApply) { try { combat._wingApply(msg.wg || null, T, msg.pl); } catch (e) { /* ignore */ } }   // wingmen + loyal drones (wingman.js)
       for (i = 0; i < msg.e.length; i++) {
         row = msg.e[i]; t = ents[row[0]];
         if (!t || !t.alive) continue;
@@ -28354,10 +28394,15 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       else if (ev.t === 'gun') {   // never trust client numbers: clamp rate (internal gun + pods), damage, spread
         P.gun = !!ev.on; P.gunRate = numIn(ev.r, 20, 1, 200); P.gunDmg = numIn(ev.d, C.gunDmg, 0, 40); P.gunSpread = numIn(ev.s, 0.004, 0, 0.05);
         P.gunSpeed = numIn(ev.sp, C.gunSpeed, 400, 1500);
+        // a jet-only gun (Kraken 40 mm turret, GAU-8 ...): shells from the base spec, damage up to 2x the base (campaign upgrades)
+        var gsp = ev.w ? specOf(ev.w) : null;
+        if (gsp && gsp.type === 'gun' && !isPodSpec(gsp) && (!gsp.jet || gsp.jet.indexOf(P.aircraftId) >= 0)) { P.gunSpec = gsp; P.gunDmg = numIn(ev.d, gsp.damage || C.gunDmg, 0, (gsp.damage || C.gunDmg) * 2); }
+        else P.gunSpec = null;
         if (Array.isArray(ev.ad) && ev.ad.length === 3 && isFinite(+ev.ad[0]) && isFinite(+ev.ad[1]) && isFinite(+ev.ad[2])) { P.gunAd = (P.gunAd || new THREE.Vector3()).set(+ev.ad[0], +ev.ad[1], +ev.ad[2]); if (P.gunAd.lengthSq() > 0.5) P.gunAd.normalize(); else P.gunAd = null; }
         else P.gunAd = null;
       }
       else if (ev.t === 'flares') remoteFlares(P, ev);
+      else if (ev.t === 'wc') { if (combat._wingCmd) combat._wingCmd(P, ev); }   // client wing / drone command (wingman.js)
       else if (ev.t === 'rcn' && Array.isArray(ev.ids)) { applyRecon(ev.ids, ev.d); net.sendEvent({ t: 'rcn', ids: ev.ids.slice(0, 200), d: numIn(ev.d, 60, 1, 120) }); }   // SR-71 recon from a client: mark + tell everyone
     }
     // client laser / railgun hits: host validates weapon type, target, range, nose angle, rate; damage from the base spec (clamped)
@@ -28888,6 +28933,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     combat.rearm = rearm;
     // ---- roster batch 3 (jetsig.js): turret aim, recon marks, built-in weapon fire / refill
     // Kraken turret: the internal gun fires along v (world unit vector); null = along the nose
+    // shader pre-warm (main.js warmStart): build the lazily made batch-3 visuals now, hidden in the scene (laser / rail beam)
+    combat.warmVisuals = function () { beamMesh(); return true; };
     combat.setGunAim = function (v) { if (v && isFinite(v.x) && isFinite(v.y) && isFinite(v.z) && v.lengthSq() > 0.5) { gunAimV.copy(v).normalize(); gunAimOn = true; } else gunAimOn = false; };
     // SR-71 recon: mark targets for dur s (lock range x1.5, lock time x0.6, damage +10% for every pilot). o: { pos, dir (unit, horizontal), range, cone deg }
     // or { center, radius }. Returns how many new targets were marked; co-op: the marks go to everyone.
@@ -28978,7 +29025,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     combat.off = function (ev, fn) { var l = listeners[ev]; if (l) { var i = l.indexOf(fn); if (i >= 0) l.splice(i, 1); } };
     combat.hud = hud;
     combat.setNet = setNet;
-    combat.setLocalInfo = function (o) { if (o) { if (o.name) localInfo.name = String(o.name).slice(0, 24); if (o.aircraftId) { localInfo.aircraftId = o.aircraftId; LP.aircraftId = o.aircraftId; } if (o.wingLvl != null) localInfo.wingLvl = o.wingLvl | 0; } };
+    combat.setLocalInfo = function (o) { if (o) { if (o.name) localInfo.name = String(o.name).slice(0, 24); if (o.aircraftId) { localInfo.aircraftId = o.aircraftId; LP.aircraftId = o.aircraftId; } if (o.wingLvl != null) localInfo.wingLvl = o.wingLvl | 0; if (o.drones != null) localInfo.drones = clamp(o.drones | 0, 0, 2); if (o.droneRb != null) localInfo.droneRb = clamp(Math.round(+o.droneRb || 60), 20, 120); } };
     combat.setLocalVisual = function (o) { if (o) { if (o.thr != null) localVis.thr = +o.thr || 0; if (o.ab != null) localVis.ab = +o.ab || 0; if (o.gearT != null) localVis.gearT = +o.gearT || 0; if (o.sg !== undefined) localVis.sg = o.sg; } };
     combat.remotePlayers = function () {
       // not flying (menu / lobby): update() does not run, so refresh the teammate poses here (startGame needs them to air-start)
@@ -29006,7 +29053,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       addFlare: function (p, v) { return addFlare(p, v); }, decoy: function (P, made, eff) { decoyMissiles(P, made, eff); },
       desig: function () { return desig; }, locked: function () { return locked; }, time: function () { return time; },
       netOn: function () { return !!(net && net.connected); }, isClient: function () { return client; }, hosting: function () { return hosting(); },
-      myId: function () { return myId(); }, now: function () { return nowMs(); },
+      myId: function () { return myId(); }, now: function () { return nowMs(); }, send: function (o) { if (net && net.connected) net.sendEvent(o); },
       drop: function (P) { var i = pts.indexOf(P); if (i > 0) pts.splice(i, 1); for (i = 0; i < tgts.length; i++) if (tgts[i].tp === P) { tgts[i].tp = LP; tgts[i].detect = false; } } };
     // per-jet gun muzzle: local Vector3 (nose -Z, right +X), e.g. model.gunMuzzle; pair = true -> guns on both sides (alternate)
     combat._dbg.fireAt = function (t) { var w = selW(); return w ? fireOne(w, t, tagSeq++) : false; };
@@ -35057,6 +35104,11 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
  * Co-op: the HOST simulates up to 3 wingmen (its own first, then clients whose state 'wl' = wingman level >= 1), each on
  *   its owner's wing. Clients get them in the entity snapshot (msg.wg via combat._wingSnap / _wingApply) and show them as
  *   friendly ai PTs (remotePlayers -> model, blue tag 'TWO' for your own). Notes: WINGMAN: NEXT MISSION / ROOM FULL / SOLO ONLY.
+ * Skuld loyal drones (jetsig.js FL.loyalDrones): solo / host fly their own ('drone1/2'). Co-op client in a Skuld: it sends
+ *   state 'dn' = [n, rebuild s] (1 Hz, with 'ac'); the HOST flies those drones too (key 'rd:<id>:<k>', max 6 drones in the room,
+ *   only while the client's jet is a Skuld). Snapshot msg.wg.d rows [owner slot in msg.pl, k, pos x10, vel, quat x1e4, thr, hp, state]
+ *   (~65 bytes / drone), [slot, k, -1] = shot down (rebuilding). Every pilot shows them (own: 'DRONE 1', others: '<NAME> D1').
+ *   Keys Y / U on a client: event 'wc' {c, tid} -> the host commands that client's wingman + drones (combat._wingCmd).
  *
  * ---- named enemy aces ----
  * FL.ACES = roster (10). From campaign mission 6, air missions (cap/intercept/bomber/boss) may get one ace
@@ -35585,7 +35637,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     var A = A_();
     if (!A || !R.opt.player || !FL.ENEMY_UTIL || !FL.ENEMY_UTIL.flyBTT) return;
     FCTX.world = world(); FCTX.time = clock;
-    lvlSendT -= dt; if (lvlSendT <= 0 && R.combat.setLocalInfo) { lvlSendT = 1; R.combat.setLocalInfo({ wingLvl: campaignLevel() }); }
+    lvlSendT -= dt; if (lvlSendT <= 0 && R.combat.setLocalInfo) { lvlSendT = 1; R.combat.setLocalInfo({ wingLvl: campaignLevel(), drones: droneWant(), droneRb: droneRb() }); }
     if (A.isClient()) { for (var c = INST.length - 1; c >= 0; c--) { use(INST[c]); despawnW(); } INST.length = 0; clientTick(dt); return; }
     if (VIEWS_N) clearViews();
     manT -= dt; if (manT <= 0) { manT = 0.5; manage(); }
@@ -35618,7 +35670,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
   // ======================================================================= co-op client: friendly views of the host's wingmen
   var VIEWS = {}, VIEWS_N = 0, hostWing = false, lastWgT = -99, myStatus = '', ownSeen = false;
   function clearViews() { var A = A_(); for (var id in VIEWS) { if (A) A.drop(VIEWS[id].pt); VIEWS[id].pt.alive = false; delete VIEWS[id]; } VIEWS_N = 0; }
-  var NO_ROWS = [];
+  var NO_ROWS = [], DID = {};
+  function droneId(oid, k) { var c = DID[oid] || (DID[oid] = ['', 'w:' + oid + ':d1', 'w:' + oid + ':d2']); return c[k] || 'w:' + oid + ':d' + k; }   // no string garbage per snapshot
   function wingApply(wg, T0, pl) {
     var A = A_(); if (!A || !A.isClient()) return;
     if (!wg) return;
@@ -35642,7 +35695,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     var D = wg.d || NO_ROWS;
     for (i = 0; i < D.length; i++) {          // loyal drones (own + other Skuld pilots, host-simulated)
       var dr = D[i], oid = pl && pl[dr[0]], dk = dr[1] | 0; if (!oid || dk < 1) continue;
-      id = 'w:' + oid + ':d' + dk;
+      id = droneId(oid, dk);
       var dv = VIEWS[id];
       if (dr.length < 4) { if (dv && dv.drone) radio('ddown', 'Drone ' + dk + ' lost. Rebuilding.', 2, 4, 'DRONES', VO_TWO); continue; }   // down: the view goes below
       seen[id] = 1;
@@ -35655,10 +35708,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       if (dv.fresh) { dv.fresh = false; dp.aim.copy(dv.rp); dp.vel.copy(dv.rv); dp.q.copy(dv.rq); }
       if (A.pts.indexOf(dp) < 0) A.pts.push(dp);
     }
-    for (id in VIEWS) if (!seen[id]) {
-      if (VIEWS[id].drone && R.opt.player.alive && R.opt.player.alive()) radio('ddown', 'Drone ' + VIEWS[id].drone + ' lost. Rebuilding.', 2, 4, 'DRONES', VO_TWO);
-      A.drop(VIEWS[id].pt); VIEWS[id].pt.alive = false; delete VIEWS[id]; VIEWS_N--;
-    }
+    for (id in VIEWS) if (!seen[id]) { A.drop(VIEWS[id].pt); VIEWS[id].pt.alive = false; delete VIEWS[id]; VIEWS_N--; }
   }
   function clientTick(dt) {
     var A = A_();
@@ -35705,15 +35755,32 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
 
   function command(cmd) {   // own wingman + loyal drones
     var A = A_(); if (!A) return false;
+    if (A.isClient()) {     // co-op client: the host flies them; send the command with my designated target
+      var mine = 0, two = false;
+      for (var vid in VIEWS) { if (VIEWS[vid].drone) mine++; else if (VIEWS[vid].pt.name === 'TWO') two = true; }
+      if (!mine && !two) return false;
+      var des = A.desig();
+      if (cmd === 'attack' && (!des || !des.alive || des.cat !== 'air')) { radio('dcmd', des && des.alive ? 'Unable. Air targets only.' : 'No target.', 2, 2, mine ? 'DRONES' : 'TWO', VO_TWO); return false; }
+      if (A.send) A.send({ t: 'wc', c: cmd, tid: cmd === 'attack' && des ? des.id : 0 });
+      radio('dcmd', mine ? (cmd === 'attack' ? 'Drones attacking your target.' : cmd === 'cover' ? 'Drones covering you.' : 'Drones rejoining.') : (cmd === 'attack' ? 'Two, copy. Attacking your target.' : cmd === 'cover' ? 'Two, copy. Covering you.' : 'Two, copy. Rejoining.'), 2, 2, mine ? 'DRONES' : 'TWO', VO_TWO);
+      return true;
+    }
     var ok = false, dn = 0, L = localInst();
     if (L && L.W.alive) { use(L); ok = commandOne(cmd, A); }
     for (var i = 0; i < INST.length; i++) { var n = INST[i]; if (!n.drone || !n.W.alive) continue; use(n); if (commandOne(cmd, A)) dn++; }
     if (dn) radio('dcmd', cmd === 'attack' ? 'Drones attacking your target.' : cmd === 'cover' ? 'Drones covering you.' : 'Drones rejoining.', 2, 2, 'DRONES', VO_TWO);
     return ok || dn > 0;
   }
-  function commandOne(cmd, A) {
+  // host: a co-op client's command for its own wingman and drones (combat event 'wc'); tid = the client's designated target
+  function remoteCommand(P, ev) {
+    var A = A_(); if (!A || !P || !ev || (ev.c !== 'attack' && ev.c !== 'cover' && ev.c !== 'form')) return 0;
+    var t = ev.tid ? A.ents[ev.tid] || null : null, n = 0;
+    for (var i = 0; i < INST.length; i++) { var x = INST[i]; if (x.P !== P || !x.W.alive) continue; use(x); if (commandOne(ev.c, A, t)) n++; }
+    return n;
+  }
+  function commandOne(cmd, A, des) {
     if (cmd === 'attack') {
-      var d = A.desig();
+      var d = des !== undefined ? des : A.desig();
       if (!d || !d.alive) { wr('cmd', 'Two. No target.', 2, 2); return false; }
       if (d.cat !== 'air') { wr('cmd', 'Two. Unable. Air targets only.', 2, 2); return false; }
       st.cmd = 'attack'; st.tgt = d; st.lockT = 0; setState('engage'); wd.seenAge = 99;
@@ -35957,7 +36024,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     var sw = c.setWorld;
     if (sw) c.setWorld = function () { for (var i = 0; i < INST.length; i++) { use(INST[i]); despawnW(); st.wreckT = 0; } clearViews(); return sw.apply(c, arguments); };
     c._wingSnap = function () { try { return wingSnap(); } catch (e) { return undefined; } };
-    c._wingApply = function (wg, T0) { wingApply(wg, T0); };
+    c._wingApply = function (wg, T0, pl) { wingApply(wg, T0, pl); };
+    c._wingCmd = function (P, ev) { try { return remoteCommand(P, ev); } catch (e) { return 0; } };
     if (c.on) {
       c.on('kill', function (ev) { try { onKill(ev); } catch (e) { /* ignore */ } });
       c.on('playerHit', function (ev) { try { onPlayerHit(ev); } catch (e) { /* ignore */ } });
@@ -35980,7 +36048,12 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       var L = localInst(); if (!L) return null; var s = L.st, w = L.W;
       return { state: s.state, alive: w.alive, hp: w.hp, target: s.tgt ? s.tgt.id : 0, pos: w.aim, vel: w.vel, aircraftId: w.aircraftId, tier: s.tier, skill: s.skill, level: s.level, msl: s.msl, flares: s.flares, kills: w.kills, cmd: s.cmd, slot: L.slot };
     },
-    all: function () { return INST.map(function (n) { return { owner: n.key, id: n.W.id, name: n.W.name, state: n.st.state, alive: n.W.alive }; }); },
+    // co-op client: my own host-simulated drones are listed too (owner 'drone1' / 'drone2', view: true) so the Skuld HUD counts them
+    all: function () {
+      var o = INST.map(function (n) { return { owner: n.key, id: n.W.id, name: n.W.name, state: n.st.state, alive: n.W.alive, cmd: n.st.cmd }; });
+      for (var id in VIEWS) if (VIEWS[id].drone) o.push({ owner: 'drone' + VIEWS[id].drone, id: id, name: VIEWS[id].pt.name, state: VIEWS[id].pt.state, alive: true, view: true });
+      return o;
+    },
     views: function () { var o = []; for (var id in VIEWS) o.push({ id: id, name: VIEWS[id].pt.name, state: VIEWS[id].pt.state, pos: VIEWS[id].pt.aim }); return o; },
     enabled: function () { return campaignLevel() >= 1; },
     unlockDebug: function (l) { dbgLevel = clamp(l == null ? 3 : l | 0, 0, 5); return dbgLevel; },
@@ -41696,7 +41769,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
   // Near the nose: wings level + fine pitch / rudder. Below the nose (< ~15 deg): push instead of rolling over.
   // Drift / Cobra: nose pointing (pitch + yaw straight at the aim, wings held). rollOv = keyboard owns roll.
   var rollHold = 1;
-  function instructor(out, rollOv) {
+  function instructorFly(out, rollOv) {
     aimDir.set(0, 0, -1).applyQuaternion(aimQ);
     qInv.copy(st.q).invert();
     var l = lv2.copy(aimDir).applyQuaternion(qInv); // aim in body frame (nose -Z, up +Y, right +X)
@@ -41705,7 +41778,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     var bank = Math.atan2(-ax.right.y, ax.up.y);
     var pErr = Math.atan2(l.y, -l.z), yErr = Math.atan2(l.x, -l.z);
     out.cobra = false;
-    if (c.mode !== 'normal') {
+    if (c.mode !== 'normal' && c.mode !== 'hover') {
       out.pitch = clamp((pErr * 4.5 - c.sp) / c.gp, -1, 1);
       out.yaw = clamp(yErr * 4.5 / c.gy, -1, 1);
       out.roll = rollOv ? 0 : clamp(-st.w.z * 0.5 / c.gr, -1, 1);
@@ -41734,7 +41807,23 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     out.pitch = clamp((pErr * 4 * gate - c.sp) / c.gp, -1, 1);
     out.yaw = clamp((clamp(yErr, -0.3, 0.3) * 3 * (1 - wB) - (c.sy || 0) * (1 - wB)) / c.gy, -1, 1);
   }
-  var aimOut = { pitch: 0, roll: 0, yaw: 0, cobra: false }, cobraPh = '';
+  // VTOL hover (Harrier / F-35B jet-borne, physics stick = translate): the mouse does not point the nose. Aim heading -> puffer yaw
+  // (full 45 deg/s at 25 deg off), aim elevation -> fore-aft translate (horizon +-5 deg = hold, 20 deg below = full forward,
+  // above = back), no sideways (A / D). Blended in with the jet-borne weight, so the change-over has no step.
+  function instructor(out, rollOv) {
+    instructorFly(out, rollOv);
+    var hw = st.cobraPhase || st.drift ? 0 : clamp(((st.hoverW || 0) - 0.25) / 0.5, 0, 1);
+    if (hw <= 0) return;
+    hw = hw * hw * (3 - 2 * hw);
+    var ax = phys.axes(), fx = ax.fwd.x, fz = ax.fwd.z, fl = Math.hypot(fx, fz), hy = 0;
+    var ah = Math.hypot(aimDir.x, aimDir.z), el = Math.atan2(aimDir.y, ah);
+    if (fl > 0.05 && ah > 0.05) hy = clamp(Math.atan2(aimDir.x * -fz + aimDir.z * fx, aimDir.x * fx + aimDir.z * fz) / (25 * DEG), -1, 1);   // + = aim right of the nose
+    var ae = Math.abs(el), hp = (el > 0 ? 1 : -1) * clamp((ae - 5 * DEG) / (15 * DEG), 0, 1);
+    out.pitch += (hp - out.pitch) * hw; out.yaw += (hy - out.yaw) * hw; out.roll += ((rollOv ? out.roll : 0) - out.roll) * hw; out.cobra = false;
+  }
+  var aimOut = { pitch: 0, roll: 0, yaw: 0, cobra: false }, cobraPh = '', orbAimWas = false, hovE = new T.Euler(0, 0, 0, 'YXZ'), hovQ = new T.Quaternion();
+  // hover: aim point -> level, on the nose heading (k = blend)
+  function hoverAimLevel(k) { var f = phys.axes().fwd; if (Math.hypot(f.x, f.z) < 0.05) return; hovE.set(0, Math.atan2(-f.x, -f.z), 0, 'YXZ'); hovQ.setFromEuler(hovE); aimQ.slerp(hovQ, k); }
   // keyboard axes: tap = small, hold = full (ramp over T s), release = quick return
   var kbAx = { p: { v: 0, h: 0, s: 0 }, r: { v: 0, h: 0, s: 0 }, y: { v: 0, h: 0, s: 0 } };
   function kbRamp(o, tgt, T, dt) {
@@ -41850,11 +41939,24 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
         inp.cobra = aimOut.cobra;
         if (cobraPh && !st.cobraPhase) resetAim();   // Cobra done: the aim point comes back to the nose, the jet flies on straight
         cobraPh = st.cobraPhase || '';
-        if (pOv || K('ArrowLeft') || K('ArrowRight')) { aimQ.slerp(st.q, 1 - Math.exp(-dt * 10)); aimMoved = 0; }
+        if (pOv || K('ArrowLeft') || K('ArrowRight')) { if ((st.hoverW || 0) > 0.5) hoverAimLevel(1 - Math.exp(-dt * 10)); else aimQ.slerp(st.q, 1 - Math.exp(-dt * 10)); aimMoved = 0; }   // hover: keys translate, the aim stays level (= hold)
         aimMoved += dt; if (aimMoved > 0.6) levelAimRoll(1 - Math.exp(-dt * 1.5));
+        // Kraken orbit: the autopilot flies; the mouse crosshair aims the turret at the ground point under it
+        var orbM = jsig && jsig.orbit ? jsig.orbit() : null;
+        if (orbM && orbM.on) {
+          if (!orbAimWas) { va.set(orbM.cx - camera.position.x, world.groundY(orbM.cx, -orbM.cz) - camera.position.y, orbM.cz - camera.position.z).normalize(); aimQ.setFromUnitVectors(vb.set(0, 0, -1), va); levelAimRoll(1); }   // orbit start: crosshair on the centre
+          jsig.setAimRay(camera.position, aimDir); inp.pitch = 0; inp.roll = 0; inp.yaw = 0;
+        }
+        orbAimWas = !!(orbM && orbM.on);
       } else if (stickMode === 'turn') {
         easyTurn(clamp(kbR + gx + tx, -1, 1), clamp(kbP + gy + tyy, -1, 1) * (invert ? -1 : 1), easyOut);
         inp.pitch = easyOut.pitch; inp.roll = easyOut.roll; inp.yaw = clamp(easyOut.yaw + kbY + gyaw, -1, 1);
+        // VTOL hover (stick = translate): easy turn becomes "turn and go": stick X = yaw, stick Y = fore / aft, no bank logic
+        var ehw = clamp(((st.hoverW || 0) - 0.25) / 0.5, 0, 1);
+        if (ehw > 0) {
+          var eX = clamp(kbR + gx + tx, -1, 1), eY = clamp(kbP + gy + tyy, -1, 1) * (invert ? -1 : 1);
+          inp.pitch += (eY - inp.pitch) * ehw; inp.roll += (0 - inp.roll) * ehw; inp.yaw += (clamp(eX + kbY + gyaw, -1, 1) - inp.yaw) * ehw;
+        }
       } else {
         inp.pitch = clamp(kbP + gy + tyy, -1, 1) * (invert ? -1 : 1);
         inp.roll = clamp(kbR + gx + tx, -1, 1);
@@ -42474,7 +42576,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
 
   // ---------------------------------------------------------------- camera
   var camOff = new V3(), camUp = new V3(0, 1, 0), tgtPos = new V3(), tmp = new V3(), tmp2 = new V3(), tmp3 = new V3();
-  var lookQ = new T.Quaternion(), eul = new T.Euler(), flyPos = new V3(), flyAge = 99;
+  var lookQ = new T.Quaternion(), eul = new T.Euler(), flyPos = new V3(), flyAge = 99, camHov = 0, camOrb = 0, camV = new V3();
   var cobCam = 0, camQ = new T.Quaternion(), camQL = new T.Quaternion(), tgtQ = new T.Quaternion(), UPW = new V3(0, 1, 0), rigM = new T.Matrix4(), rX = new V3(), rY = new V3(), rZ = new V3();
   var rmbPrev = false;
   var zoomHeld = false, zoomV = 0, fovBase = 62, zoomLatch = false, zoomMode = 'hold';
@@ -42565,6 +42667,10 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       var f = tmp2, u = tmp3, kRot = 6.5;
       var rear = mode === 'REAR';
       var maimCam = mouseAimOn() && !rear;
+      // VTOL hover / Kraken orbit: pulled-back camera (blends in ~1.5 s, no snaps). Hover: higher, further back, looks down at the pad.
+      var orb = !rear && jsig && jsig.orbit ? jsig.orbit() : null;
+      camHov += ((rear ? 0 : clamp(((st.hoverW || 0) - 0.2) / 0.6, 0, 1)) - camHov) * (1 - Math.exp(-dt * 1.8));
+      camOrb += ((orb && orb.on ? 1 : 0) - camOrb) * (1 - Math.exp(-dt * 1.5));
       if (rear) { f.copy(fwd); u.copy(up); dist = 17; hgt = 3.6; kRot = 13; }   // fixed rear: nose direction, rolls with the jet, light smoothing
       else if (maimCam) { f.copy(aimDir); u.set(0, 1, 0).applyQuaternion(aimQ); kRot = 12; }
       else if (st.drift && sp > 30) {
@@ -42576,10 +42682,19 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       if (!maimCam && !rear) {
         // horizon: blend world-up and the jet's up (level camera by default; full roll as an option)
         var rf = st.drift ? Math.max(rollFollow, 0.6) : rollFollow;
+        rf *= 1 - camOrb;                                         // orbit: level horizon in the steady bank
         if (Math.abs(f.y) > 0.92) rf = 1;                         // near vertical: follow the jet to avoid flips
         u.multiplyScalar(rf).addScaledVector(UPW, 1 - rf);
         if (u.lengthSq() < 1e-4) u.copy(up);
         u.normalize();
+      }
+      if (camHov > 0.001 || camOrb > 0.001) {
+        dist += camHov * (far ? 12 : 16) + camOrb * (far ? 22 : 34); hgt += camHov * 8 + camOrb * 12;
+        // orbit: look part of the way toward the orbit centre, so the ground target and the turret line are both in view
+        // (about 20 deg of the target stays to the side of the jet, so the jet does not cover it)
+        if (camOrb > 0.001 && orb && !maimCam) { camV.set(orb.cx - p.x, world.groundY(orb.cx, -orb.cz) - p.y, orb.cz - p.z).normalize(); f.lerp(camV, 0.75 * camOrb).normalize(); }
+        // hover: follow the heading, not the nose pitch (the jet leans 15-20 deg when it brakes / translates)
+        if (camHov > 0.001 && !maimCam && Math.abs(f.y) < 0.9) { f.y *= 1 - camHov; f.normalize(); }
       }
       rigQ(f, u, tgtQ);
       if (camReset) { camQ.copy(tgtQ); lookS.y = lookS.p = lookS.vy = lookS.vp = 0; distS.x = dist; distS.v = 0; camReset = false; }
@@ -42599,7 +42714,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       var gy = world.groundY(camera.position.x, -camera.position.z) + 3;
       if (camera.position.y < gy) camera.position.y = gy;
       camera.quaternion.copy(camQL);
-      camera.rotateX(-Math.atan2(hgt * 0.55, distS.x));                      // aim slightly over the jet so it sits below centre
+      camera.rotateX(-Math.atan2(hgt * 0.55, distS.x) - camHov * 0.1);       // aim slightly over the jet so it sits below centre (hover: a bit more down)
       camera.up.set(0, 1, 0).applyQuaternion(camQL);
     }
     // shake: small and scaled by the setting; trauma (hits, explosions) dominates, flight rumble is subtle
@@ -44736,7 +44851,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793185090', updShown = false;
+  var BUILD = '1793186926', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
@@ -44879,6 +44994,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
   var KHR = (function () { try { return renderer.extensions.get('KHR_parallel_shader_compile'); } catch (e) { return null; } })();
   function needsLights(m) { return !!m && (m.isMeshStandardMaterial || m.isMeshPhongMaterial || m.isMeshLambertMaterial || m.isMeshToonMaterial || m.isShadowMaterial || (m.isShaderMaterial && m.lights === true)); }
   function warmStart() {
+    if (combat && combat.warmVisuals) { try { combat.warmVisuals(); } catch (e) {} }   // batch 3: laser beam materials (hidden, in the scene pass)
     if (window.FLK_DEV && !window.FLK_WARM && !/[?&]warm\b/.test(location.search)) { warmShaders('boot'); return; }   // test builds: software GL
     WJ = { q: [], objs: null, oi: 0, model: null, t0: performance.now(), busy: 0, n0: renderer.info.programs ? renderer.info.programs.length : 0,
       models: 0, skip: 0, reps: {}, repG: null, repN: 0, seenMat: new Set() };
@@ -44897,6 +45013,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       var it = { k: 'model', name: k, make: function () { return d.build(0); } };
       (d.boss || d.noWaves ? boss : d.category === 'air' ? air : gnd).push(it);
     });
+    // batch 3: Skuld loyal drones (own or a teammate's, any time) warm early like the enemy kinds, not with the queued jets
+    if (FL.buildAircraft) air.unshift({ k: 'model', name: 'skuld_d low', make: function () { return FL.buildAircraft('skuld_d', { light: false, lod: 'low' }); } });
     WJ.q = q.concat(air, gnd, boss, [{ k: 'shadow' }], jets);   // other jets last, and only in menus (a full jet build is a 20-80 ms hitch in flight)
     glog('shader pre-warm: ' + (WJ.q.length - 2) + ' models queued' + (KHR ? ' (parallel compile ext)' : ''));
   }
@@ -45204,18 +45322,27 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       }
       // test hook: put the mouse-aim point yawDeg right / pitchDeg up of the nose (world frame), fly `sec` s with the instructor.
       // Returns samples every 0.25 s: off (deg nose-to-aim), bank (deg), roll/pitch inputs. o.drift = hold drift.
+      // test hook: run only the camera for sec s at 60 Hz (o.device: 'kb' | 'mouse' for the time of the call)
+      // test hook: one input poll (real pad / keys / mouse state) -> the flight input it made
+      window.__flanker.pollTest = function (dt) { poll(dt || 1 / 60); return { pitch: inp.pitch, roll: inp.roll, yaw: inp.yaw, gas: inp.gas, brake: inp.brake, device: lastDevice }; };
+      window.__flanker.camStep = function (sec, o) { o = o || {}; var ld = lastDevice; if (o.device) lastDevice = o.device; try { for (var t = 0; t < sec; t += 1 / 60) updateCamera(1 / 60); } finally { lastDevice = ld; } return { hov: camHov, orb: camOrb }; };
       window.__flanker.aimTest = function (sec, yawDeg, pitchDeg, o) {
         o = o || {}; aimQ.copy(st.q); levelAimRoll(1);
         qa.setFromAxisAngle(va.set(0, 1, 0), -(yawDeg || 0) * DEG); aimQ.premultiply(qa);
         var rgt = vb.set(1, 0, 0).applyQuaternion(aimQ); qa.setFromAxisAngle(rgt, (pitchDeg || 0) * DEG); aimQ.premultiply(qa).normalize();
-        var I = { pitch: 0, roll: 0, yaw: 0, gas: 0.6, brake: 0, boost: false, drift: !!o.drift }, out = [];
+        // o.sig: run the jet signature too (VTOL hover law); o.gas: throttle (default 0.6); o.lvl: hover aim level (key override)
+        var I = { pitch: 0, roll: 0, yaw: 0, gas: o.gas != null ? o.gas : 0.6, brake: 0, boost: false, drift: !!o.drift }, out = [];
         for (var t = 0, i = 0; t < sec; t += 1 / 60, i++) {
+          if (o.lvl) hoverAimLevel(1);
           instructor(aimOut, false); I.pitch = aimOut.pitch; I.roll = aimOut.roll; I.yaw = aimOut.yaw; I.cobra = aimOut.cobra;
+          if (o.sig && jsig) jsig.update(1 / 60, I);
           for (var k = 0; k < 4; k++) phys.step(1 / 240, I);
           if (i % 15 === 0) {
             var ax = phys.axes(), f = va.set(0, 0, -1).applyQuaternion(aimQ);
             out.push({ t: +t.toFixed(2), off: Math.round(Math.acos(clamp(f.dot(ax.fwd), -1, 1)) / DEG * 10) / 10, bank: Math.round(Math.atan2(-ax.right.y, ax.up.y) / DEG),
-              r: +I.roll.toFixed(2), p: +I.pitch.toFixed(2), aoa: Math.round(st.aoa / DEG), cob: st.cobraPhase, kmh: Math.round(st.speed * 3.6), alt: Math.round(st.pos.y) });
+              r: +I.roll.toFixed(2), p: +I.pitch.toFixed(2), aoa: Math.round(st.aoa / DEG), cob: st.cobraPhase, kmh: Math.round(st.speed * 3.6), alt: Math.round(st.pos.y),
+              y: +I.yaw.toFixed(2), hw: +(st.hoverW || 0).toFixed(2), hdg: Math.round(Math.atan2(ax.fwd.x, -ax.fwd.z) / DEG), aimHdg: Math.round(Math.atan2(f.x, -f.z) / DEG),
+              vf: +(st.vel.x * ax.fwd.x + st.vel.z * ax.fwd.z).toFixed(1), vs: +(st.vel.x * -ax.fwd.z + st.vel.z * ax.fwd.x).toFixed(1), x: Math.round(st.pos.x), z: Math.round(st.pos.z) });
           }
           if (st.crashed) break;
         }
