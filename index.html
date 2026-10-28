@@ -1614,6 +1614,15 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         sel.push([i, j]);
       }
       if (lv.max && sel.length > lv.max) { sel.sort((a, b) => b[2] - a[2]); sel.length = lv.max; }
+      if (lv.dilate) { // grow the selection by one tile so tile borders (forced to the coarse surface) fall on gentler ground
+        const has = new Set(sel.map((q) => q[1] * L + q[0])), add = [];
+        for (const q of sel) for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+          const i = q[0] + di, j = q[1] + dj, k = j * L + i; if (i < 0 || j < 0 || i >= L || j >= L || has.has(k)) continue;
+          if (parent) { const e0 = -HALF + i * lv.tile, n0 = HALF - j * lv.tile, pi = Math.floor((e0 + 1 + HALF) / parent.TS), pj = Math.floor((HALF - (n0 - 1)) / parent.TS); if (parent.idx[pj * parent.L + pi] < 0) continue; }
+          has.add(k); add.push([i, j, 0]);
+        }
+        for (const a of add.slice(0, lv.dilate)) sel.push(a);
+      }
       const nc = Math.round(lv.tile / lv.cell), level = { TS: lv.tile, cell: lv.cell, L: L, idx: idx, nc: nc };
       for (const [i, j] of sel) { idx[j * L + i] = grids.length; grids.push({ e0: -HALF + i * lv.tile, n0: HALF - j * lv.tile, cell: lv.cell, nc: nc, NV: nc + 1, H: null, lvl: levels.length + 1 }); }
       const pl = lookup;
@@ -3951,7 +3960,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     { const R = makeRng(631);
       for (let k = 0; k < 34; k++) {
         const i = Math.floor(R() * (MAIN.length - 2)) + 1, a = MAIN[i - 1], b = MAIN[i + 1], dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy);
-        const side = R() < 0.5 ? -1 : 1, W = halfW(i * 250), d = W * (0.45 + R() * 0.3), r = 250 + R() * 550;
+        const side = R() < 0.5 ? -1 : 1, W = halfW(i * 250), d = W * (0.42 + R() * 0.3), r = 380 + R() * 650;
         TEMPLES.push([MAIN[i][0] - dy / l * d * side, MAIN[i][1] + dx / l * d * side, r, 0.8 + R() * 0.17, R() * 9]);
       }
     }
@@ -3965,7 +3974,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         MESAS.push([e, n, r, 140 + R() * 220, R() * 100]);
       }
     }
-    const plat = (e, n) => 20 * (fbm(e / 9000 + 2, n / 9000, 3, 643) - 0.5) + 140 * sstep(-10000, 30000, n) + 8 * (fbm(e / 700, n / 700, 2, 645) - 0.5);
+    const plat = (e, n) => 60 * (fbm(e / 9000 + 2, n / 9000, 3, 643) - 0.5) + 220 * sstep(-10000, 35000, n) + 14 * (fbm(e / 700, n / 700, 2, 645) - 0.5) - 45 * (1 - sstep(80, 600, Math.abs(2 * fbm(e / 5000 + 7, n / 5000, 3, 647) - 1) * 3000));
     let lastX = 1, lastPlat = 0;
     function raw(e, n) {
       let x = 1.5;
@@ -3977,7 +3986,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       for (let i = 0; i < TEMPLES.length; i++) {
         const T = TEMPLES[i], de = e - T[0], dn = n - T[1]; if (Math.abs(de) > T[2] * 1.4 || Math.abs(dn) > T[2] * 1.4) continue;
         const db = Math.hypot(de, dn) * (0.85 + 0.3 * fbm(Math.atan2(dn, de) * 1.4 + T[4], 0.3, 2, 655));
-        const xb = (1 - db / T[2]) * T[3] * 1.35; if (xb > x) x = Math.min(xb, T[3]);
+        const xb = (1 - db / T[2]) * 2.6; if (xb > x) x = Math.min(xb, T[3]);
       }
       x += jit;
       lastX = x;
@@ -4007,7 +4016,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     for (const B of [BASE, EBASE]) for (let k = 0; k < 60 && (mFar.query(B.e, B.n) < 6500 || sIdx.query(B.e, B.n) < 2600 || MESAS.some((m) => Math.hypot(m[0] - B.e, m[1] - B.n) < m[2] + 3000)); k++) { B.e += 1300 * Math.cos(k * 2.4); B.n += 1300 * Math.sin(k * 2.4); }
     // layer colours by height
     const L = (h) => lin(h);
-    const LAY = [[RIVER + 4, L(0xb39a76)], [1150, L(0x4a3d38)], [1205, L(0x8d8a6c)], [1445, L(0xa9573b)], [1700, L(0xa24c31)], [1790, L(0xab4a32)], [1900, L(0xe2d2ab)], [1950, L(0xc8a883)], [2075, L(0xcbbfa6)], [2250, L(0xb15c3d)], [2400, L(0xc27a55)], [9000, L(0xd59a72)]];
+    const LAY = [[RIVER + 4, L(0xb39a76)], [1150, L(0x4a3d38)], [1205, L(0x8d8a6c)], [1445, L(0x9a5038)], [1700, L(0x93492f)], [1790, L(0x9c4630)], [1900, L(0xcdb58c)], [1950, L(0xb8946e)], [2075, L(0xb3a58a)], [2250, L(0xb15c3d)], [2400, L(0xc27a55)], [9000, L(0xd59a72)]];
     const cRiver = L(0xb39a76), cPlat = L(0x8c8668), cPin = L(0x5d6343), tmp = [0, 0, 0];
     function layerCol(h, o, e, n) {
       let i = 0; while (i < LAY.length - 1 && h > LAY[i][0]) i++;
@@ -4024,7 +4033,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       bases: [BASE, EBASE], raw: raw,
       aux: () => lastPlat,
       levels: [
-        { tile: 1920, cell: 64, max: 320, score: (e0, n0, e1, n1, g) => { let lo = 1e9, hi = -1e9; for (let i = 0; i <= 4; i++) for (let j = 0; j <= 4; j++) { const h = triH(g.H, g.NV, (e0 + i * 480 + 48000) / g.cell, (48000 - (n0 + j * 480)) / g.cell); lo = Math.min(lo, h); hi = Math.max(hi, h); } const sl = slIdx.query((e0 + e1) / 2, (n0 + n1) / 2) < 200 ? 5000 : 0; return Math.max(hi - lo > 160 ? hi - lo : 0, sl); } },
+        { tile: 1920, cell: 64, max: 480, dilate: 400, score: (e0, n0, e1, n1, g) => { let lo = 1e9, hi = -1e9; for (let i = 0; i <= 4; i++) for (let j = 0; j <= 4; j++) { const h = triH(g.H, g.NV, (e0 + i * 480 + 48000) / g.cell, (48000 - (n0 + j * 480)) / g.cell); lo = Math.min(lo, h); hi = Math.max(hi, h); } const sl = slIdx.query((e0 + e1) / 2, (n0 + n1) / 2) < 200 ? 5000 : 0; return Math.max(hi - lo > 160 ? hi - lo : 0, sl); } },
         { tile: 384, cell: 16, select: (e0, n0, e1, n1) => slIdx.query((e0 + e1) / 2, (n0 + n1) / 2) < 190 }],
       color: function (e, n, h, il, curv, o, cell, k, aux) {
         layerCol(h, o, e, n);
@@ -4361,7 +4370,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       water: { color: 0x0a1a22, shallow: 0x1f3a40, foam: 0.35, shallowK: 0.35, roughness: 0.18 },
       bases: [BASE].concat(EB ? [EB] : []), flats: flats,
       raw: raw,
-      levels: [{ tile: 1920, cell: 64, max: 420, score: (e0, n0, e1, n1, g) => { const e = (e0 + e1) / 2, n = (n0 + n1) / 2; if (Math.abs(e - BASE.e) < 3500 && Math.abs(n - BASE.n) < 3500) return 1e6; let lo = 1e9, hi = -1e9; for (let i = 0; i <= 4; i++) for (let j = 0; j <= 4; j++) { const h = g ? triH(g.H, g.NV, (e0 + i * 500 + 48000) / g.cell, (48000 - (n0 + j * 500)) / g.cell) : 0; lo = Math.min(lo, h); hi = Math.max(hi, h); } return lo < 120 ? hi - lo : 0; } }],
+      levels: [{ tile: 1920, cell: 64, max: 360, dilate: 250, score: (e0, n0, e1, n1, g) => { const e = (e0 + e1) / 2, n = (n0 + n1) / 2; if (Math.abs(e - BASE.e) < 3500 && Math.abs(n - BASE.n) < 3500) return 1e6; let lo = 1e9, hi = -1e9; for (let i = 0; i <= 4; i++) for (let j = 0; j <= 4; j++) { const h = g ? triH(g.H, g.NV, (e0 + i * 500 + 48000) / g.cell, (48000 - (n0 + j * 500)) / g.cell) : 0; lo = Math.min(lo, h); hi = Math.max(hi, h); } return lo < 120 ? hi - lo : 0; } }],
       aux: () => lastIce,
       color: function (e, n, h, il, curv, o, cell, k, aux) {
         if (h < 0) { mix3(o, cSea, cShore, sstep(-25, -1, h)); return 0; }
@@ -14818,7 +14827,10 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     }
     var RANK_BONUS = { S: 0.2, A: 0.1, B: 0, C: 0 };
     function completeMission() {
-      var m = mission, s = stats(), base = TYPE[m.type].base * (1 + 0.06 * Math.min(m.no - 1, 30));
+      var m = mission; if (!m) return;
+      if (m.tMain != null) m.tZone = m.tMain;                      // time bonus / rank use the time to the main target
+      var s = stats(), base = TYPE[m.type].base * (1 + 0.06 * Math.min(m.no - 1, 30));
+      var clearB = m.cleared && m.left0 ? base * 0.25 : 0;          // bonus for clearing every target in the area
       if (m.type === 'boss') base *= s.bossBonusMul;
       var par = 150 + (m.type === 'boss' ? 120 : 0);
       var timeB = base * 0.4 * clamp(1 - m.tZone / par, 0, 1) * s.timeBonusMul;
@@ -14828,10 +14840,10 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       m.objs.forEach(function (o) { if (!o.main && o.done) side += o.bonus * (1 + 0.04 * Math.min(m.no, 25)); });
       var rank = missionRank(m, par), rankB = base * RANK_BONUS[rank];
       var deathMul = Math.max(0.4, 1 - 0.15 * (m.deaths || 0));
-      var total = Math.round((base + timeB + noDmg + combo + side + rankB) * (role === 'host' ? s.teamPayoutMul : 1) * deathMul);
+      var total = Math.round((base + timeB + noDmg + combo + side + rankB + clearB) * (role === 'host' ? s.teamPayoutMul : 1) * deathMul);
       var xp = Math.round(400 + total * 0.25);
       m.payout = { base: Math.round(base), time: Math.round(timeB), noDmg: Math.round(noDmg), combo: combo, side: Math.round(side), deaths: m.deaths || 0, deathMul: deathMul, total: total,
-        rank: rank, rankBonus: Math.round(rankB) };
+        rank: rank, rankBonus: Math.round(rankB), clear: Math.round(clearB) };
       P.missions++; mastery(P.ac).missions++; masteryCheck();
       P.ranks[rank] = (P.ranks[rank] || 0) + 1;
       if (!isClient()) showToast('RANK ' + rank, 'MISSION COMPLETE · +' + Math.round(total * stats().creditMul) + ' CREDITS');   // a level-up toast (in award) replaces it
@@ -14987,6 +14999,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         if (!m.spawned && dz < 15000) spawnObjectives(m);
         if (m.type !== 'bomber' && dz < Math.min(z.r || 2500, 2500) + 1500) { m.entered = true; setPhase('zone'); }
       }
+      if (m.cleanup) m.cleanT += dt;
       if (m.spawned) evalObjectives(m);
       if (phase === 'zone') m.tZone += dt;
     }
@@ -15019,10 +15032,21 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       m.objs.forEach(function (o) { if (o.main && !o.void) { anyMain = true; if (!o.done) allMain = false; } });
       if (!anyMain) allMain = m.t > 8;
       if (allMain && !m.mainDone) {
-        m.mainDone = true;
-        completeMission();
+        // main target down: the mission goes on until the area is clear (or the player leaves / time runs out)
+        m.mainDone = true; m.tMain = m.tZone; m.cleanT = 0;
+        var leftAll = missionLeft(m);
+        if (leftAll <= 0) { m.cleared = true; completeMission(); return; }
+        m.cleanup = true; m.left0 = leftAll;
+        say('mainDown', 'Main target destroyed. ' + leftAll + ' more targets in the area. Clear them for a bonus.', 3, 0);
+      }
+      if (m.cleanup) {
+        var lf = missionLeft(m);
+        m.cleanLeft = lf;
+        if (lf <= 0) { m.cleared = true; m.cleanup = false; say('cleared', 'Area clear. Good work.', 2, 0); completeMission(); }
+        else if (m.cleanT > 180 || (m.cleanT > 20 && dist(m.zone.e, m.zone.n) > 18000)) { m.cleanup = false; completeMission(); }
       }
     }
+    function missionLeft(m) { var n = 0; for (var i = 0; i < m.groups.length; i++) n += alive(m.groups[i]); return n; }
 
     // ---------------------------------------------------------------- HUD
     var wpVec = root.THREE ? new THREE.Vector3() : null;
@@ -15054,6 +15078,10 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       }
       if (m.type === 'cap' && m.capWave === 2) extra = ' · wave 2' + extra;
       o.objective = short(main + extra, 40);
+      if (m.cleanup) {
+        var rem = Math.max(0, Math.ceil(180 - m.cleanT));
+        o.objective = short('Clear the area · ' + (m.cleanLeft || 0) + ' left · ' + Math.floor(rem / 60) + ':' + ('0' + rem % 60).slice(-2), 40);
+      }
       var wp = m.wp || m.zone;
       if (wpVec) { wpVec.set(wp.e, H(wp.e, wp.n) + 250, -wp.n); o.waypoint = wpVec; }
       o.waypointDist = Math.round(dist(wp.e, wp.n));
@@ -22887,8 +22915,18 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     // TIME_ELAPSED queries cannot nest: while this is on, the caller must not wrap post.render in its own timer query
     // (use post.info.gpu.total instead).
     const TQ = { on: false, ext: null, gl: null, active: -1, recs: [], head: 0, n: 0 };
-    const gpuMs = { scene: 0, bloom: 0, comp: 0, total: 0, ok: false };
-    const TQ_STAGES = ['scene', 'bloom', 'comp'];
+    const gpuMs = { shadow: 0, scene: 0, bloom: 0, comp: 0, total: 0, ok: false };
+    const TQ_STAGES = ['scene', 'bloom', 'comp', 'shadow'];
+    // split the shadow pass out of the scene stage: three calls shadowMap.render() at the start of render()
+    let inScene = false;
+    const shadowRender = renderer.shadowMap.render;
+    renderer.shadowMap.render = function () {
+      if (!inScene) return shadowRender.apply(this, arguments);
+      inScene = false;
+      const r = shadowRender.apply(this, arguments);
+      tqEnd(); tqBegin(0);
+      return r;
+    };
     function tqInit(on) {
       TQ.on = false;
       if (!on) return false;
@@ -22917,7 +22955,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         if (!disjoint) { const ms = gl.getQueryParameter(r.q, gl.QUERY_RESULT) / 1e6, k = TQ_STAGES[r.st]; gpuMs[k] += (ms - gpuMs[k]) * (gpuMs.ok ? 0.1 : 1); if (r.st === 2) gpuMs.ok = true; }
         TQ.head = (TQ.head + 1) % TQ.recs.length; TQ.n--;
       }
-      gpuMs.total = gpuMs.scene + gpuMs.bloom + gpuMs.comp;
+      gpuMs.total = gpuMs.shadow + gpuMs.scene + gpuMs.bloom + gpuMs.comp;
     }
 
     function pass(material, target) {
@@ -22933,6 +22971,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       info: { quality: 'high', degrade: 0, samples: 0, levels: 0, passes: 0, renderW: 0, renderH: 0, gpu: gpuMs },
       // true -> per-stage GPU ms in post.info.gpu (when the browser exposes EXT_disjoint_timer_query_webgl2). Returns availability.
       setGpuTiming: function (on) { return tqInit(!!on); },
+      // per-stage GPU ms (EMA) or null when timing is off / unsupported: {shadow, scene (incl. MSAA resolve), bloom, comp, total}
+      gpuStages: function () { return TQ.on && gpuMs.ok ? gpuMs : null; },
       setSize: function (w, h, pr) {
         pr = pr || renderer.getPixelRatio();
         const nw = Math.max(1, Math.floor(w * pr)), nh = Math.max(1, Math.floor(h * pr));
@@ -23008,10 +23048,17 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         }
         tqPoll();
         setActive(sceneRT, sw, sh);
+        sceneRT.depthBuffer = true; sceneRT.stencilBuffer = true;   // (re)allocation in setRenderTarget needs the real flags
         renderer.setRenderTarget(sceneRT);
-        tqBegin(0);
+        // three r128 resolves an MSAA target at the end of render() with blitFramebuffer(COLOR|DEPTH|STENCIL) over the whole
+        // target. Nothing reads the resolved depth/stencil, and a multisampled depth-stencil blit is a slow path on
+        // ANGLE/D3D11 (Chrome + Firefox on Windows). Clear the flags for the render so only colour is resolved.
+        if (sceneRT.isWebGLMultisampleRenderTarget) { sceneRT.depthBuffer = false; sceneRT.stencilBuffer = false; }
+        tqBegin(3); inScene = TQ.on;    // 'shadow' until shadowMap.render() returns, then 'scene'
         renderer.render(scn, cam);
+        inScene = false;
         tqEnd();
+        sceneRT.depthBuffer = true; sceneRT.stencilBuffer = true;
         if (fog) fog.color.copy(fogSave);
         if (skyU) skyU.value.copy(skySave);
 
@@ -27525,7 +27572,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     // floor concrete (tiles every 6 m: texture = 6 x 6 m, repeat 8 x 10.67)
     {
       const c = canvas(512, 512), g = c.getContext('2d'), R = rng(11);
-      noiseFill(g, 512, 512, [128, 126, 121], 26, R, 46);
+      noiseFill(g, 512, 512, [128, 126, 121], 22, R, 22);
       g.strokeStyle = 'rgba(30,28,26,.55)'; g.lineWidth = 2; g.strokeRect(1, 1, 510, 510);           // expansion joints
       g.strokeStyle = 'rgba(255,255,255,.06)'; g.lineWidth = 1; g.strokeRect(3, 3, 506, 506);
       for (let k = 0; k < 18; k++) {                                                                  // hairline cracks
@@ -27533,7 +27580,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         for (let j = 0; j < 6; j++) { x += (R() - 0.5) * 40; y += (R() - 0.5) * 40; g.lineTo(x, y); }
         g.strokeStyle = 'rgba(40,38,34,' + (0.08 + R() * 0.12) + ')'; g.stroke();
       }
-      for (let k = 0; k < 6; k++) {                                                                   // oil spots
+      for (let k = 0; k < 3; k++) {                                                                   // oil spots
         const x = R() * 512, y = R() * 512, r = 6 + R() * 26, gg = g.createRadialGradient(x, y, 0, x, y, r);
         gg.addColorStop(0, 'rgba(18,16,14,.35)'); gg.addColorStop(0.7, 'rgba(18,16,14,.12)'); gg.addColorStop(1, 'rgba(0,0,0,0)');
         g.fillStyle = gg; g.beginPath(); g.ellipse(x, y, r, r * (0.5 + R() * 0.5), R() * 3, 0, 7); g.fill();
@@ -27543,13 +27590,17 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     // floor roughness: puddles / polished lanes are dark (= glossy, wet look)
     {
       const c = canvas(256, 256), g = c.getContext('2d'), R = rng(5);
-      g.fillStyle = 'rgb(150,150,150)'; g.fillRect(0, 0, 256, 256);
-      for (let k = 0; k < 26; k++) {
-        const x = R() * 256, y = R() * 256, r = 14 + R() * 46, gg = g.createRadialGradient(x, y, 0, x, y, r);
-        gg.addColorStop(0, 'rgba(25,25,25,.95)'); gg.addColorStop(0.55, 'rgba(40,40,40,.6)'); gg.addColorStop(1, 'rgba(150,150,150,0)');
-        g.fillStyle = gg; g.beginPath(); g.ellipse(x, y, r, r * (0.4 + R() * 0.6), R() * 3, 0, 7); g.fill();
+      g.fillStyle = 'rgb(128,128,128)'; g.fillRect(0, 0, 256, 256);
+      for (let k = 0; k < 14; k++) {          // large soft damp patches (wrap-safe: drawn 3x3)
+        const x = R() * 256, y = R() * 256, r = 40 + R() * 70, sy = 0.35 + R() * 0.5, rot = R() * 3;
+        for (let ox = -256; ox <= 256; ox += 256) for (let oy = -256; oy <= 256; oy += 256) {
+          g.save(); g.translate(x + ox, y + oy); g.rotate(rot); g.scale(1, sy);
+          const gg = g.createRadialGradient(0, 0, 0, 0, 0, r);
+          gg.addColorStop(0, 'rgba(48,48,48,.55)'); gg.addColorStop(1, 'rgba(48,48,48,0)');
+          g.fillStyle = gg; g.beginPath(); g.arc(0, 0, r, 0, 7); g.fill(); g.restore();
+        }
       }
-      tx.floorR = texOf(c, false, [3, 4]);
+      tx.floorR = texOf(c, false, [2, 2.6]);
     }
     // floor markings decal (whole floor, 48 x 64 m, 21.33 px / m; canvas top = back wall)
     {
@@ -27808,7 +27859,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     LAMPS.forEach((L, i) => { m4.compose(p.set(L.x, 0.02, L.z), q.identity(), sc.set(8, 1, 8)); iPool.setMatrixAt(i, m4); });
     iPool.renderOrder = 2; iPool.frustumCulled = false; scene.add(iPool);
     // wet-floor reflections of the lamps: placed every frame where the mirrored lamp meets the floor
-    const reflMat = M(new T.MeshBasicMaterial({ map: tx.glow, color: new T.Color(1.15, 1.0, 0.8), transparent: true, blending: T.AdditiveBlending, depthWrite: false }));
+    const reflMat = M(new T.MeshBasicMaterial({ map: tx.glow, color: new T.Color(1.6, 1.4, 1.1), transparent: true, blending: T.AdditiveBlending, depthWrite: false }));
     const iRefl = new T.InstancedMesh(poolG, reflMat, LAMPS.length); iRefl.renderOrder = 3; iRefl.frustumCulled = false; scene.add(iRefl);
     // door light spill on the floor (static) + its long reflection streak
     const spillMat = M(new T.MeshBasicMaterial({ map: tx.glow, color: new T.Color(0.32, 0.34, 0.36), transparent: true, blending: T.AdditiveBlending, depthWrite: false }));
@@ -27945,7 +27996,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     const box3 = new T.Box3(), v1 = new T.Vector3(), v2 = new T.Vector3(), m4 = new T.Matrix4(), q = new T.Quaternion(), sc = new T.Vector3();
     const target = new T.Vector3(0, 2, 0);
     // orbit
-    const orb = { yaw: Math.PI + 0.8, pitch: 0.2, zoom: 1, sYaw: Math.PI + 0.8, sPitch: 0.2, sZoom: 1, idle: 99, fit: 30 };
+    const orb = { yaw: Math.PI + 0.5, pitch: 0.2, zoom: 1, sYaw: Math.PI + 0.5, sPitch: 0.2, sZoom: 1, idle: 99, fit: 30 };
     let layout = { cx: 0.5, cy: 0.5, fw: 1, fh: 1, W: 0, H: 0, t: 0 };
     let hint = null, flcEl = null;
 
@@ -28168,7 +28219,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       if (hint) hint.hidden = false;
       listen(true);
       syncSky(); syncJet(true);
-      orb.yaw = orb.sYaw = Math.PI + 0.8; orb.pitch = orb.sPitch = 0.2; orb.zoom = orb.sZoom = 1; orb.idle = 0;
+      orb.yaw = orb.sYaw = Math.PI + 0.5; orb.pitch = orb.sPitch = 0.16; orb.zoom = orb.sZoom = 1; orb.idle = 0;
       layout.t = 99;
     }
     function close() {
@@ -28223,6 +28274,628 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     Object.defineProperty(api, 'active', { get: function () { return active; } });
     FL._hangar3d = api;   // tests / console
     return api;
+  };
+})();
+
+</script>
+<script>
+/* ---- lobby.js ---- */
+/* lobby.js — Flanker co-op lobby: create screen, lobby room (slots, ready, chat, kick, settings, launch), public lobby browser.
+ *
+ * Loads before main.js. At load it adds its menu screens to the page (#scrLobbyNew, #scrLobby) and the
+ * "Find lobbies" list to the Co-op screen, so main.js wires the Back buttons and the pad navigation.
+ *
+ * FL.createLobby(api) -> lobby
+ *   api: $, tele {url, key, version}, net() -> net|null, ensureNet(), name(), jet(), jetName(id), maps() [{id,name}], mapId(),
+ *        mapDesc(id), mapBusy(), pickMap(id), mix(), setMix(id), wx(), setWx(id), doHost(code, after(ok)), doJoin(code, after(ok)),
+ *        leaveRoom(why), coStatus(text, err), start(kind), resume(), state() -> {started, paused, flying},
+ *        showScreen(name, focusId), screen(), menuOpen(), flash(text), campaign()
+ * lobby.attach(net)      main.js calls this when it makes the net object
+ * lobby.onScreen(name)   main.js calls this from showScreen
+ * lobby.openCreate()     Host button in the Co-op screen
+ * lobby.inRoom(), lobby.focusId()
+ *
+ * Net events (all reliable, over net.sendEvent):
+ *   host -> all : {t:'lobby', nm, pub, mx, mj, st, rd:{id:1}, rk:{id:'rank'}}   lobby info (on change, on join, every 5 s)
+ *   client-> host: {t:'lme', r:0|1, rk}                                      my ready state + rank title
+ *   any  -> host : {t:'chat', x}   host -> all: {t:'chat', id, n, x}          chat (max 120 chars, rate-limited on both sides)
+ *   host -> all : {t:'launch', spawn:'runway'|'air'}                          all pilots take off now
+ * Public lobbies: POST {base}/rest/v1/lobby_beats every 30 s (and on change, max 1 per 5 s), status 'closed' on close / pagehide.
+ *   Browser: GET {base}/rest/v1/lobbies (latest beat per code, last 75 s, no closed ones), every 10 s while the Co-op screen shows.
+ * All user text goes to the page with textContent only.
+ */
+(function () {
+  'use strict';
+  var FL = window.FL = window.FL || {};
+  var MIXN = { air: 'Air only', airmost: 'Mostly air', mixed: 'Mixed', ground: 'Mostly ground' };
+  var SAVE_KEY = 'flk_lobby', PREF_KEY = 'flk_lobby_pref';
+
+  var CSS = '' +
+    '#scrCoop #coRoom, #scrCoop #coMap, #scrCoop #coPeers, #scrCoop .mixrow, #scrCoop #bLeave { display: none !important; }' +
+    '.lbgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px 26px; }' +
+    '.lbgrid .field input { width: 100%; box-sizing: border-box; }' +
+    '.lbchips { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }' +
+    '.lbchips.n3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }' +
+    '.lbchips.n3 button.chip { text-align: center; justify-content: center; }' +
+    '.lrcode { display: flex; align-items: center; gap: 10px 16px; flex-wrap: wrap; }' +
+    '.lrcode .lbl { font: 12px var(--mono); letter-spacing: .16em; color: var(--ink-dim); }' +
+    '.lrcode strong { font: 800 clamp(30px, 6vw, 44px)/1 var(--display); letter-spacing: .24em; color: var(--hud); }' +
+    '.lrtag { font: 700 11px/1 var(--mono); letter-spacing: .16em; color: var(--amber); border: 1px solid rgba(255,190,85,.5); padding: 5px 8px; }' +
+    '.lrtag.fly { color: #04140c; background: var(--amber); }' +
+    '.lrslots { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 8px; }' +
+    '.lrslots li { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); background: rgba(9, 20, 22, .35); min-width: 0; }' +
+    '.lrslots li.empty { border-style: dashed; opacity: .55; }' +
+    '.lrslots li.me { border-color: var(--hud); box-shadow: inset 0 0 0 1px rgba(147,255,196,.4); }' +
+    '.lrslots .sn { font: 800 22px/1 var(--display); color: var(--amber); }' +
+    '.lrslots .sm { min-width: 0; display: grid; gap: 3px; }' +
+    '.lrslots .cs { font: 700 15px/1.15 var(--display); color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }' +
+    '.lrslots .tg { font: 700 10.5px/1 var(--mono); letter-spacing: .14em; color: var(--amber); margin-left: 6px; }' +
+    '.lrslots small { font: 12.5px/1.3 var(--mono); color: var(--ink-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }' +
+    '.lrslots .rd { font: 700 11px/1 var(--mono); letter-spacing: .12em; color: var(--ink-dim); text-align: right; }' +
+    '.lrslots .rd.on { color: var(--hud); }' +
+    '.lrslots .kick { grid-column: 2 / 4; justify-self: end; padding: 6px 10px; font-size: 11px; border-color: #ff8f80; color: #ff8f80; }' +
+    '.lrchat { height: 168px; overflow-y: auto; border: 1px solid var(--line); background: #0b1714; padding: 8px 10px; display: grid; align-content: start; gap: 4px; font: 14px/1.35 var(--display); user-select: text; }' +
+    '.lrchat p { margin: 0; overflow-wrap: anywhere; }' +
+    '.lrchat b { color: var(--hud); font-weight: 700; margin-right: 8px; }' +
+    '.lrchat p.mine b { color: var(--amber); }' +
+    '.lrchat p.sys { color: var(--ink-dim); font: 12.5px/1.35 var(--mono); }' +
+    '.lrsay { display: flex; gap: 8px; }' +
+    '.lrsay input { flex: 1; min-width: 0; font: 15px var(--mono); background: #0c1a17; color: var(--ink); border: 1px solid var(--line); padding: 9px 10px; user-select: text; }' +
+    '.lrsay input:focus-visible { outline: 2px solid var(--amber); outline-offset: 3px; }' +
+    'button[aria-pressed="true"].ready { background: var(--hud); color: #04140c; }' +
+    '.lflist { display: grid; gap: 6px; }' +
+    '.lfrow { display: grid; grid-template-columns: 1fr auto auto auto; gap: 6px 14px; align-items: center; padding: 9px 12px; border: 1px solid var(--line); background: rgba(9, 20, 22, .35); min-width: 0; }' +
+    '.lfrow .lfm { min-width: 0; display: grid; gap: 3px; }' +
+    '.lfrow b { font: 700 15px/1.15 var(--display); color: var(--hud); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }' +
+    '.lfrow small { font: 12.5px/1.3 var(--mono); color: var(--ink-dim); overflow-wrap: anywhere; }' +
+    '.lfrow .lfp { font: 700 15px/1 var(--mono); color: var(--ink); }' +
+    '.lfempty { margin: 0; font: 13px/1.45 var(--display); color: var(--ink-dim); }' +
+    '@media (max-width: 560px) { .lfrow { grid-template-columns: 1fr auto; } .lfrow .lfm { grid-column: 1 / 3; } .lrchat { height: 140px; } }';
+
+  var HTML_NEW = '' +
+    '<div class="shead"><button class="back" data-back>◀ Back <span class="pad-hint">B</span></button><h2 id="lnTtl"><span class="sec">4.1</span>Create lobby</h2></div>' +
+    '<p class="note">You are the host. Set the lobby. Then push Open lobby. You can change the map, missions, weather and size later.</p>' +
+    '<div class="lbgrid">' +
+    '<div class="grp"><h3><span class="sec">4.1.1</span>Lobby</h3>' +
+    '<label class="field">Lobby name <input id="lnName" maxlength="32" autocomplete="off" spellcheck="false"></label>' +
+    '<div class="chips lbchips" data-ln="pub"><button class="chip" id="lnPub1" data-v="1"><b>Public</b><span>All players see it in Find lobbies.</span></button>' +
+    '<button class="chip" id="lnPub0" data-v="0"><b>Private</b><span>Only pilots with the code can join.</span></button></div>' +
+    '<p class="note" id="lnPubNote">Public lobbies show your callsign and lobby name to all players.</p>' +
+    '<h3 style="margin-top:8px"><span class="sec">4.1.2</span>Max players</h3>' +
+    '<div class="chips lbchips n3" data-ln="max"><button class="chip" data-v="2"><b>2</b></button><button class="chip" data-v="3"><b>3</b></button><button class="chip" data-v="4"><b>4</b></button></div>' +
+    '<label class="opt"><span>Allow joining mid-mission<small>Pilots can join when the squadron flies.</small></span><input type="checkbox" id="lnMid" checked></label>' +
+    '</div>' +
+    '<div class="grp"><h3><span class="sec">4.1.3</span>Map</h3><div id="lnMaps" class="maps" role="group" aria-label="Maps"></div>' +
+    '<label class="opt"><span><span class="sec">4.1.4</span>Missions</span><select id="lnMix"></select></label>' +
+    '<label class="opt"><span><span class="sec">4.1.5</span>Weather</span><select id="lnWx"></select></label>' +
+    '</div></div>' +
+    '<div class="actions"><button id="lnOpen" class="primary big">Open lobby</button></div>' +
+    '<p id="lnStatus" class="costatus"></p>';
+
+  var HTML_ROOM = '' +
+    '<div class="shead"><button class="back" data-back>◀ Back <span class="pad-hint">B</span></button><h2 id="lrTtl"><span class="sec">4.2</span><span id="lrName">Lobby</span></h2></div>' +
+    '<p class="mhead"><span id="lrRole">Host</span><span>Status · <b id="lrState">Lobby</b></span></p>' +
+    '<div class="lrcode"><span class="lbl">ROOM CODE</span><strong id="lrCode">—</strong><button id="lrCopy" class="small">Copy invite link</button><span id="lrVis" class="lrtag">PRIVATE</span><span id="lrFly" class="lrtag fly" hidden>FLYING</span></div>' +
+    '<div class="actions">' +
+    '<button id="lrStart" class="primary big">Start mission</button><button id="lrStartAir">Start in the air</button>' +
+    '<button id="lrJoinFlight" class="primary big" hidden>Join the flight</button>' +
+    '<button id="lrReady" class="ready" aria-pressed="false" hidden>Ready</button>' +
+    '<button id="lrResume" class="primary big" hidden>Resume flight</button>' +
+    '<button id="lrLeave">Close lobby</button></div>' +
+    '<p id="lrNote" class="note"></p>' +
+    '<div><h2 class="sh"><span class="sec">4.2.1</span>Pilots <span id="lrCount" class="note-inline"></span></h2><ol id="lrSlots" class="lrslots"></ol></div>' +
+    '<div class="lbgrid">' +
+    '<div class="grp"><h3><span class="sec">4.2.2</span>Settings</h3>' +
+    '<div id="lrMaps" class="maps" role="group" aria-label="Maps"></div>' +
+    '<label class="opt"><span>Missions</span><select id="lrMix"></select></label>' +
+    '<label class="opt"><span>Weather</span><select id="lrWx"></select></label>' +
+    '<label class="opt"><span>Max players</span><select id="lrMax"><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></label>' +
+    '<label class="opt"><span>Allow joining mid-mission<small>Pilots can join when the squadron flies.</small></span><input type="checkbox" id="lrMid"></label>' +
+    '<p id="lrSetNote" class="hint"></p></div>' +
+    '<div class="grp"><h3><span class="sec">4.2.3</span>Chat</h3>' +
+    '<div id="lrChat" class="lrchat" aria-live="polite"></div>' +
+    '<div class="lrsay"><input id="lrSay" maxlength="120" autocomplete="off" spellcheck="false" placeholder="Message (max 120)"><button id="lrSend" class="small">Send</button></div>' +
+    '</div></div>';
+
+  var HTML_FIND = '' +
+    '<h2 class="sh"><span class="sec">4.3</span>Find lobbies <span id="lfNote" class="note-inline"></span></h2>' +
+    '<div id="lfList" class="lflist"><p class="lfempty">Loading the lobby list…</p></div>' +
+    '<div class="actions sub"><button id="lfRefresh" class="small">Refresh list</button></div>';
+
+  // ---- add the DOM now (before main.js wires the Back buttons and the screens)
+  (function inject() {
+    if (typeof document === 'undefined') return;
+    var card = document.querySelector('#menu .card'), coop = document.getElementById('coop');
+    if (!card || document.getElementById('scrLobby')) return;
+    var s = document.createElement('style'); s.textContent = CSS; document.head.appendChild(s);
+    var a = document.createElement('section'); a.id = 'scrLobbyNew'; a.className = 'screen'; a.hidden = true; a.setAttribute('aria-labelledby', 'lnTtl'); a.innerHTML = HTML_NEW;
+    var b = document.createElement('section'); b.id = 'scrLobby'; b.className = 'screen'; b.hidden = true; b.setAttribute('aria-labelledby', 'lrTtl'); b.innerHTML = HTML_ROOM;
+    var ref = document.getElementById('scrLeader');
+    card.insertBefore(a, ref || null); card.insertBefore(b, ref || null);
+    if (coop) {
+      var row = coop.querySelector('.corow');
+      if (row) { var ob = document.createElement('button'); ob.id = 'lcOpen'; ob.className = 'primary'; ob.hidden = true; ob.textContent = 'Open lobby room'; row.appendChild(ob); }
+      var f = document.createElement('section'); f.className = 'coop'; f.id = 'lbFind'; f.innerHTML = HTML_FIND;
+      coop.parentNode.insertBefore(f, coop.nextSibling);
+    }
+    var bh = document.getElementById('bHost'); if (bh) bh.textContent = 'Create lobby';
+  })();
+
+  function str(v, n) { return String(v == null ? '' : v).replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, n); }
+  function clampI(v, lo, hi, d) { v = Math.round(+v); return isFinite(v) ? Math.max(lo, Math.min(hi, v)) : d; }
+  function lsGet(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+  function ssGet(k) { try { return JSON.parse(sessionStorage.getItem(k) || 'null'); } catch (e) { return null; } }
+  function ssSet(k, v) { try { if (v == null) sessionStorage.removeItem(k); else sessionStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+  function el(tag, cls, txt) { var e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; }
+  function rateOk(arr, t) {           // max 5 messages per 10 s, min 0.8 s apart
+    while (arr.length && t - arr[0] > 10000) arr.shift();
+    if (arr.length >= 5 || (arr.length && t - arr[arr.length - 1] < 800)) return false;
+    arr.push(t); return true;
+  }
+
+  FL.createLobby = function (api) {
+    var $ = api.$ || function (id) { return document.getElementById(id); };
+    if (!$('scrLobby')) return null;
+    var tele = api.tele || {}, base = String(tele.url || '').replace(/\/+$/, '').replace(/\/rest\/v1(\/.*)?$/, ''), key = tele.key || '', ver = str(tele.version, 16);
+    var S = blank(), attached = null, findT = 0, findSig = '', lastFindOk = 0, myRate = [], hostRate = {};
+    function blank() {
+      return { open: false, host: false, code: '', name: '', pub: false, max: 4, mj: true, status: 'lobby', ready: {}, rank: {}, members: {}, banned: {},
+        myReady: false, gotInfo: false, prev: null, lastB: 0, lastBeat: 0, beatSig: '', pending: null };
+    }
+    function net() { return api.net ? api.net() : null; }
+    function st() { try { return api.state() || {}; } catch (e) { return {}; } }
+    function peers() { var n = net(); return n && n.connected && n.peers ? n.peers : []; }
+    function myRank() {
+      try {
+        if (typeof FL.rankTitle !== 'function') return '';
+        var c = api.campaign ? api.campaign() : null, p = c && c.profile ? c.profile() : null;
+        var r = FL.rankTitle(p ? p.level : 1, p); return r ? str(r, 24) : '';
+      } catch (e) { return ''; }
+    }
+    function mixOpts(sel) { var src = $('optMix'); if (src && !sel.options.length) sel.innerHTML = src.innerHTML; }
+    function wxOpts(sel) { var src = $('optWx'); if (src && !sel.options.length) sel.innerHTML = src.innerHTML; }
+    function wxName(id) { var l = FL.WEATHER_PRESETS || []; for (var i = 0; i < l.length; i++) if (l[i].id === id) return l[i].name; return id || ''; }
+    function mapName(id) { var l = api.maps() || []; for (var i = 0; i < l.length; i++) if (l[i].id === id) return l[i].name || id; return id || ''; }
+    function visible(id) { var e = $(id); return !!(e && !e.hidden && api.menuOpen()); }
+
+    // ---------------------------------------------------------------- shared map cards
+    function mapCards(grid, lock) {
+      var l = api.maps() || [];
+      if (grid.children.length !== l.length) {
+        grid.textContent = '';
+        l.forEach(function (m) {
+          var b = el('button', 'map'); b.setAttribute('data-map', m.id);
+          b.appendChild(el('b', null, m.name || m.id)); b.appendChild(el('span', null, api.mapDesc(m.id) || m.region || ''));
+          grid.appendChild(b);
+        });
+      }
+      var cur = api.mapId(), busy = api.mapBusy();
+      Array.prototype.forEach.call(grid.children, function (b) {
+        var on = b.getAttribute('data-map') === cur;
+        b.setAttribute('aria-pressed', on ? 'true' : 'false'); b.disabled = !!lock && !on;
+      });
+      grid.classList.toggle('busy', !!busy);
+    }
+    function onMapClick(e, lock) {
+      var b = e.target.closest && e.target.closest('button[data-map]'); if (!b || lock()) return;
+      api.pickMap(b.getAttribute('data-map'));
+      setTimeout(renderAll, 60);
+    }
+
+    // ---------------------------------------------------------------- create screen
+    var C = { pub: false, max: 4, mj: true, custom: '' };
+    (function () { var p = lsGet(PREF_KEY); if (p) { C.pub = !!p.pub; C.max = clampI(p.max, 2, 4, 4); C.mj = p.mj !== false; C.custom = str(p.custom, 32); } })();
+    function defName() { return str(api.name(), 22) + "'s squadron"; }
+    function renderCreate() {
+      if (!$('lnName').value || ($('lnName').getAttribute('data-auto') === '1')) { $('lnName').value = C.custom || defName(); $('lnName').setAttribute('data-auto', C.custom ? '0' : '1'); }
+      Array.prototype.forEach.call(document.querySelectorAll('[data-ln="pub"] button'), function (b) { b.setAttribute('aria-pressed', (b.getAttribute('data-v') === '1') === C.pub ? 'true' : 'false'); });
+      Array.prototype.forEach.call(document.querySelectorAll('[data-ln="max"] button'), function (b) { b.setAttribute('aria-pressed', +b.getAttribute('data-v') === C.max ? 'true' : 'false'); });
+      $('lnMid').checked = C.mj;
+      $('lnPubNote').className = C.pub ? 'caution' : 'note';
+      $('lnPubNote').textContent = C.pub ? 'Public lobbies show your callsign and lobby name to all players.' : 'Private lobby. Send the code or the link to your friends. Public lobbies show your callsign and lobby name to all players.';
+      mixOpts($('lnMix')); wxOpts($('lnWx'));
+      $('lnMix').value = api.mix(); $('lnWx').value = api.wx();
+      mapCards($('lnMaps'), false);
+    }
+    $('lnName').addEventListener('input', function () { $('lnName').setAttribute('data-auto', '0'); });
+    $('scrLobbyNew').addEventListener('click', function (e) {
+      var b = e.target.closest && e.target.closest('[data-ln] button'); if (!b) return;
+      var g = b.parentNode.getAttribute('data-ln');
+      if (g === 'pub') C.pub = b.getAttribute('data-v') === '1'; else if (g === 'max') C.max = clampI(b.getAttribute('data-v'), 2, 4, 4);
+      renderCreate();
+    });
+    $('lnMid').addEventListener('change', function () { C.mj = $('lnMid').checked; });
+    $('lnMix').addEventListener('change', function (e) { api.setMix(e.target.value); renderCreate(); });
+    $('lnWx').addEventListener('change', function (e) { api.setWx(e.target.value); renderCreate(); });
+    $('lnMaps').addEventListener('click', function (e) { onMapClick(e, function () { return false; }); });
+    $('lnOpen').addEventListener('click', function () {
+      if (S.open) { api.showScreen('lobby', focusId()); return; }
+      var nm = str($('lnName').value, 32) || defName();
+      C.custom = $('lnName').getAttribute('data-auto') === '1' || nm === defName() ? '' : nm;
+      lsSet(PREF_KEY, { pub: C.pub, max: C.max, mj: C.mj, custom: C.custom });
+      S.pending = { name: nm, pub: C.pub, max: C.max, mj: C.mj };
+      $('lnOpen').disabled = true; $('lnStatus').classList.remove('err'); $('lnStatus').textContent = 'Opening the lobby…';
+      api.doHost(null, function (ok) {
+        $('lnOpen').disabled = false;
+        if (!ok) { var cs = $('coStatus'); $('lnStatus').textContent = cs ? cs.textContent : 'Could not open the lobby.'; $('lnStatus').classList.add('err'); S.pending = null; return; }
+        $('lnStatus').textContent = '';
+        adopt(); api.showScreen('lobby', 'lrStart');
+      });
+    });
+    function openCreate() {
+      if (S.open) { api.showScreen('lobby', focusId()); return; }
+      $('lnStatus').textContent = '';
+      api.showScreen('lobbynew', C.pub ? 'lnPub1' : 'lnPub0');
+    }
+
+    // ---------------------------------------------------------------- host: open / save / broadcast
+    function adopt() {
+      var n = net(); if (!n || !n.connected || !n.isHost) return;
+      var sv = ssGet(SAVE_KEY), p = S.pending;
+      S = blank(); S.open = true; S.host = true; S.code = n.code || '';
+      $('lrChat').textContent = '';
+      if (sv && sv.code === S.code && Date.now() - (sv.t || 0) < 10 * 60000) {
+        S.name = str(sv.name, 32); S.pub = !!sv.pub; S.max = clampI(sv.max, 2, 4, 4); S.mj = sv.mj !== false; S.members = sv.members || {}; S.banned = sv.banned || {};
+        addSys('The lobby is open again.');
+      } else if (p) { S.name = p.name; S.pub = p.pub; S.max = p.max; S.mj = p.mj; addSys('You opened the lobby. Room code ' + S.code + '.'); }
+      else { S.name = defName(); S.pub = false; S.max = 4; S.mj = true; addSys('You opened the lobby. Room code ' + S.code + '.'); }
+      if (!S.name) S.name = defName();
+      n.setMaxPlayers && n.setMaxPlayers(S.max);
+      n.setGate && n.setGate(gate);
+      S.status = st().started ? 'flying' : 'lobby';
+      save(); bcast(); beatTick(true); renderAll();
+    }
+    function gate(info) {
+      var nm = str(info && info.name, 24);
+      if (S.banned[nm]) return 'THE HOST REMOVED YOU FROM THIS LOBBY';
+      if (!S.mj && S.status === 'flying' && !S.members[nm]) return 'THE SQUADRON IS FLYING. LATE JOIN IS OFF.';
+      return null;
+    }
+    function save() {
+      if (!S.open || !S.host) return;
+      ssSet(SAVE_KEY, { t: Date.now(), code: S.code, name: S.name, pub: S.pub, max: S.max, mj: S.mj, members: S.members, banned: S.banned });
+    }
+    function bcast() {
+      var n = net(); if (!S.open || !S.host || !n || !n.connected) return;
+      S.rank[n.myId] = myRank(); S.lastB = Date.now();
+      var rd = {}, rk = {}, ids = peers().map(function (p) { return p.id; });
+      ids.forEach(function (id) { if (S.ready[id]) rd[id] = 1; if (S.rank[id]) rk[id] = S.rank[id]; });
+      n.sendEvent({ t: 'lobby', nm: S.name, pub: S.pub ? 1 : 0, mx: S.max, mj: S.mj ? 1 : 0, st: S.status, rd: rd, rk: rk });
+    }
+    function sendMe() {
+      var n = net(); if (!S.open || S.host || !n || !n.connected) return;
+      n.sendEvent({ t: 'lme', r: S.myReady ? 1 : 0, rk: myRank() });
+    }
+
+    // ---------------------------------------------------------------- public listing (Supabase)
+    function beatOk() { return !!(base && key && typeof fetch === 'function') && (/^https:/.test(location.protocol) || window.__flkLobbyNet === true); }
+    function beatBody(status) {
+      return { code: S.code, name: str(S.name, 32) || 'Squadron', host: str(api.name(), 24) || 'Pilot', map: str(api.mapId(), 24), mix: str(api.mix(), 16), weather: str(api.wx(), 16),
+        players: Math.max(0, Math.min(4, peers().length)), max_players: S.max, status: status, version: ver };
+    }
+    function beat(status, keep) {
+      if (!beatOk() || !/^[A-Z0-9]{5}$/.test(S.code)) return;
+      S.lastBeat = Date.now();
+      try {
+        fetch(base + '/rest/v1/lobby_beats', { method: 'POST', keepalive: !!keep, headers: { apikey: key, Authorization: 'Bearer ' + key, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify(beatBody(status)) })
+          .catch(function () {});
+      } catch (e) {}
+    }
+    function beatTick(now) {
+      if (!S.open || !S.host || !S.pub) return;
+      var b = beatBody(S.status), sig = JSON.stringify(b), t = Date.now();
+      if (now || t - S.lastBeat > 30000 || (sig !== S.beatSig && t - S.lastBeat > 5000)) { S.beatSig = sig; beat(S.status); }
+    }
+    addEventListener('pagehide', function () { if (S.open && S.host && S.pub) beat('closed', true); });
+
+    // ---------------------------------------------------------------- lobby browser (Co-op screen)
+    function fetchFind() {
+      findT = Date.now();
+      if (!base || !key || typeof fetch !== 'function') { showFindMsg('The lobby list is not available here. Join with a room code.'); return; }
+      fetch(base + '/rest/v1/lobbies?select=*&order=created_at.desc&limit=30', { headers: { apikey: key, Authorization: 'Bearer ' + key } })
+        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function (rows) { lastFindOk = Date.now(); renderFind(Array.isArray(rows) ? rows : []); })
+        .catch(function () { showFindMsg('Could not load the lobby list. Check your connection. Push Refresh list.'); });
+    }
+    function showFindMsg(t) { findSig = ''; var l = $('lfList'); l.textContent = ''; l.appendChild(el('p', 'lfempty', t)); $('lfNote').textContent = ''; }
+    function renderFind(rows) {
+      var seen = {}, list = [];
+      rows.forEach(function (r) {
+        if (!r || !/^[A-Z0-9]{5}$/.test(r.code || '') || seen[r.code] || (r.status !== 'lobby' && r.status !== 'flying')) return;
+        seen[r.code] = 1; list.push(r);
+      });
+      var noPeer = typeof Peer === 'undefined' && !(api.net && api.net());
+      var sig = JSON.stringify(list.map(function (r) { return [r.code, r.name, r.host, r.map, r.mix, r.weather, r.players, r.max_players, r.status]; })) + (S.open ? 1 : 0) + (noPeer ? 1 : 0);
+      var d = new Date(); $('lfNote').textContent = '· updated ' + ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) + ':' + ('0' + d.getSeconds()).slice(-2) + ' · every 10 s';
+      if (sig === findSig) return;
+      findSig = sig;
+      var box = $('lfList'), fc = document.activeElement && box.contains(document.activeElement) ? document.activeElement.getAttribute('data-code') : null;
+      box.textContent = '';
+      if (!list.length) { box.appendChild(el('p', 'lfempty', 'No public lobbies now. Create a lobby, or join with a room code.')); return; }
+      list.forEach(function (r) {
+        var n = clampI(r.players, 0, 4, 0), mx = clampI(r.max_players, 1, 4, 4), full = n >= mx, mine = S.open && r.code === S.code;
+        var row = el('div', 'lfrow'), m = el('div', 'lfm');
+        m.appendChild(el('b', null, str(r.name, 32) || 'Squadron'));
+        m.appendChild(el('small', null, 'Host ' + (str(r.host, 24) || 'Pilot') + ' · ' + mapName(str(r.map, 24)) + ' · ' + (MIXN[r.mix] || str(r.mix, 16)) + ' · ' + wxName(str(r.weather, 16))));
+        row.appendChild(m);
+        row.appendChild(el('span', 'lfp', n + '/' + mx));
+        row.appendChild(el('span', 'lrtag' + (r.status === 'flying' ? ' fly' : ''), r.status === 'flying' ? 'FLYING' : 'LOBBY'));
+        var jb = el('button', 'small', mine ? 'Yours' : full ? 'Full' : 'Join'); jb.setAttribute('data-code', r.code);
+        jb.disabled = mine || full || S.open || noPeer;
+        row.appendChild(jb); box.appendChild(row);
+      });
+      if (fc) { var again = box.querySelector('button[data-code="' + fc + '"]'); if (again && !again.disabled) again.focus({ preventScroll: true }); }
+    }
+    $('lfList').addEventListener('click', function (e) {
+      var b = e.target.closest && e.target.closest('button[data-code]'); if (!b || b.disabled || S.open) return;
+      var code = b.getAttribute('data-code'); if (!/^[A-Z0-9]{5}$/.test(code)) return;
+      var ci = $('coCode'); if (ci) ci.value = code;
+      b.disabled = true; b.textContent = 'Joining…';
+      api.doJoin(code, function (ok) {
+        findSig = '';
+        if (ok && api.menuOpen() && (api.screen() === 'coop')) api.showScreen('lobby', 'lrReady');
+        else if (!ok) fetchFind();
+      });
+    });
+    $('lfRefresh').addEventListener('click', fetchFind);
+    $('lcOpen').addEventListener('click', function () { if (S.open) api.showScreen('lobby', focusId()); });
+
+    // ---------------------------------------------------------------- chat
+    function addLine(p) {
+      var box = $('lrChat'); if (!box) return;
+      var atEnd = box.scrollTop + box.clientHeight >= box.scrollHeight - 8;
+      box.appendChild(p);
+      while (box.children.length > 60) box.removeChild(box.firstChild);
+      if (atEnd) box.scrollTop = box.scrollHeight;
+    }
+    function addChat(who, text, mine) {
+      var p = el('p', mine ? 'mine' : ''); p.appendChild(el('b', null, str(who, 24) || 'Pilot')); p.appendChild(document.createTextNode(str(text, 120)));
+      addLine(p);
+    }
+    function addSys(text) { addLine(el('p', 'sys', text)); }
+    function sendChat() {
+      var n = net(), inp = $('lrSay'), x = str(inp.value, 120);
+      if (!x || !S.open || !n || !n.connected) return;
+      if (!rateOk(myRate, Date.now())) { addSys('Wait a moment. Then send again.'); return; }
+      inp.value = '';
+      if (S.host) { addChat(api.name(), x, true); n.sendEvent({ t: 'chat', id: n.myId, n: str(api.name(), 24), x: x }); }
+      else n.sendEvent({ t: 'chat', x: x });
+    }
+    $('lrSend').addEventListener('click', sendChat);
+    $('lrSay').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); sendChat(); } });
+
+    // ---------------------------------------------------------------- net events
+    function attach(n) {
+      if (!n || attached === n) return;
+      attached = n;
+      n.on('event', onEvent); n.on('peers', onPeers); n.on('disconnect', onDisc);
+    }
+    function onEvent(msg, from) {
+      var n = net(); if (!msg || !msg.t || !n) return;
+      if (n.isHost) {
+        if (!S.open) return;
+        var who = null; peers().forEach(function (p) { if (p.id === from) who = p; });
+        if (!who) return;
+        if (msg.t === 'lme') { S.ready[from] = !!msg.r; S.rank[from] = str(msg.rk, 24); bcast(); renderAll(); }
+        else if (msg.t === 'chat') {
+          var x = str(msg.x, 120); if (!x) return;
+          if (!rateOk(hostRate[from] = hostRate[from] || [], Date.now())) return;
+          addChat(who.name, x, false);
+          n.sendEvent({ t: 'chat', id: from, n: str(who.name, 24), x: x });
+        }
+        return;
+      }
+      if (msg.t === 'lobby') {
+        var first = !S.gotInfo;
+        S.open = true; S.host = false; S.code = n.code || S.code; S.gotInfo = true;
+        S.name = str(msg.nm, 32) || 'Lobby'; S.pub = !!msg.pub; S.max = clampI(msg.mx, 1, 4, 4); S.mj = !!msg.mj;
+        var wasFly = S.status === 'flying'; S.status = msg.st === 'flying' ? 'flying' : 'lobby';
+        S.ready = {}; S.rank = {};
+        var k, c = 0;
+        if (msg.rd && typeof msg.rd === 'object') for (k in msg.rd) { if (c++ > 8) break; if (msg.rd[k]) S.ready[str(k, 64)] = true; }
+        c = 0;
+        if (msg.rk && typeof msg.rk === 'object') for (k in msg.rk) { if (c++ > 8) break; S.rank[str(k, 64)] = str(msg.rk[k], 24); }
+        if (first) {
+          addSys('You joined ' + S.name + '.');
+          sendMe();
+          if (api.menuOpen() && api.screen() === 'coop') api.showScreen('lobby', S.status === 'flying' ? 'lrJoinFlight' : 'lrReady');
+        }
+        if (!wasFly && S.status === 'flying' && !first) addSys('The squadron is flying.');
+        if (!first && ((S.myReady && !S.ready[n.myId]) || (!S.rank[n.myId] && myRank()))) sendMe();   // host reopened (update): send my state again
+        renderAll();
+      } else if (msg.t === 'chat') {
+        addChat(msg.n, msg.x, msg.id === n.myId);
+      } else if (msg.t === 'launch') {
+        addSys('The host started the mission.');
+        S.myReady = false;
+        if (!st().started) { api.start(msg.spawn === 'air' ? 'air' : 'runway'); }
+        else api.flash('THE HOST STARTED THE MISSION');
+        renderAll();
+      }
+    }
+    function onPeers(list) {
+      var n = net(); if (!n) return;
+      list = list || [];
+      var now = {}, changed = false;
+      list.forEach(function (p) { now[p.id] = p.name || 'Pilot'; });
+      if (S.prev && S.open) {
+        for (var id in now) if (!S.prev[id]) {
+          changed = true;
+          if (id !== n.myId) addSys(str(now[id], 24) + ' joined.');
+          if (S.host && S.banned[str(now[id], 24)]) { n.kick(id, 'REMOVED'); }
+          if (S.host && S.status === 'lobby') S.members[str(now[id], 24)] = 1;
+        }
+        for (var id2 in S.prev) if (!now[id2]) { changed = true; addSys(str(S.prev[id2], 24) + ' left.'); delete S.ready[id2]; delete S.rank[id2]; }
+      } else changed = true;
+      S.prev = now;
+      if (S.host && S.open) { if (changed || Date.now() - S.lastB > 5000) { bcast(); save(); } }
+      renderAll();
+    }
+    function onDisc() { if (S.open) closeLocal(); }      // main.js shows the reason in the Co-op status line
+    function closeLocal() {
+      var n = net(), wasOpen = S.open;
+      if (S.open && S.host && S.pub) beat('closed', false);
+      if (n && n.setGate) n.setGate(null);
+      if (n && n.setMaxPlayers) n.setMaxPlayers(4);
+      S = blank(); $('lrChat').textContent = ''; findSig = '';
+      if (wasOpen && api.menuOpen() && (api.screen() === 'lobby' || api.screen() === 'lobbynew')) api.showScreen('coop');
+    }
+
+    // ---------------------------------------------------------------- lobby room screen
+    var slotEls = [];
+    (function buildSlots() {
+      var ol = $('lrSlots');
+      for (var i = 0; i < 4; i++) {
+        var li = el('li'), sm = el('div', 'sm'), top = el('div');
+        li.appendChild(el('span', 'sn', String(i + 1)));
+        var cs = el('span', 'cs'), tg = el('span', 'tg'); top.appendChild(cs); top.appendChild(tg); sm.appendChild(top);
+        var sd = el('small'); sm.appendChild(sd); li.appendChild(sm);
+        var rd = el('span', 'rd'); li.appendChild(rd);
+        var kb = el('button', 'small kick', 'Kick'); kb.hidden = true; li.appendChild(kb);
+        (function (idx) { kb.addEventListener('click', function () { kick(idx); }); })(i);
+        ol.appendChild(li); slotEls.push({ li: li, cs: cs, tg: tg, sd: sd, rd: rd, kb: kb, id: null, name: '' });
+      }
+    })();
+    function kick(i) {
+      var n = net(), s = slotEls[i]; if (!S.host || !n || !s.id || s.id === n.myId) return;
+      var nm = str(s.name, 24);
+      S.banned[nm] = 1; delete S.members[nm];
+      n.kick(s.id, 'REMOVED');
+      addSys(nm + ' was removed from the lobby.');
+      save();
+    }
+    function renderRoom() {
+      var n = net(), list = peers(), me = n ? n.myId : null, t = st(), host = S.host;
+      $('lrName').textContent = S.name || 'Lobby';
+      var hp = list.filter(function (p) { return p.host; })[0];
+      $('lrRole').textContent = host ? 'You are the host' : 'Host · ' + (hp ? str(hp.name, 24) : '—');
+      $('lrState').textContent = S.status === 'flying' ? 'Flying' : 'Lobby';
+      $('lrCode').textContent = S.code || '—';
+      $('lrVis').textContent = S.pub ? 'PUBLIC' : 'PRIVATE';
+      $('lrFly').hidden = S.status !== 'flying';
+      var nReady = 0, nCli = 0;
+      for (var i = 0; i < 4; i++) {
+        var s = slotEls[i], p = list[i];
+        s.li.hidden = i >= Math.max(S.max, list.length);
+        if (p) {
+          s.id = p.id; s.name = p.name || 'Pilot';
+          s.li.className = p.id === me ? 'me' : '';
+          s.cs.textContent = str(p.name, 24) || 'Pilot';
+          s.tg.textContent = (p.host ? 'HOST' : '') + (p.id === me ? (p.host ? ' · YOU' : 'YOU') : '');
+          var ping = p.host ? (host ? null : (n && n.ping ? n.ping() : null)) : p.ping, rk = S.rank[p.id];
+          s.sd.textContent = api.jetName(p.aircraftId) + (rk ? ' · ' + rk : '') + (ping != null && !(host && p.id === me) ? ' · ' + Math.round(ping) + ' ms' : '');
+          if (!p.host) { nCli++; if (S.ready[p.id]) nReady++; }
+          s.rd.textContent = p.host ? (S.status === 'flying' ? 'FLYING' : '') : (S.ready[p.id] ? 'READY' : 'NOT READY');
+          s.rd.className = 'rd' + (S.ready[p.id] || p.host ? ' on' : '');
+          s.kb.hidden = !(host && !p.host);
+        } else {
+          s.id = null; s.name = ''; s.li.className = 'empty';
+          s.cs.textContent = 'Open slot'; s.tg.textContent = ''; s.sd.textContent = host ? 'Waiting for a pilot' : '—'; s.rd.textContent = ''; s.kb.hidden = true;
+        }
+      }
+      $('lrCount').textContent = '· ' + list.length + ' of ' + S.max + (list.length >= S.max ? ' · full' : '');
+      // actions
+      var fly = S.status === 'flying';
+      $('lrStart').hidden = !host || t.started; $('lrStartAir').hidden = !host || t.started;
+      $('lrReady').hidden = host || fly || t.started;
+      $('lrReady').setAttribute('aria-pressed', S.myReady ? 'true' : 'false'); $('lrReady').textContent = S.myReady ? 'Ready ✓' : 'Ready';
+      $('lrJoinFlight').hidden = host || !fly || t.started;
+      $('lrResume').hidden = !(t.started && t.paused);
+      $('lrLeave').textContent = host ? 'Close lobby' : 'Leave lobby';
+      var note;
+      if (host) note = t.started ? 'You fly. New pilots push Join the flight.' + (S.mj ? '' : ' Late join is off.') : nCli ? nReady + ' of ' + nCli + ' pilots are ready. Push Start mission. All pilots take off at the same time.' : 'Send the room code or the link to your friends. You can also start alone.';
+      else note = fly ? (t.started ? 'You fly with the squadron.' : 'The squadron is flying. Push Join the flight. You start in the air near your team.') : 'Push Ready. The host starts the mission. All pilots take off at the same time.';
+      $('lrNote').textContent = note;
+      // settings
+      var lock = !host;
+      mapCards($('lrMaps'), lock);
+      mixOpts($('lrMix')); wxOpts($('lrWx'));
+      $('lrMix').value = api.mix(); $('lrMix').disabled = lock;
+      $('lrWx').value = api.wx(); $('lrWx').disabled = lock;
+      $('lrMax').value = String(S.max); $('lrMax').disabled = lock;
+      $('lrMid').checked = S.mj; $('lrMid').disabled = lock;
+      $('lrSetNote').textContent = host ? 'All pilots get your settings at once.' : 'The host selects the settings. You see them live.';
+    }
+    function renderCoop() {
+      var n = net(), inRoom = !!(n && n.connected);
+      $('lcOpen').hidden = !inRoom;
+      $('lcOpen').textContent = inRoom ? 'Open lobby · ' + (n.code || '') : 'Open lobby room';
+    }
+    function renderAll() {
+      if (visible('scrLobby')) renderRoom();
+      if (visible('scrCoop')) renderCoop();
+    }
+    $('lrMaps').addEventListener('click', function (e) { onMapClick(e, function () { return !S.host; }); });
+    $('lrMix').addEventListener('change', function (e) { if (S.host) api.setMix(e.target.value); renderRoom(); });
+    $('lrWx').addEventListener('change', function (e) { if (S.host) api.setWx(e.target.value); renderRoom(); });
+    $('lrMax').addEventListener('change', function (e) {
+      if (!S.host) { renderRoom(); return; }
+      S.max = clampI(e.target.value, 2, 4, 4); var n = net(); if (n && n.setMaxPlayers) n.setMaxPlayers(S.max);
+      bcast(); save(); renderRoom();
+    });
+    $('lrMid').addEventListener('change', function (e) { if (!S.host) { renderRoom(); return; } S.mj = e.target.checked; bcast(); save(); renderRoom(); });
+    $('lrCopy').addEventListener('click', function () {
+      var link = location.href.split('#')[0] + '#room-' + S.code, b = $('lrCopy');
+      var done = function (ok) { b.textContent = ok ? 'Link copied' : 'Copy failed'; addSys(ok ? 'Invite link copied: ' + link : 'Copy this link: ' + link); setTimeout(function () { b.textContent = 'Copy invite link'; }, 2500); };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(link).then(function () { done(true); }, function () { done(false); }); else done(false);
+    });
+    function launch(spawn) {
+      var n = net(); if (!S.host || !n || !n.connected) return;
+      peers().forEach(function (p) { S.members[str(p.name, 24)] = 1; });
+      S.status = 'flying'; S.ready = {}; save(); bcast(); beatTick(true);
+      n.sendEvent({ t: 'launch', spawn: spawn });
+      addSys('You started the mission.');
+      api.start(spawn);
+    }
+    $('lrStart').addEventListener('click', function () { launch('runway'); });
+    $('lrStartAir').addEventListener('click', function () { launch('air'); });
+    $('lrJoinFlight').addEventListener('click', function () { if (!st().started) api.start('runway'); });
+    $('lrResume').addEventListener('click', function () { api.resume(); });
+    $('lrReady').addEventListener('click', function () { S.myReady = !S.myReady; sendMe(); renderRoom(); });
+    $('lrLeave').addEventListener('click', function () {
+      var n = net();
+      if (S.host) {
+        ssSet(SAVE_KEY, null);
+        if (S.pub) beat('closed', false);
+        S.pub = false;                                    // closed beat sent: no second one from closeLocal
+        try { if (n && n.connected) n.leave(true); } catch (e) {}
+        closeLocal();
+        api.leaveRoom('You closed the lobby.');
+      } else { closeLocal(); api.leaveRoom('You left the lobby.'); }
+      api.showScreen('coop', 'bHost');
+    });
+
+    // ---------------------------------------------------------------- 1 s tick
+    function tick() {
+      var n = net(); attach(n);
+      var conn = !!(n && n.connected);
+      if (conn && n.isHost && !S.open) adopt();
+      if (conn && !n.isHost && !S.open) { S = blank(); S.open = true; S.host = false; S.code = n.code || ''; }
+      if (!conn && S.open) closeLocal();
+      if (S.open && S.host) {
+        var stNow = st().started ? 'flying' : 'lobby';
+        if (stNow !== S.status && stNow === 'flying') { S.status = 'flying'; peers().forEach(function (p) { S.members[str(p.name, 24)] = 1; }); save(); bcast(); beatTick(true); }
+        if (Date.now() - S.lastB > 5000) bcast();
+        beatTick();
+      }
+      renderAll();
+      if (visible('scrCoop') && Date.now() - findT > 10000) fetchFind();
+    }
+    setInterval(tick, 1000);
+
+    function onScreen(name) {
+      if (name === 'lobby') renderRoom();
+      else if (name === 'lobbynew') renderCreate();
+      else if (name === 'coop') { renderCoop(); if (Date.now() - findT > 3000) setTimeout(fetchFind, 0); }
+    }
+    function focusId() { var t = st(); if (S.host) return t.started ? 'lrResume' : 'lrStart'; return S.status === 'flying' && !t.started ? 'lrJoinFlight' : t.started && t.paused ? 'lrResume' : 'lrReady'; }
+    return {
+      attach: attach, onScreen: onScreen, openCreate: openCreate, focusId: focusId,
+      inRoom: function () { var n = net(); return !!(n && n.connected && S.open); },
+      state: function () { return JSON.parse(JSON.stringify({ open: S.open, host: S.host, code: S.code, name: S.name, pub: S.pub, max: S.max, mj: S.mj, status: S.status, ready: S.ready, rank: S.rank, myReady: S.myReady })); },
+      _fetchFind: fetchFind
+    };
   };
 })();
 
@@ -28885,6 +29558,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   var screen = 'main', setupFirst = false, menuReady = false, SETUP_KEY = 'flanker.setup.v1';
   var SCREENS = { main: 'scrMain', settings: 'scrSettings', controls: 'scrControls', coop: 'scrCoop', setup: 'scrSetup', leader: 'scrLeader', medals: 'scrMedals' };
   var BACK_TO = { settings: ['main', 'bSettings'], controls: ['main', 'bControls'], coop: ['main', 'bCoop'], setup: ['settings', 'bSetup'], leader: ['main', 'bLeader'], medals: ['main', 'bMedals'] };
+  if ($('scrLobby')) { SCREENS.lobbynew = 'scrLobbyNew'; SCREENS.lobby = 'scrLobby'; BACK_TO.lobbynew = ['coop', 'bHost']; BACK_TO.lobby = ['main', 'bCoop']; }   // lobby.js screens
   if ($('scrAccount')) { SCREENS.account = 'scrAccount'; BACK_TO.account = ['main', 'bAccount']; }   // account.js (cloud save)
   function escH(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function showScreen(name, focusId, noFocus) {
@@ -28895,6 +29569,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     if (name === 'controls') { renderPresets(); renderControlsRef(); }
     if (name === 'setup') renderSetup();
     if (name === 'leader') { if (leaderboard) leaderboard.render($('lbRoot')); else $('lbRoot').textContent = 'The leaderboard is not available.'; }
+    if (lobby && lobby.onScreen) lobby.onScreen(name);
     if (name === 'medals') { if (extras) extras.renderMedals($('xmRoot')); else $('xmRoot').textContent = 'Medals are not available.'; }
     if (name === 'account') { if (FL.account) FL.account.open(); else $('acRoot').textContent = 'The account is not available.'; }
     $('menu').scrollTop = 0;
@@ -28988,7 +29663,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   Array.prototype.forEach.call(document.querySelectorAll('#menu [data-back]'), function (b) { b.addEventListener('click', function () { menuBack(); }); });
   $('bSettings').addEventListener('click', function () { showScreen('settings'); });
   $('bControls').addEventListener('click', function () { showScreen('controls'); });
-  $('bCoop').addEventListener('click', function () { showScreen('coop'); });
+  $('bCoop').addEventListener('click', function () { if (lobby && lobby.inRoom()) showScreen('lobby', lobby.focusId()); else showScreen('coop'); });
   if ($('bAccount')) $('bAccount').addEventListener('click', function () { showScreen('account'); });
   if ($('bLeader')) $('bLeader').addEventListener('click', function () { showScreen('leader'); });
   if ($('bMedals')) $('bMedals').addEventListener('click', function () { showScreen('medals'); });
@@ -31016,7 +31691,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   } catch (e) { PF.ok = false; }
   var gpuActive = null;
   function gpuBegin() {
-    if (!PF.ok || gpuActive || PF.q.length > 4) return;
+    if (PF.post === undefined) PF.post = !!(PF.ok && post && post.enabled && post.setGpuTiming && post.setGpuTiming(true));  // one timer system only: TIME_ELAPSED queries cannot nest
+    if (!PF.ok || PF.post || gpuActive || PF.q.length > 4) return;
     try { gpuActive = PF.gl.createQuery(); PF.gl.beginQuery(PF.ext.TIME_ELAPSED_EXT, gpuActive); } catch (e) { PF.ok = false; gpuActive = null; }
   }
   function gpuEnd() {
@@ -31041,7 +31717,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   function pfLine() {
     var n = PF.n || 1, parts = [], tot = 0;
     for (var i = 0; i < 9; i++) { var v = PF.sum[i] / n; tot += v; parts.push(PF_NAMES[i] + ' ' + v.toFixed(2)); }
-    var gpu = PF.gpuN ? PF.gpuSum / PF.gpuN : -1;
+    var gpu = PF.gpuN ? PF.gpuSum / PF.gpuN : -1, gs = PF.post && post.gpuStages ? post.gpuStages() : null;
+    if (gs) gpu = gs.total;
     var bound = gpu < 0 ? 'gpu ?' : (gpu > tot ? 'GPU-bound' : 'CPU-bound');
     if (gpu < 0) {
       // no timer query (Firefox, Safari): estimate. GPU-wait proxy = frame time minus non-render CPU; a large 'render'
@@ -31050,7 +31727,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       bound = 'gpu~ ' + est.toFixed(1) + ' ms (frame ' + frameAvg.toFixed(1) + ')' + (rnd > 4 || est > Math.max(tot - rnd, 1) * 2 ? ' GPU-bound?' : ' CPU-bound?');
     }
     var ents = 0; try { ents = ((combat && combat.hud().targets) || []).length; } catch (e) {}
-    var line = 'cpu ms/frame: ' + parts.join(', ') + ' = ' + tot.toFixed(2) + ' | gpu ' + (gpu < 0 ? 'n/a' : gpu.toFixed(2) + ' ms (max ' + PF.gpuMax.toFixed(1) + ')') + ' | ' + bound + ' | px ' + Math.round(W * H * Math.pow(basePR() * (resScale || 1), 2) / 1000) + 'k | enemies ' + ents;
+    var line = 'cpu ms/frame: ' + parts.join(', ') + ' = ' + tot.toFixed(2) + ' | gpu ' + (gs ? gs.total.toFixed(2) + ' ms (shadow ' + gs.shadow.toFixed(2) + ', scene ' + gs.scene.toFixed(2) + ', bloom ' + gs.bloom.toFixed(2) + ', comp ' + gs.comp.toFixed(2) + ')' : gpu < 0 ? 'n/a' : gpu.toFixed(2) + ' ms (max ' + PF.gpuMax.toFixed(1) + ')') + ' | ' + bound + ' | px ' + Math.round(W * H * Math.pow(basePR() * (resScale || 1), 2) / 1000) + 'k | enemies ' + ents;
     PF.sum.fill(0); PF.n = 0; PF.frameSum = 0; PF.gpuSum = 0; PF.gpuN = 0; PF.gpuMax = 0;
     return line;
   }
@@ -31182,13 +31859,13 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   }
 
   // ---------------------------------------------------------------- co-op lobby (PeerJS via net.js)
-  var net = null;
+  var net = null, lobby = null;
   function coStatus(t, err) { var el = $('coStatus'); el.textContent = t; el.classList.toggle('err', !!err); }
   function coUi() {
     var inRoom = !!(net && net.connected);
     $('bHost').hidden = inRoom; $('bJoin').hidden = inRoom; $('coCode').disabled = inRoom; $('coName').disabled = inRoom;
     $('bLeave').hidden = !inRoom; $('coRoom').hidden = !(inRoom && net.isHost && roomCode);
-    $('bCoop').textContent = inRoom ? 'Co-op · ' + (net.isHost ? 'hosting ' : 'in room ') + (roomCode || net.code || '') : 'Co-op';
+    $('bCoop').textContent = inRoom ? 'Lobby · ' + (roomCode || net.code || '') : 'Co-op';
     renderMaps();
   }
   var roomCode = '';
@@ -31197,7 +31874,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     $('coName').addEventListener('change', function () { try { localStorage.setItem('flk_name', $('coName').value.trim() || 'Flanker One'); } catch (e) {} if (combat.setLocalInfo) combat.setLocalInfo({ name: playerName(), aircraftId: aircraftId }); });
     var m = /room-([A-Za-z0-9]{5})/.exec(location.hash || ''); if (m) { $('coCode').value = m[1].toUpperCase(); coStatus('Invite found. Push Join.'); }
     if (!FL.createNet || typeof Peer === 'undefined') { $('bHost').disabled = $('bJoin').disabled = true; coStatus('Co-op needs the internet. Use the game web page. Offline previews cannot connect.', true); return; }
-    $('bHost').addEventListener('click', function () { doHost(); });
+    $('bHost').addEventListener('click', function () { if (lobby) lobby.openCreate(); else doHost(); });
     $('bJoin').addEventListener('click', function () { doJoin($('coCode').value.trim()); });
     netSetupRest();
     resumeAfterUpdate();
@@ -31234,7 +31911,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       if (e.type !== 'end') return;
       var wasClient = !!(net && !net.isHost && roomCode), code = roomCode;
       leaveRoom(e.reason || 'Disconnected from the room.');
-      if (wasClient && code) { flash('HOST LOST — TRYING TO REJOIN'); rejoinLoop(code, 14); }
+      if (wasClient && code && !/REMOVED YOU|CLOSED THE LOBBY/.test(e.reason || '')) { flash('HOST LOST — TRYING TO REJOIN'); rejoinLoop(code, 14); }
       else flash((e.reason || 'DISCONNECTED').toUpperCase());
     });
   }
@@ -31249,7 +31926,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793151768', updShown = false;
+  var BUILD = '1793152093', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
@@ -31291,6 +31968,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   function ensureNet() {
     if (net) return;
     net = FL.createNet();
+    if (lobby && lobby.attach) lobby.attach(net);
     net.on('peers', function (list) {
       warmMates(list);
       var ul = $('coPeers'); ul.innerHTML = '';
@@ -31449,6 +32127,19 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       });
       if (FL.createExtras) { try { extras = FL.createExtras({ scene: scene, camera: camera, renderer: renderer, combat: combat, campaign: campaign, phys: phys, world: function () { return world; }, fx: fx, audio: audio, hudCanvas: hud }); } catch (e) { extras = null; console.warn('extras', e); } }
       booted = true;
+      // ---- co-op lobby (lobby.js): create screen, lobby room, public lobby list
+      if (FL.createLobby) {
+        try {
+          lobby = FL.createLobby({ $: $, tele: TELE, net: function () { return net; }, ensureNet: ensureNet, name: playerName, jet: function () { return aircraftId; },
+            jetName: function (id) { var a = acSpec(id); return a ? a.name : String(id || ''); }, maps: mapsAll, mapId: function () { return mapId; },
+            mapDesc: function (id) { return MAP_SHORT[id] || ''; }, mapBusy: function () { return mapBusy || !booted; }, pickMap: selectMapFromMenu,
+            mix: function () { return inClientRoom() && hostMix ? hostMix : curMix(); }, setMix: setMix, setWx: setWx,
+            wx: function () { return weather && weather.preset ? (weather.preset.id || weather.preset) : 'scattered'; },
+            doHost: doHost, doJoin: doJoin, leaveRoom: leaveRoom, coStatus: coStatus, start: startGame, resume: function () { initAudio(); resume(); },
+            state: function () { return { started: started, paused: paused, flying: !!(started && st && !st.crashed) }; },
+            showScreen: showScreen, screen: function () { return screen; }, menuOpen: function () { return !$('menu').hidden; }, flash: flash, campaign: function () { return campaign; } });
+        } catch (e) { lobby = null; console.warn('lobby', e); }
+      }
       setupNet();
       setDbg(dbgOn); $('optDbg').addEventListener('change', function (e) { setDbg(e.target.checked); });
       $('optTele').checked = teleOn;
