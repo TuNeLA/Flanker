@@ -23346,7 +23346,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       if (b && b.getAttribute('data-key')) focusKey = b.getAttribute('data-key');
       var ok = null, buy = false;
       if (a === 'go') { closeHangar(); return; }
-      if (a === 'tab') { tab = id; focusKey = 'tab-' + id; render(); return; }
+      if (a === 'tab') { tab = id; focusKey = 'tab-' + id; pickOpen = false; render(); return; }
       if (a === 'upg') { ok = buyUpgrade(id, viewAc()); buy = true; }
       else if (a === 'upgac') { upgAc = id; render(); return; }
       else if (a === 'buyw') { ok = buyWeapon(id); buy = true; }
@@ -23540,7 +23540,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     }
     function cycleTab(d) {
       var i = TABS.map(function (t) { return t[0]; }).indexOf(tab);
-      tab = TABS[(i + d + TABS.length) % TABS.length][0]; focusKey = null; render(); focusFirst();
+      tab = TABS[(i + d + TABS.length) % TABS.length][0]; focusKey = null; pickOpen = false; render(); focusFirst();
     }
     function cycleBranch(d) {
       var i = BRANCHES.map(function (b) { return b.id; }).indexOf(skillBranch);
@@ -23652,7 +23652,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       selectAircraft: function (id) { var r = selectAircraft(id); if (hangarOpen) render(); return r; },
       learnSkill: function (id) { var r = learnSkill(id); if (hangarOpen) render(); return r; },
       respec: respec,
-      setTab: function (t) { tab = t; if (hangarOpen) { focusKey = null; render(); } },
+      setTab: function (t) { tab = t; pickOpen = false; if (hangarOpen) { focusKey = null; render(); } },
       // hangar UX: jet shown in the 3D hangar (Aircraft tab = the jet you look at), loadout presets, picker / shop state (tests)
       viewAc: function () { return hangarOpen && tab === 'aircraft' && acSel && acSpec(acSel) ? acSel : P.ac; },
       viewAircraft: function (id) { if (acSpec(id)) acSel = id; if (hangarOpen) render(); },
@@ -37382,7 +37382,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       trap.sinceTD = 0; trap.done = false; trap.skipMsg = false; trap.bolterMsg = false;
       var rs = Math.hypot(st.vel.x, st.vel.z);
       // ROSTER M8: only jets with a tail hook catch the wires (spec.carrier 'catobar' | 'stobar'; VTOL jets land without them)
-      var sp = phys.spec ? phys.spec() : null, hook = !!(sp && sp.carrier && sp.carrier !== 'vtol');
+      var sp = phys.spec ? phys.spec() : null, hook = true;   // Chad: every jet has a tail hook (game rule; real hooks only on naval jets)
       trap.armed = st.gearT > 0.9 && rs > 25 && hook;
       if (!hook && rs > 25 && !(sp && sp.carrier === 'vtol')) { say('NO TAIL HOOK — BRAKE HARD OR GO AROUND'); lso('No hook! Power, go around!', 'x'); }
       trap.prevAH = axisA(LX, LZ) - K.HOOK;
@@ -45387,7 +45387,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793192025', updShown = false;
+  var BUILD = '1793193200', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
