@@ -1361,7 +1361,8 @@ body.flk-cover > .xm-pop, body.flk-cover > .xm-ban, body.flk-cover > .xm-card { 
     { id: 'alps', name: 'Swiss Alps', region: 'Bernese Oberland, Switzerland', blurb: 'Thread the 800 m deep Lauterbrunnen slot past its waterfalls, skim the Eiger north face and the Aletsch glacier, dodge the Schilthorn cables.', timeOfDay: 'midday' },
     { id: 'patagonia', name: 'Patagonia', region: 'Torres del Paine & Fitz Roy, Chile/Argentina', blurb: 'Granite spires over turquoise glacial lakes: weave between the Torres, race down the Valle del Francés, hit the El Chaltén strip under Fitz Roy.', timeOfDay: 'morning' },
     { id: 'karakoram', name: 'Karakoram', region: 'Baltoro glacier, Pakistan', blurb: 'Fly the 60 km Baltoro ice highway between 3 km granite walls, past the Trango towers to Concordia and the pyramid of K2.', timeOfDay: 'midday' },
-    { id: 'rio', name: 'Rio de Janeiro', region: 'Rio de Janeiro, Brazil', blurb: 'Granite domes rising out of the city and the sea: loop Sugarloaf, buzz Christ the Redeemer, dive under the Rio-Niterói bridge span.', timeOfDay: 'afternoon' }];
+    { id: 'rio', name: 'Rio de Janeiro', region: 'Rio de Janeiro, Brazil', blurb: 'Granite domes rising out of the city and the sea: loop Sugarloaf, buzz Christ the Redeemer, dive under the Rio-Niterói bridge span.', timeOfDay: 'afternoon' },
+    { id: 'ocean', name: 'Open Ocean', region: 'Central Pacific', blurb: 'Deep blue sea to the horizon: coral atolls, a reef island airfield, your supercarrier and an enemy naval base. Fight boats, frigates, carriers and the Caspian Sea Monster.', timeOfDay: 'midday' }];
 
   // ================================================================ grid helpers
   // Height on a regular grid exactly as THREE.PlaneGeometry triangulates it: cell (ix,iy) = triangles (a,b,d) + (b,c,d),
@@ -7017,6 +7018,169 @@ body.flk-cover > .xm-pop, body.flk-cover > .xm-ban, body.flk-cover > .xm-card { 
     if (!lb.nv) return null;
     const lm = new THREE.Mesh(lb.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.07, metalness: 0.1, envMapIntensity: 1.2 })); lm.name = 'lake'; lm.receiveShadow = true; ctx.add(lm); return lm;
   }
+  // ================================================================ MAP: Open Ocean (id 'ocean')
+  // ~96 x 96 km of deep blue Pacific: one larger island with the home airfield (Tern Island: coral reef, lagoon, harbour town,
+  // a volcanic hill and a lighthouse), four ring atolls with turquoise lagoons, scattered rocky islets and sea stacks, and the
+  // enemy naval base on Black Rock far to the north-east. The friendly supercarrier sails ~3 km off Tern Island (carrier.js).
+  // Zones: land zones on the islands + 'sea' zones on open water for naval missions; sea lanes for convoys and frigates.
+  MAPDEFS.ocean = function () {
+    const C = (e, n, r, H, o) => Object.assign({ e: e, n: n, r: r, H: H }, o || {});
+    const HOME = { e: -16000, n: -14000 }, ENEMY = { e: 27000, n: 25500 };
+    const ATOLLS = [[7000, -27000, 2600, 'Kanoa Atoll', 0.4], [-31000, 13000, 2200, 'Moana Atoll', 1.1], [12500, 4500, 1600, 'Coral Ring', 2.0], [-6000, 31000, 2000, 'North Atoll', 0.2]];
+    const CONES = [
+      // Tern Island: long low coral-limestone island (airfield) + Mount Kaleo, an old volcanic hill at the west end
+      C(HOME.e, HOME.n, 2300, 55, { el: 2.4, ang: 0.35, p: 1.7, cliff: 8, shelf: 950, rib: 0.25, jag: 0.22, seed: 11 }),
+      C(-20800, -15700, 1150, 360, { p: 1.05, cliff: 55, jag: 0.3, shelf: 700, ridge: 0.5, ridgeS: 700, seed: 13 }),
+      C(-11200, -12300, 800, 70, { p: 1.3, cliff: 20, shelf: 800, seed: 15 }),
+      // Black Rock (enemy naval base): a low island + a dark rocky peak, Sentinel Rock (SAM islet) to the south-west
+      C(ENEMY.e, ENEMY.n, 2000, 95, { el: 1.9, ang: -0.4, p: 1.5, cliff: 15, shelf: 900, rib: 0.3, seed: 21 }),
+      C(29600, 24200, 900, 330, { p: 1.0, cliff: 70, jag: 0.35, shelf: 400, seed: 23 }),
+      C(22500, 21300, 520, 45, { p: 1.4, cliff: 25, shelf: 500, seed: 25 })
+    ];
+    // ring atolls: a narrow coral rim with motus and passes, a turquoise lagoon inside, a reef flat outside, then the deep
+    const ATF = ATOLLS.map((a) => ({ e: a[0], n: a[1], r: a[2], ca: Math.cos(a[4]), sa: Math.sin(a[4]), s: (a[0] * 0.0011 + a[1] * 0.0007) % 31 }));
+    function atollH(e, n) {
+      let best = -1e9;
+      for (const A of ATF) {
+        const de = e - A.e, dn = n - A.n; if (de > A.r * 2.3 || de < -A.r * 2.3 || dn > A.r * 2.3 || dn < -A.r * 2.3) continue;
+        const u = (de * A.ca + dn * A.sa) / 1.25, v = -de * A.sa + dn * A.ca, d = Math.sqrt(u * u + v * v), th = Math.atan2(v, u), ct = Math.cos(th), st = Math.sin(th);
+        const x = d / (A.r * (0.88 + 0.24 * fbm(ct * 1.4 + A.s, st * 1.4 - A.s, 3, 1441)));
+        if (x > 1.7) continue;
+        let h = -13 + 11.8 * sstep(0.8, 0.94, x) - 160 * sstep(1.08, 1.4, x);
+        h += 2.4 * (fbm(e / 260, n / 260, 2, 1443) - 0.5) * (1 - sstep(0.82, 0.92, x));                 // patch reefs in the lagoon
+        const gap = sstep(0.34, 0.46, fbm(ct * 3 + A.s, st * 3 - A.s, 2, 1447)), rim = Math.max(0, 1 - Math.abs(x - 1) / 0.06);
+        h += 4.6 * Math.pow(rim, 0.6) * gap;
+        if (h > best) best = h;
+      }
+      return best;
+    }
+    const MODS = [];
+    // harbour coves: Port Tern (east end of Tern Island) and Black Rock harbour (south side)
+    MODS.push({ e: -9600, n: -11200, r: 700, lvl: -11 }, { e: 27300, n: 23500, r: 850, lvl: -12 });
+    // scattered rocky islets / sea stacks in the open sea (deterministic)
+    { const R = makeRng(4242); let tries = 0, k = 0;
+      while (k < 14 && tries++ < 4000) {
+        const e = -40000 + R() * 80000, n = -40000 + R() * 80000, r = 160 + Math.pow(R(), 1.5) * 300;
+        if (Math.hypot(e - HOME.e, n - HOME.n) < 11000 || Math.hypot(e - ENEMY.e, n - ENEMY.n) < 6000) continue;
+        let ok = true;
+        for (const c of CONES) if (Math.hypot(e - c.e, n - c.n) < c.r * (c.el || 1) + r + 5000) { ok = false; break; }
+        if (!ok) continue;
+        CONES.push(C(e, n, r, 50 + R() * 140, { p: 0.75 + R() * 0.3, cliff: 30 + R() * 40, jag: 0.45, shelf: 200 + R() * 250, seed: 100 + k })); k++;
+      }
+    }
+    const bank = () => -1500;
+    const FOPT = { bank: bank, ribScale: 800, ribK: 0.25, ravine: 0.3, ravineScale: 1200, wind: [1, 0.3], mods: MODS };
+    const isl = makeIslandField(CONES, FOPT);
+    const raw = (e, n) => { const a = atollH(e, n), h = isl(e, n); return a > h ? a : h; };
+    const BASE = { name: 'Tern Island Air Station', e: -15200, n: -13700, hdg: 70, len: 2600, w: 45, seed: 141, blend: 450, minH: 6, q: 0.5 };
+    const EBASE = { name: 'Black Rock naval air station', e: 26300, n: 26000, hdg: 113, len: 1800, w: 40, seed: 142, blend: 450, mini: true, enemy: true, minH: 6, q: 0.5 };
+    const TOWNS = [
+      { e: -10900, n: -12000, r: 380, count: 34, style: 'tropical', harbor: true, church: true, seed: 1401, name: 'Port Tern' },
+      { e: 27900, n: 24400, r: 320, count: 22, style: 'tropical', harbor: true, seed: 1402, name: 'Black Rock' }];
+    const cG1 = lin(0x1f4a18), cG2 = lin(0x3a6a22), cScrub = lin(0x8d8a58), cSand = lin(0xe6dcc0), cSea = lin(0xe2d8b8), cRock = lin(0x3a3633), cWet = lin(0x2a2622), cCoral = lin(0xd8cfb0);
+    const def = {
+      name: 'Open Ocean', region: 'Central Pacific', N: 400, lodK: 0.06,
+      sky: { sunAz: 205, sunEl: 52, fog: 0xb4cfe8, fogD: 0.0000072, hfogA: 0.000005, hfogB: 1 / 700, zenith: [0.018, 0.09, 0.42], glow: [0.95, 0.88, 0.7], glowW: 0.16, sunCol: [1.0, 0.97, 0.9], disk: 30,
+        sunHex: 0xfff6e6, sunI: 2.8, hemiSky: 0xa4caf0, hemiGround: 0x2a5068, hemiI: 0.58, white: 0xe9eef4, envGround: [0.04, 0.1, 0.16] },
+      ground: { rockOn: 1, rock1: 0x2f2a26, rock2: 0x5c534a, rockA: 0.45, rockB: 0.62, sandH: 1.8, sand: 0xe4d8b8, faceN: 1 },
+      water: { color: 0x00081c, shallow: 0x066a64, foam: 0.24, shallowK: 0.95, roughness: 0.16, normalScale: 0.55 },
+      bases: [BASE, EBASE], raw: raw,
+      levels: [{ tile: 1920, cell: 48, max: 120, dilate: 40, score: (e0, n0, e1, n1, g) => {
+        let lo = 1e9, hi = -1e9;
+        for (let i = 0; i <= 4; i++) for (let j = 0; j <= 4; j++) { const h = triH(g.H, g.NV, (e0 + i * 480 + 48000) / g.cell, (48000 - (n0 + j * 480)) / g.cell); lo = Math.min(lo, h); hi = Math.max(hi, h); }
+        const e = (e0 + e1) / 2, n = (n0 + n1) / 2;
+        if (Math.hypot(e - BASE.e, n - BASE.n) < 2600) return 2e5;
+        return hi > 1 ? hi - Math.max(lo, -20) + 40 : (hi > -8 ? 20 : 0); } }],
+      color: function (e, n, h, il, curv, o) {
+        if (h < 0) { mix3(o, cSea, cSand, sstep(-6, 0, h)); mix3(o, o, cWet, Math.max(1 - sstep(0.75, 0.92, il), sstep(3, 10, curv)) * 0.7); return 0; }
+        const blk = Math.hypot(e - 29600, n - 24200) < 1100 ? 1 : 0;
+        mix3(o, cG1, cG2, sstep(0.35, 0.7, fbm(e / 600, n / 600, 3, 1421)));
+        mix3(o, o, cScrub, sstep(0.55, 0.75, fbm(e / 1400 + 2, n / 1400, 2, 1423)) * 0.6);
+        mix3(o, o, cRock, Math.max(blk * 0.8, sstep(220, 320, h) * 0.6) + (1 - sstep(0.6, 0.85, il)) * 0.6);
+        mix3(o, o, h < 6 && il > 0.9 ? cCoral : cSand, (1 - sstep(0.9, 2.2, h + 1.0 * (curv > 0 ? 0 : 1))) * sstep(0.9, 0.97, il) * (1 - sstep(2, 8, curv)));
+        return 0;
+      },
+      zones: [],
+      towns: TOWNS,
+      traffic: 0,
+      veg: [
+        { kind: 'jungle', per: 420, farThin: 3, scale: [0.8, 1.4], cap: 5000, test: (e, n, h, sl) => { if (h < 4 || h > 300 || sl > 1.2) return 0; if (Math.hypot(e - 29600, n - 24200) < 1000) return 0.1; return 0.8; } },
+        { kind: 'palm', per: 150, farThin: 2, scale: [0.8, 1.3], cap: 5000, minH: 0.8, test: (e, n, h, sl) => h < 30 && sl < 0.45 ? 0.95 - h / 40 : 0 },
+        { kind: 'scrub', per: 170, scale: [0.6, 1.1], cap: 1500, shadow: false, test: (e, n, h, sl) => h > 120 && sl < 0.5 ? 0.4 : 0 }],
+      clouds: { seed: 1431, cumulus: 85, cuBase: [650, 950], cuSize: 0.9, lit: [1.2, 1.16, 1.1], shadow: [0.44, 0.52, 0.64], opacity: 0.92, cling: true,
+        banks: [[HOME.e - 4000, HOME.n - 1500, 3000, 2000, 300, 640], [ENEMY.e + 2500, ENEMY.n - 1000, 2200, 1800, 280, 700]] },
+      extras: null
+    };
+    def.extras = function (ctx) {
+      const sampleH = ctx.sampleH, rock = new Builder(), props = new Builder(), F = [];
+      // deep ocean: less sky reflection so the open sea stays deep blue (the reefs keep their turquoise)
+      for (const o of ctx.objs) if (o.name === 'water' && o.material) o.material.envMapIntensity = 0.55;
+      const cRk = lin(0x4a443e), cTop = lin(0x2f5a22), cDark = lin(0x2b2826);
+      // sea stacks: off Mount Kaleo, around Black Rock, at the atoll passes
+      const R = makeRng(7777);
+      const STK = [[-23400, -17200, 34, 95], [-23650, -17000, 22, 62], [-23200, -17450, 18, 40], [31300, 23400, 40, 120], [31550, 23650, 26, 75], [24800, 28600, 30, 85]];
+      ATOLLS.forEach((a) => { const an = R() * 6.283; STK.push([a[0] + Math.cos(an) * a[2] * 1.45, a[1] + Math.sin(an) * a[2] * 1.45, 16 + R() * 10, 30 + R() * 30]); });
+      for (const s of STK) buildStack(rock, F, s[0], s[1], -14, s[2], s[3] + 14, R() * 9, s[0] > 20000 ? cDark : cRk, cTop, 0.75);
+      // coral heads on the reefs (low boulders awash)
+      for (let k = 0, t = 0; k < 60 && t < 3000; t++) {
+        const a = ATOLLS[t % ATOLLS.length], an = R() * 6.283, d = a[2] * (0.75 + R() * 0.5), e = a[0] + Math.cos(an) * d * 1.2, n = a[1] + Math.sin(an) * d, h = sampleH(e, n);
+        if (h < -5 || h > -0.5) continue;
+        buildBoulder(rock, F, e, h + 1.2, n, 4 + R() * 7, k + 300, lin(0xcfc4a4), 0.6); k++;
+      }
+      // lighthouse on the south-west point of Tern Island (below Mount Kaleo)
+      let lh = null;
+      { const a = 200 * DEG, d = marchTo(sampleH, -20800, -15700, a, 2, 9000, 10);
+        if (d > 0) { const e = -20800 + Math.cos(a) * (d - 70), n = -15700 + Math.sin(a) * (d - 70), y0 = Math.max(sampleH(e, n), 2); buildLighthouse(props, e, n, y0, 1.1, 0xc8282a); lh = [e, n, y0]; } }
+      // boats: yachts and fishing boats at anchor off Port Tern, an old freighter wreck on Kanoa reef
+      { let k = 0, t = 0; const Y = makeRng(99);
+        while (k < 24 && t++ < 4000) {
+          const e = -12500 + Y() * 6000, n = -14500 + Y() * 5500, h = sampleH(e, n);
+          if (h > -3 || h < -30) continue; if (sampleH(e + 25, n) > -2 || sampleH(e - 25, n) > -2 || sampleH(e, n + 25) > -2 || sampleH(e, n - 25) > -2) continue;
+          buildYacht(props, e, n, Y() * 360, 0.9 + Y() * 0.6, [0xf4f4f0, 0xf4f4f0, 0x1d3a5a, 0xc8402c][k % 4]); k++;
+        } }
+      buildGalleon(props, ATOLLS[0][0] + ATOLLS[0][2] * 0.95, ATOLLS[0][1] - 300, 35, 1.4, true);
+      // enemy naval base: piers, fuel tanks, cranes at Black Rock harbour (props; mission targets come from combat)
+      { const hx = 27300, hn = 23900, hy = Math.max(sampleH(hx, hn + 600), 2);
+        for (let i = 0; i < 3; i++) props.rbox(hx - 500 + i * 380, -(hn - 200), 14, 260, 0, -2, 2.4, lin(0x8a8a86), lin(0x6a6a66), 0);
+        for (let i = 0; i < 4; i++) geoTmp(new THREE.CylinderGeometry(14, 14, 16, 16), mat4(hx - 700 + i * 36, hy + 8, -(hn + 520)), props, lin(0xb8b8b0));
+        for (let i = 0; i < 2; i++) { props.rbox(hx - 150 + i * 380, -(hn + 40), 3, 3, 0, 2, 38, lin(0xc89a2a), lin(0xa07a20), 0); props.rbox(hx - 150 + i * 380, -(hn + 40) + 14, 3, 30, 0, 36, 39, lin(0xc89a2a), lin(0xa07a20), 0); }
+      }
+      const rm = new THREE.Mesh(rock.build(), m2RockMat(ctx, 1.7)); rm.castShadow = true; rm.receiveShadow = true; rm.name = 'stacks'; ctx.add(rm);
+      const pm = new THREE.Mesh(props.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7, metalness: 0, side: THREE.DoubleSide })); pm.castShadow = true; pm.name = 'props'; ctx.add(pm);
+      // ---- zones: land (moved onto land), sea (open water for naval missions)
+      const Z = [
+        ['tern', 'Tern Island', HOME.e, HOME.n, 3000, 'hills'], ['kaleo', 'Mount Kaleo', -20800, -15700, 1500, 'mountain'], ['porttern', 'Port Tern', -10900, -12000, 1400, 'town'],
+        ['kanoa', ATOLLS[0][3], ATOLLS[0][0], ATOLLS[0][1] + ATOLLS[0][2], 1600, 'coast'], ['moana', ATOLLS[1][3], ATOLLS[1][0] + ATOLLS[1][2], ATOLLS[1][1], 1500, 'coast'],
+        ['coralring', ATOLLS[2][3], ATOLLS[2][0], ATOLLS[2][1] - ATOLLS[2][2], 1200, 'coast'], ['northatoll', ATOLLS[3][3], ATOLLS[3][0] - ATOLLS[3][2], ATOLLS[3][1], 1400, 'coast'],
+        ['blackrock', 'Black Rock naval base (enemy)', EBASE.e, EBASE.n, 2500, 'airbase', true], ['brport', 'Black Rock harbour (enemy)', 27300, 24300, 1500, 'port', true],
+        ['brpeak', 'Black Rock peak (enemy)', 29600, 24200, 1200, 'mountain', true], ['sentinel', 'Sentinel Rock (enemy)', 22500, 21300, 800, 'hills', true]];
+      for (const z of Z) {
+        let e = z[2], n = z[3];
+        if (sampleH(e, n) < 1) { for (let r = 100; r < 2500 && sampleH(e, n) < 1; r += 100) for (let a = 0; a < 12; a++) { const ee = z[2] + Math.cos(a * 0.52) * r, nn = z[3] + Math.sin(a * 0.52) * r; if (sampleH(ee, nn) > 1.5) { e = ee; n = nn; break; } } }
+        def.zones.push({ id: z[0], name: z[1], e: Math.round(e), n: Math.round(n), r: z[4], type: z[5], enemy: z[6] || undefined });
+      }
+      const SEA = [['northdeep', 'the Northern Deep', 2000, 18000], ['channel', 'Coral Channel', -2000, -8000], ['westdeep', 'the Western Deep', -32000, -6000],
+        ['eastdeep', 'the Eastern Deep', 32000, -4000], ['approach', 'the Black Rock approaches', 17000, 15000], ['southdeep', 'the Southern Deep', -12000, -34000], ['kanoasound', 'Kanoa Sound', 15000, -22000]];
+      for (const s of SEA) def.zones.push({ id: s[0], name: s[1], e: s[2], n: s[3], r: 4000, type: 'sea', sea: true });
+      // ---- sea lanes: Black Rock -> the south, the ring route, the atoll run
+      const ring = []; for (let k = 0; k <= 30; k++) { const a = k / 30 * 6.283; ring.push([Math.round(Math.cos(a) * 30000), Math.round(Math.sin(a) * 28000)]); }
+      const lanes = [[[24000, 21000], [16000, 12000], [6000, 2000], [-4000, -6000], [-8000, -20000], [-6000, -36000]], ring,
+        [[30000, 20000], [34000, 6000], [26000, -10000], [12000, -20000], [ATOLLS[0][0], ATOLLS[0][1] + 6000]], [[-38000, 4000], [-24000, 22000], [-6000, 24000], [14000, 30000], [24000, 30000]]];
+      const b0 = ctx.bases[0].spec;
+      return {
+        solids: makeSolids(F), seaLanes: lanes,
+        debug: { lighthouse: lh, views: {
+          overview: [HOME.e - 9000, HOME.n - 9000, 2600, HOME.e + 4000, HOME.n + 4000, 0],
+          home: [b0.e + 2600, b0.n - 2600, 420, b0.e, b0.n, 0],
+          atoll: [ATOLLS[0][0] - 4500, ATOLLS[0][1] - 4500, 1300, ATOLLS[0][0], ATOLLS[0][1], 0],
+          reef: [HOME.e + 2500, HOME.n - 5200, 180, HOME.e, HOME.n - 1500, 0],
+          lighthouse: lh ? [lh[0] - 500, lh[1] - 450, 70, lh[0], lh[1], lh[2] + 20] : [-23000, -18000, 70, -20800, -15700, 60],
+          enemy: [ENEMY.e - 6000, ENEMY.n - 6000, 900, ENEMY.e, ENEMY.n, 0],
+          sea: [0, 0, 160, 3000, 9000, 0] } }
+      };
+    };
+    return def;
+  };
 })();
 
 </script>
@@ -22567,9 +22731,11 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       '.flc .flc-tab{padding:11px 13px 9px;min-height:0}.flc-body{padding:14px 18px}',
       '.flo-sub{display:flex;margin:0 0 10px;border:1px solid var(--line);width:max-content;max-width:100%}',
       '.flc .flo-sub button{border:0;border-radius:0;min-height:32px;padding:8px 14px;font-size:12px;color:var(--dim);white-space:nowrap}.flc .flo-sub button[aria-pressed=true]{background:rgba(147,255,196,.14);color:var(--g)}',
-      '.flo-sec{margin:0 0 6px!important}',
+      '.flo-sec{margin:0!important;min-width:0}',
       '@media (min-aspect-ratio:1001/1000){.flc.flc-3d .flc-panel{width:min(880px,58%)}}',
-      '.flo-pyl{display:grid;grid-template-columns:repeat(auto-fit,minmax(66px,1fr));gap:4px;margin-bottom:10px}',
+      '.flo-top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:6px 12px;margin:0 0 8px}.flo-top .flo-sub{margin:0}',
+      '.flo-pyl{display:flex;flex-wrap:nowrap;gap:4px;margin-bottom:10px}.flc .flo-pyl .flo-pc{flex:1 1 0;min-width:0;padding:6px 5px}.flc .flo-pyl .flo-pc.lock{flex:0 0 36px;align-items:center}',
+      '@media (max-width:760px){.flo-pyl{flex-wrap:wrap}.flc .flo-pyl .flo-pc{flex:1 1 70px}}.flc .flo-pyl .flo-pc.lock .k small{display:none}',
       '.flc .flo-pc{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:3px;min-height:48px;padding:6px 7px;text-transform:none;letter-spacing:0;text-align:left;border-color:var(--line);color:var(--ink);background:rgba(4,12,12,.6);min-width:0;touch-action:manipulation}',
       '.flo-pc *{pointer-events:none}.flo-pc .k{font:10px/1 var(--mono);letter-spacing:.06em;color:var(--g);text-transform:uppercase;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}',
       '.flo-pc .k small{font-size:9px;color:var(--dim);letter-spacing:.04em}.flo-pc b{font:700 12px/1.1 var(--disp);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.flo-pc i{font:normal 10px/1 var(--mono);color:var(--dim)}',
@@ -22965,19 +23131,19 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       if (!sts.byId[selSlot]) selSlot = sts.open[0] ? sts.open[0].id : 'L1';
       var sel = sts.byId[selSlot], gunE = lo[0], hp = Math.round(s.handling01 * 100), allW = allWeapons();
       var nOwn = allW.filter(function (w) { return P.ownedW[w.id]; }).length;
-      h += '<div class="flo-sub" role="tablist" aria-label="Loadout or shop">' + [['fit', 'Loadout'], ['shop', 'Weapon shop · ' + nOwn + '/' + allW.length + ' owned']].map(function (o) {
+      var sub = '<div class="flo-sub" role="tablist" aria-label="Loadout or shop">' + [['fit', 'Loadout'], ['shop', 'Weapon shop · ' + nOwn + '/' + allW.length + ' owned']].map(function (o) {
         return '<button role="tab" data-act="losub" data-id="' + o[0] + '" data-key="losub-' + o[0] + '" aria-pressed="' + (loSub === o[0]) + '">' + o[1] + '</button>';
       }).join('') + '</div>';
-      if (loSub === 'shop') return h + htmlShop(sts, eq, sel);
+      if (loSub === 'shop') return '<div class="flo-top"><span class="flc-sec flo-sec">Weapon shop · ' + esc(spec ? spec.name : P.ac) + '</span>' + sub + '</div>' + htmlShop(sts, eq, sel);
       // totals
       var tot = function (lab, v, sm, ok) { return '<div><span class="flc-lab">' + lab + '</span><b' + (ok ? ' class="ok"' : '') + '>' + v + '</b>' + (sm ? '<small>' + sm + '</small>' : '') + '</div>'; };
-      h += '<div class="flc-tot flo-tot">' + tot('Missiles', s.missiles, s.reserveAAM > 0 && s.missiles ? 'AAM · ' + s.reserveAAM + ' in reserve' : 'air-to-air', true) +
+      var totH = '<div class="flc-tot flo-tot">' + tot('Missiles', s.missiles, s.reserveAAM > 0 && s.missiles ? 'AAM · ' + s.reserveAAM + ' in reserve' : 'air-to-air', true) +
         tot('Ground msl', s.agms, 'air-to-ground') + tot('Bombs', s.bombs, s.bombRack + s.bombRackAdd > 1 ? 'up to ' + clamp(Math.round(s.bombRack + s.bombRackAdd), 1, 4) + ' per pylon' : '1 per pylon') +
         tot('Rockets', s.rockets, '') + tot('Weight', kg(s.storesMass), s.overKg > 0 ? '<span style="color:#ffb347">OVERLOAD: ' + kg(s.overKg) + ' over max payload. Slow turns.</span>' : 'stores + gun ammo') +
         tot('Drag', '+' + Math.round(s.storesDrag * 100) + '%', 'top speed ' + Math.round(100 / Math.sqrt(1 + s.storesDrag)) + '%') +
         tot('Handling', hp + '%', hp < 40 ? 'Heavy. Slow turns.' : hp < 70 ? 'Medium' : 'Good') + '</div>';
-      h += '<div class="flc-sec flo-sec">' + esc(spec ? spec.name : P.ac) + ' · ' + sts.open.length + ' of ' + sts.all.length + ' pylons open' +
-        (sts.open.length < sts.all.length ? ' · buy Hardpoints to open more' : '') + '</div>';
+      h += '<div class="flo-top"><span class="flc-sec flo-sec">' + esc(spec ? spec.name : P.ac) + ' · ' + sts.open.length + ' of ' + sts.all.length + ' pylons open' +
+        (sts.open.length < sts.all.length ? ' · buy Hardpoints to open more' : '') + '</span>' + sub + '</div>';
       // jet top view with pylon markers: the real top view of this jet (hangaricons.js) when every pylon has a known point, else the generic drawing
       var HI = FL.hangarIcons, TV = HI ? HI.topView(P.ac) : null, tvp = null, real = false;
       var mk = function (st) { var e = lo.filter(function (x) { return x.slot === st.id; })[0]; return e || null; };
@@ -22986,7 +23152,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
         .concat(sts.all.filter(function (st) { return st.side === 0; }), sts.all.filter(function (st) { return st.side > 0; }).sort(function (a, b) { return b.index - a.index; }));
       h += '<div class="flo-pyl" role="group" aria-label="Pylons, left to right">' + order.map(function (st) {
         var e = st.open ? mk(st) : null, w = st.open ? FL.WEAPONS[eq.pyl[st.id]] : null;
-        var v = !st.open ? 'Closed' : e && w ? shortName(w) : 'Empty', n = e ? (e.type === 'rocket' || e.type === 'gunpod' ? e.ammo : '×' + e.count) : '';
+        var v = !st.open ? '+' : e && w ? shortName(w) : 'Empty', n = e ? (e.type === 'rocket' || e.type === 'gunpod' ? e.ammo : '×' + e.count) : '';
         return '<button class="flo-pc' + (st.id === selSlot ? ' sel' : '') + (!st.open ? ' lock' : !e ? ' empty' : '') + (e ? ' t-' + e.type : '') + '" data-act="slot" data-id="' + st.id + '" data-key="pyl-' + st.id + '" aria-pressed="' + (st.id === selSlot) + '" title="Pylon ' + st.id + ' (' + KIND_NAME[st.kind] + '): ' + esc(v) + '">' +
           '<span class="k">' + st.id + ' <small>' + ({ tip: 'tip', wing: 'wing', belly: 'ctr', bay: 'bay' }[st.kind] || '') + '</small></span><b>' + esc(v) + '</b>' + (n ? '<i>' + n + '</i>' : '') + '</button>';
       }).join('') + '</div>';
@@ -23024,7 +23190,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
           '<div><button data-act="pssave" data-id="' + i + '" data-key="pss-' + i + '" title="Keep the loadout you have now in this slot">Save</button>' +
           (p ? '<button data-act="psname" data-id="' + i + '" data-key="psn-' + i + '">Name</button>' : '') + '</div></div>';
       }).join('') + '</div>';
-      h += '<p class="flc-msg" role="status">' + esc(loMsg) + '</p>';
+      h += totH;
       var cyc = cycleOf(lo).map(function (c) { return esc(shortName(c.spec)) + ' ×' + c.ammo; }).join(' → ');
       h += '<p class="flc-cyc"><span>In flight, Y cycles</span> ' + (cyc || '—') + '</p>';
       h += '<p class="flc-cyc"><span>Gun</span> ' + esc(gunE.spec.name) + ' · burst ' + s.gunBurst.toFixed(1) + ' s · assist ' + Math.round(s.aimAssist * 100) + '%</p>';
@@ -23038,7 +23204,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
         (mirId ? '<button class="flc-mir' + (P.mirror ? ' on' : '') + '" data-act="mirror" data-key="mirror" aria-pressed="' + !!P.mirror + '" title="A store you put on one side also goes on the other side">Mirror to ' + mirId + ': ' + (P.mirror ? 'on' : 'off') + '</button>' : '') +
         '<button class="flo-pkx" data-act="pkclose" data-key="pkclose" aria-label="Close">✕</button></div>';
       if (!sel || !sel.open) {
-        return h + '<p class="flc-hint" style="display:block">' + (sel ? 'This pylon is closed. Buy Hardpoints to open it.' : '') + '</p><button class="flo-sm" data-act="tab" data-id="upgrades" data-key="tab-upgrades">Go to Upgrades</button></div>';
+        return h + (loMsg ? '<p class="flc-msg" role="status">' + esc(loMsg) + '</p>' : '') + '<p class="flc-hint" style="display:block">' + (sel ? 'This pylon is closed. Buy Hardpoints to open it.' : '') + '</p><button class="flo-sm" data-act="tab" data-id="upgrades" data-key="tab-upgrades">Go to Upgrades</button></div>';
       }
       var all = allWeapons(), fitsHere = function (w) { return !isGunW(w) && !whyNot(sel, w); };
       var cnt = { all: 0 };
@@ -23046,7 +23212,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
         var c = wCat(w), ok = isGunW(w) ? P.ownedW[w.id] && (!w.jet || w.jet.indexOf(P.ac) >= 0) : fitsHere(w) && (P.ownedW[w.id] || !wGated(w));
         if (!ok) return; cnt[c] = (cnt[c] || 0) + 1; if (!isGunW(w)) cnt.all++;
       });
-      h += catBar('pkcat', pkCat, cnt) + qBox('pk', pkQ, 'Search: name, IR, radar…');
+      h += catBar('pkcat', pkCat, cnt) + qBox('pk', pkQ, 'Search: name, IR, radar…') + (loMsg ? '<p class="flc-msg" role="status">' + esc(loMsg) + '</p>' : '');
       var inCat = function (w) { return pkCat === 'all' ? !isGunW(w) : wCat(w) === pkCat; };
       var list = all.filter(inCat), own = [], buy = [], lock = 0, noFit = 0, rows = '';
       list.forEach(function (w) {
@@ -35247,6 +35413,12 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       grade: { exposure: 1.0, temp: 0.12, tint: 0.01, shadows: [0.95, 0.97, 1.08], highlights: [1.04, 1.0, 0.945], sat: 1.14, vib: 0.24,
         lift: [0.008, 0.004, 0.008], gain: [0.985, 0.995, 1.0], contrast: 0.24, vignette: 0.26, shoulder: 0.45, bloom: 1.3, bloomThr: 0.85, glare: 1.3 },
       scene: { fog: 0xccd2d4, sunHex: 0xffd9a8 }
+    },
+    // Open Ocean: clean high sun, saturated deep blue sea, turquoise reefs, crisp whites, sparkling sun glint
+    ocean: {
+      grade: { exposure: 1.0, temp: 0.02, tint: -0.02, shadows: [0.94, 0.99, 1.08], highlights: [1.02, 1.0, 0.97], sat: 1.18, vib: 0.28,
+        lift: [0.0, 0.004, 0.012], gain: [0.98, 1.0, 1.02], contrast: 0.26, vignette: 0.2, shoulder: 0.35, bloom: 1.2, bloomThr: 0.85, glare: 1.35 },
+      scene: { water: 0x00081c, fogMul: 0.85, sunHex: 0xfff4e2 }
     }
   };
 
@@ -36618,7 +36790,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
 
   // ------------------------------------------------------------------ ship data (Kuznetsov: 305 m LOA, 72 m deck, 205 m x 26 m angled deck at 7 deg,
   // ski-jump ~14 deg, 4 arrestor wires, 2 bow launch runs of ~90 m + 1 aft run of ~180 m, island on the starboard side)
-  var K = {
+  var KZ = {
     D: 17.5,                       // flight deck height above the waterline
     BOW: -152.5, STERN: 152.5,
     RZ0: -108, RLEN: 44.5, RDEG: 14, // ski-jump: circular ramp from z = RZ0 forward to the bow
@@ -36632,30 +36804,30 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     SPOTS: [[-8, 40], [-6, -62], [6, -62]],           // launch spots: 3 (aft, long run), 1, 2 (bow)
     DEC: 30, TRAP_MAX: 310 / 3.6, HOOK: 7             // wire deceleration m/s^2, max catch speed, hook distance aft of the CG
   };
-  var RR = K.RLEN / Math.sin(K.RDEG * DEG);           // ramp radius
-  var UX = -Math.sin(K.ANG * DEG), UZ = -Math.cos(K.ANG * DEG); // angled deck forward unit (local x, z)
-  var RX = Math.cos(K.ANG * DEG), RZ = -Math.sin(K.ANG * DEG);  // angled deck starboard unit
+  var RR = KZ.RLEN / Math.sin(KZ.RDEG * DEG);           // ramp radius
+  var UX = -Math.sin(KZ.ANG * DEG), UZ = -Math.cos(KZ.ANG * DEG); // angled deck forward unit (local x, z)
+  var RX = Math.cos(KZ.ANG * DEG), RZ = -Math.sin(KZ.ANG * DEG);  // angled deck starboard unit
   // edge tables at 0.5 m
-  var ET = 0.5, EN = Math.round((K.STERN - K.BOW) / ET) + 1, EPORT = new Float32Array(EN), ESTB = new Float32Array(EN), EWL = new Float32Array(EN);
+  var ET = 0.5, EN = Math.round((KZ.STERN - KZ.BOW) / ET) + 1, EPORT = new Float32Array(EN), ESTB = new Float32Array(EN), EWL = new Float32Array(EN);
   (function () {
     function lerpT(T, z, col) {
       for (var i = 0; i < T.length - 1; i++) if (z <= T[i + 1][0]) { var a = (z - T[i][0]) / (T[i + 1][0] - T[i][0]); return T[i][col] + (T[i + 1][col] - T[i][col]) * a; }
       return T[T.length - 1][col];
     }
-    for (var i = 0; i < EN; i++) { var z = K.BOW + i * ET; EPORT[i] = lerpT(K.EDGE, z, 1); ESTB[i] = lerpT(K.EDGE, z, 2); EWL[i] = lerpT(K.WL, z, 1); }
+    for (var i = 0; i < EN; i++) { var z = KZ.BOW + i * ET; EPORT[i] = lerpT(KZ.EDGE, z, 1); ESTB[i] = lerpT(KZ.EDGE, z, 2); EWL[i] = lerpT(KZ.WL, z, 1); }
   })();
-  function eIdx(lz) { var f = (lz - K.BOW) / ET; return f < 0 ? 0 : f > EN - 1 ? EN - 1 : Math.round(f); }
-  function rampH(lz) { if (lz >= K.RZ0) return 0; var s = Math.min(K.RZ0 - lz, K.RLEN); return RR - Math.sqrt(RR * RR - s * s); }
-  function rampAng(lz) { if (lz >= K.RZ0) return 0; return Math.asin(Math.min(K.RZ0 - lz, K.RLEN) / RR); }
+  function eIdx(lz) { var f = (lz - KZ.BOW) / ET; return f < 0 ? 0 : f > EN - 1 ? EN - 1 : Math.round(f); }
+  function rampH(lz) { if (lz >= KZ.RZ0) return 0; var s = Math.min(KZ.RZ0 - lz, KZ.RLEN); return RR - Math.sqrt(RR * RR - s * s); }
+  function rampAng(lz) { if (lz >= KZ.RZ0) return 0; return Math.asin(Math.min(KZ.RZ0 - lz, KZ.RLEN) / RR); }
   function inDeckL(lx, lz) {
-    if (lz < K.BOW || lz > K.STERN) return false;
+    if (lz < KZ.BOW || lz > KZ.STERN) return false;
     var i = eIdx(lz); return lx >= -EPORT[i] && lx <= ESTB[i];
   }
   // angled deck coordinates: along a (from the stern), lateral l (+ = starboard of the landing line)
-  function axisA(lx, lz) { return (lx - K.AX0) * UX + (lz - K.AZ0) * UZ; }
-  function axisL(lx, lz) { return (lx - K.AX0) * RX + (lz - K.AZ0) * RZ; }
-  function axisX(a, l) { return K.AX0 + a * UX + l * RX; }
-  function axisZ(a, l) { return K.AZ0 + a * UZ + l * RZ; }
+  function axisA(lx, lz) { return (lx - KZ.AX0) * UX + (lz - KZ.AZ0) * UZ; }
+  function axisL(lx, lz) { return (lx - KZ.AX0) * RX + (lz - KZ.AZ0) * RZ; }
+  function axisX(a, l) { return KZ.AX0 + a * UX + l * RX; }
+  function axisZ(a, l) { return KZ.AZ0 + a * UZ + l * RZ; }
 
   // ------------------------------------------------------------------ course (stadium): into-wind leg A, turn, leg B back, turn
   function makeCourse(ce, cn, Hdeg, Lh, R, sgn) {
@@ -36689,11 +36861,11 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
 
   // ---- deep-water clearance field: distance (m) from every cell to the nearest shallow (> -14 m), solid or map-edge cell
   function seaField(world, G) {
-    var N = Math.round(96000 / G) + 1, i, j, k, d = new Float32Array(N * N), INF = 1e9, h2 = G * 0.45;
-    var o = [[0, 0], [h2, 0], [-h2, 0], [0, h2], [0, -h2]];
+    var N = Math.round(96000 / G) + 1, i, j, k, d = new Float32Array(N * N), INF = 1e9, h2 = G / 3;
+    var o = [[0, 0], [h2, 0], [-h2, 0], [0, h2], [0, -h2], [h2, h2], [-h2, h2], [h2, -h2], [-h2, -h2]];   // 3x3 samples per cell: small islets count
     for (j = 0; j < N; j++) for (i = 0; i < N; i++) {
       var e = -48000 + i * G, n = -48000 + j * G, ok = Math.abs(e) < 43500 && Math.abs(n) < 43500;
-      for (k = 0; k < 5 && ok; k++) { var h = world.sampleH(e + o[k][0], n + o[k][1]); if (!(h < -14)) ok = false; }
+      for (k = 0; k < 9 && ok; k++) { var h = world.sampleH(e + o[k][0], n + o[k][1]); if (!(h < -14)) ok = false; }
       if (ok && world.solidAt && (world.solidAt(e, 10, -n) || world.solidAt(e, 40, -n))) ok = false;
       d[j * N + i] = ok ? INF : 0;
     }
@@ -36793,51 +36965,51 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     var W = 256, H = 1024, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
     var g = cv.getContext('2d'), XMIN = -40, XMAX = 32, R = rng(63);
     function px(x) { return (x - XMIN) / (XMAX - XMIN) * W; }
-    function py(z) { return (z - K.BOW) / (K.STERN - K.BOW) * H; }
+    function py(z) { return (z - KZ.BOW) / (KZ.STERN - KZ.BOW) * H; }
     g.fillStyle = '#3a3e42'; g.fillRect(0, 0, W, H);
     for (var i = 0; i < 2600; i++) { var c = 50 + (R() * 22 | 0); g.fillStyle = 'rgba(' + c + ',' + (c + 3) + ',' + (c + 6) + ',0.35)'; g.fillRect(R() * W, R() * H, 2 + R() * 10, 2 + R() * 6); }
     // panel seams
     g.strokeStyle = 'rgba(20,22,24,0.35)'; g.lineWidth = 1;
-    for (var zz = K.BOW; zz < K.STERN; zz += 6) { g.beginPath(); g.moveTo(0, py(zz)); g.lineTo(W, py(zz)); g.stroke(); }
+    for (var zz = KZ.BOW; zz < KZ.STERN; zz += 6) { g.beginPath(); g.moveTo(0, py(zz)); g.lineTo(W, py(zz)); g.stroke(); }
     function aline(a0, l0, a1, l1, col, w, dash) {
       g.strokeStyle = col; g.lineWidth = w; g.setLineDash(dash || []);
       g.beginPath(); g.moveTo(px(axisX(a0, l0)), py(axisZ(a0, l0))); g.lineTo(px(axisX(a1, l1)), py(axisZ(a1, l1))); g.stroke(); g.setLineDash([]);
     }
     // tyre marks in the landing area
     for (i = 0; i < 40; i++) { var a = 30 + R() * 120, l = (R() - 0.5) * 12; aline(a, l, a + 10 + R() * 30, l + (R() - 0.5) * 2, 'rgba(15,15,15,0.28)', 1 + R() * 2); }
-    aline(0, -K.AHW, K.ALEN, -K.AHW, '#e8e8e0', 2.2); aline(0, K.AHW, K.ALEN, K.AHW, '#e8e8e0', 2.2);
-    aline(0, 0, K.ALEN, 0, '#f0f0e8', 1.6, [18, 18]);
-    aline(K.ALEN, -K.AHW, K.ALEN, K.AHW, '#c94a3a', 2.5);           // foul line (red)
-    for (i = 0; i < K.WIRES.length; i++) aline(K.WIRES[i], -K.AHW - 1, K.WIRES[i], K.AHW + 1, '#16181a', 2.5);
+    aline(0, -KZ.AHW, KZ.ALEN, -KZ.AHW, '#e8e8e0', 2.2); aline(0, KZ.AHW, KZ.ALEN, KZ.AHW, '#e8e8e0', 2.2);
+    aline(0, 0, KZ.ALEN, 0, '#f0f0e8', 1.6, [18, 18]);
+    aline(KZ.ALEN, -KZ.AHW, KZ.ALEN, KZ.AHW, '#c94a3a', 2.5);           // foul line (red)
+    for (i = 0; i < KZ.WIRES.length; i++) aline(KZ.WIRES[i], -KZ.AHW - 1, KZ.WIRES[i], KZ.AHW + 1, '#16181a', 2.5);
     g.fillStyle = '#f2f2ea';
-    for (var s = -1; s <= 1; s += 2) { var x0 = axisX(K.AIM, s * 7), z0 = axisZ(K.AIM, s * 7); g.fillRect(px(x0) - 6, py(z0) - 14, 12, 28); }
+    for (var s = -1; s <= 1; s += 2) { var x0 = axisX(KZ.AIM, s * 7), z0 = axisZ(KZ.AIM, s * 7); g.fillRect(px(x0) - 6, py(z0) - 14, 12, 28); }
     // launch lanes (yellow) + spots
-    for (i = 0; i < K.SPOTS.length; i++) {
-      var sx = K.SPOTS[i][0], sz = K.SPOTS[i][1];
+    for (i = 0; i < KZ.SPOTS.length; i++) {
+      var sx = KZ.SPOTS[i][0], sz = KZ.SPOTS[i][1];
       g.strokeStyle = '#d8b030'; g.lineWidth = 2; g.setLineDash([10, 8]);
-      g.beginPath(); g.moveTo(px(sx), py(sz)); g.lineTo(px(sx * 0.5), py(K.BOW + 2)); g.stroke(); g.setLineDash([]);
+      g.beginPath(); g.moveTo(px(sx), py(sz)); g.lineTo(px(sx * 0.5), py(KZ.BOW + 2)); g.stroke(); g.setLineDash([]);
       g.fillStyle = '#d8b030'; g.fillRect(px(sx) - 10, py(sz) - 2, 20, 4); g.fillRect(px(sx) - 2, py(sz) - 10, 4, 12);
       g.fillStyle = 'rgba(25,27,30,0.85)'; g.fillRect(px(sx) - 22, py(sz + 10), 44, 14);   // blast deflector
     }
     // spot numbers, Granit missile hatches (flush, forward), landing-area hash marks, round-down stripes, deck number
     g.save(); g.fillStyle = '#d8b030'; g.font = 'bold 30px Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    for (i = 0; i < K.SPOTS.length; i++) { g.save(); g.translate(px(K.SPOTS[i][0]), py(K.SPOTS[i][1] + 6)); g.scale(1, 0.9); g.fillText(i === 0 ? '3' : String(i), 0, 0); g.restore(); }
+    for (i = 0; i < KZ.SPOTS.length; i++) { g.save(); g.translate(px(KZ.SPOTS[i][0]), py(KZ.SPOTS[i][1] + 6)); g.scale(1, 0.9); g.fillText(i === 0 ? '3' : String(i), 0, 0); g.restore(); }
     g.restore();
     g.strokeStyle = 'rgba(14,15,17,0.8)'; g.lineWidth = 1.2;
     for (var hx = 0; hx < 4; hx++) for (var hz = 0; hz < 3; hz++) g.strokeRect(px(-7.6 + hx * 4), py(-100 + hz * 5), px(3.2) - px(0), py(4) - py(0));
-    for (var ha = 6; ha < K.ALEN; ha += 6) { aline(ha, -K.AHW, ha, -K.AHW + 1.2, '#e8e8e0', 1.4); aline(ha, K.AHW - 1.2, ha, K.AHW, '#e8e8e0', 1.4); }
-    for (var sx2 = -16; sx2 < 21; sx2 += 3) { g.fillStyle = ((sx2 + 16) / 3 & 1) ? '#e8e8e0' : '#b83a2c'; g.fillRect(px(sx2), py(K.STERN - 2.2), px(3) - px(0), py(2.2) - py(0)); }
+    for (var ha = 6; ha < KZ.ALEN; ha += 6) { aline(ha, -KZ.AHW, ha, -KZ.AHW + 1.2, '#e8e8e0', 1.4); aline(ha, KZ.AHW - 1.2, ha, KZ.AHW, '#e8e8e0', 1.4); }
+    for (var sx2 = -16; sx2 < 21; sx2 += 3) { g.fillStyle = ((sx2 + 16) / 3 & 1) ? '#e8e8e0' : '#b83a2c'; g.fillRect(px(sx2), py(KZ.STERN - 2.2), px(3) - px(0), py(2.2) - py(0)); }
     // ramp stripes
     g.fillStyle = 'rgba(230,230,220,0.55)';
-    for (var rz = K.RZ0; rz > K.BOW; rz -= 7) g.fillRect(px(-14), py(rz) - 1.5, px(14) - px(-14), 3);
+    for (var rz = KZ.RZ0; rz > KZ.BOW; rz -= 7) g.fillRect(px(-14), py(rz) - 1.5, px(14) - px(-14), 3);
     // lifts (starboard, fore and aft of the island)
     g.strokeStyle = 'rgba(15,16,18,0.9)'; g.lineWidth = 2;
     g.strokeRect(px(17), py(-48), px(31) - px(17), py(-33) - py(-48)); g.strokeRect(px(17), py(36), px(31) - px(17), py(51) - py(36));
     // deck edge safety line
     g.strokeStyle = 'rgba(235,235,225,0.6)'; g.lineWidth = 1.5; g.beginPath();
-    for (i = 0; i < K.EDGE.length; i++) { var E = K.EDGE[i]; if (i) g.lineTo(px(-E[1] + 1.2), py(E[0])); else g.moveTo(px(-E[1] + 1.2), py(E[0])); }
+    for (i = 0; i < KZ.EDGE.length; i++) { var E = KZ.EDGE[i]; if (i) g.lineTo(px(-E[1] + 1.2), py(E[0])); else g.moveTo(px(-E[1] + 1.2), py(E[0])); }
     g.stroke(); g.beginPath();
-    for (i = 0; i < K.EDGE.length; i++) { E = K.EDGE[i]; if (i) g.lineTo(px(E[2] - 1.2), py(E[0])); else g.moveTo(px(E[2] - 1.2), py(E[0])); }
+    for (i = 0; i < KZ.EDGE.length; i++) { E = KZ.EDGE[i]; if (i) g.lineTo(px(E[2] - 1.2), py(E[0])); else g.moveTo(px(E[2] - 1.2), py(E[0])); }
     g.stroke();
     var tex = new T.CanvasTexture(cv); tex.encoding = T.sRGBEncoding; tex.anisotropy = 8;
     return (DTC = { tex: tex, XMIN: XMIN, XMAX: XMAX });
@@ -36919,17 +37091,17 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     var g = new T.Group(), m4 = new T.Matrix4(), q = new T.Quaternion(), sc = new T.Vector3(1, 1, 1), p = new T.Vector3(), col = new T.Color(), R = rng(99), i;
     var crew = new T.InstancedMesh(LIFEG.crew, LIFEG.mat, CREW.length);
     for (i = 0; i < CREW.length; i++) {
-      q.setFromAxisAngle(UPV0, R() * 6.283); p.set(CREW[i][0], K.D + rampH(CREW[i][1]), CREW[i][1]); crew.setMatrixAt(i, m4.compose(p, q, sc));
+      q.setFromAxisAngle(UPV0, R() * 6.283); p.set(CREW[i][0], KZ.D + rampH(CREW[i][1]), CREW[i][1]); crew.setMatrixAt(i, m4.compose(p, q, sc));
       col.setHex(VEST[CREW[i][2]]); col.convertSRGBToLinear(); crew.setColorAt(i, col);
     }
     crew.castShadow = true; g.add(crew);
     var tr = new T.InstancedMesh(LIFEG.trac, LIFEG.mat, TRAC.length);
-    for (i = 0; i < TRAC.length; i++) { q.setFromAxisAngle(UPV0, TRAC[i][2]); p.set(TRAC[i][0], K.D, TRAC[i][1]); tr.setMatrixAt(i, m4.compose(p, q, sc)); col.setHex(TRAC[i][3] ? 0xd0d0cc : 0xd8b030); col.convertSRGBToLinear(); tr.setColorAt(i, col); }
+    for (i = 0; i < TRAC.length; i++) { q.setFromAxisAngle(UPV0, TRAC[i][2]); p.set(TRAC[i][0], KZ.D, TRAC[i][1]); tr.setMatrixAt(i, m4.compose(p, q, sc)); col.setHex(TRAC[i][3] ? 0xd0d0cc : 0xd8b030); col.convertSRGBToLinear(); tr.setColorAt(i, col); }
     tr.castShadow = true; g.add(tr);
     if (withJets) {
       var jm = new T.InstancedMesh(LIFEG.jet, LIFEG.mat, JETS.length);
       col.setRGB(1, 1, 1);
-      for (i = 0; i < JETS.length; i++) { q.setFromAxisAngle(UPV0, 0); p.set(JETS[i][0], K.D + 2.4, JETS[i][1]); jm.setMatrixAt(i, m4.compose(p, q, sc)); jm.setColorAt(i, col); }
+      for (i = 0; i < JETS.length; i++) { q.setFromAxisAngle(UPV0, 0); p.set(JETS[i][0], KZ.D + 2.4, JETS[i][1]); jm.setMatrixAt(i, m4.compose(p, q, sc)); jm.setColorAt(i, col); }
       jm.castShadow = true; jm.receiveShadow = true; g.add(jm);
     }
     return { group: g, crew: crew };
@@ -36941,12 +37113,12 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     enemy: { hull: 0x3b4044, hull2: 0x30353a, bottom: 0x4a1f1c, isl: 0x464b50, isl2: 0x383d42, deck: 0x9a9a9a, radar: 0x2a2e33, decal: 0.5 } };
   function buildShipBody(pal) {
     var grp = new T.Group();
-    var D = K.D, i, j;
+    var D = KZ.D, i, j;
     // stations along z
     var zs = [];
-    for (var z = K.BOW; z < K.RZ0; z += 4.5) zs.push(z);
-    for (z = K.RZ0; z < K.STERN; z += 8) zs.push(z);
-    zs.push(K.STERN);
+    for (var z = KZ.BOW; z < KZ.RZ0; z += 4.5) zs.push(z);
+    for (z = KZ.RZ0; z < KZ.STERN; z += 8) zs.push(z);
+    zs.push(KZ.STERN);
     // ---- hull loft (vertex colours: grey, black boot top, red below the waterline)
     var cG = lin(pal.hull), cG2 = lin(pal.hull2), cB = lin(0x1d1f22), cRd = lin(pal.bottom), hull = new Acc();
     var SEGC = [cG, cG2, cB, cRd, cRd, cRd, cRd, cB, cG2, cG];
@@ -36967,7 +37139,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     ring(zs[0], r0); var cb = [0, D * 0.55, zs[0] + (D - D * 0.55) * 0.42];
     for (j = 0; j < 10; j++) hull.tri(cb, r0[j + 1], r0[j], cG2);
     hull.tri(cb, r0[0], r0[10], cG2);
-    ring(K.STERN, r1); var cs = [0, D * 0.4, K.STERN];
+    ring(KZ.STERN, r1); var cs = [0, D * 0.4, KZ.STERN];
     for (j = 0; j < 10; j++) hull.tri(cs, r1[j], r1[j + 1], cG2);
     hull.tri(cs, r1[10], r1[0], cG2);
     var hullMat = new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.75, metalness: 0.25, flatShading: true });
@@ -36976,7 +37148,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     var DT = deckTexture(), XW = DT.XMAX - DT.XMIN, NC = 8, pos = [], uv = [], idx = [];
     for (i = 0; i < zs.length; i++) {
       var k2 = eIdx(zs[i]), x0 = -EPORT[k2], x1 = ESTB[k2], yy = D + rampH(zs[i]);
-      for (j = 0; j <= NC; j++) { var xx = x0 + (x1 - x0) * j / NC; pos.push(xx, yy, zs[i]); uv.push((xx - DT.XMIN) / XW, 1 - (zs[i] - K.BOW) / (K.STERN - K.BOW)); }
+      for (j = 0; j <= NC; j++) { var xx = x0 + (x1 - x0) * j / NC; pos.push(xx, yy, zs[i]); uv.push((xx - DT.XMIN) / XW, 1 - (zs[i] - KZ.BOW) / (KZ.STERN - KZ.BOW)); }
     }
     for (i = 0; i < zs.length - 1; i++) for (j = 0; j < NC; j++) {
       var a0 = i * (NC + 1) + j, a1 = a0 + 1, b0 = a0 + NC + 1, b1 = b0 + 1;
@@ -36985,7 +37157,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     var dg = new T.BufferGeometry(); dg.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); dg.setAttribute('uv', new T.Float32BufferAttribute(uv, 2)); dg.setIndex(idx); dg.computeVertexNormals();
     var deck = new T.Mesh(dg, new T.MeshStandardMaterial({ map: DT.tex, color: pal.deck, roughness: 0.88, metalness: 0.1 })); deck.receiveShadow = true; deck.castShadow = false; grp.add(deck);
     // ---- island + details (one merged mesh)
-    var sup = new Acc(), cI = lin(pal.isl), cI2 = lin(pal.isl2), cW = lin(0x151b20), cP = lin(0x2c333a), cBl = lin(0x18191b), cWh = lin(0xd8dcdc), I = K.ISL, m4 = new T.Matrix4();
+    var sup = new Acc(), cI = lin(pal.isl), cI2 = lin(pal.isl2), cW = lin(0x151b20), cP = lin(0x2c333a), cBl = lin(0x18191b), cWh = lin(0xd8dcdc), I = KZ.ISL, m4 = new T.Matrix4();
     sup.box(I.x0, I.x1 - 1, D, D + 15, I.z0, I.z1, cI);
     sup.box(22.5, 31, D + 15, D + 27, -18, 14, cI2);
     sup.box(22.3, 31.2, D + 22.4, D + 24.2, -18.2, 14.2, cW);                       // bridge windows
@@ -37010,13 +37182,13 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     sup.box(26.6, 27.4, D + 27, D + 29, 7.6, 8.4, cI2);   // radar pole
     // arrestor wires (raised a little) + wire sheaves
     var wires = [], wireMat = new T.MeshStandardMaterial({ color: 0x1a1b1d, roughness: 0.5, metalness: 0.6 });
-    for (i = 0; i < K.WIRES.length; i++) {
-      var wa = K.WIRES[i], wx = axisX(wa, 0), wz = axisZ(wa, 0);
-      var wm = new T.Mesh(new T.BoxGeometry(2 * K.AHW + 2, 0.14, 0.14), wireMat); wm.position.set(wx, D + 0.12, wz); wm.rotation.y = -K.ANG * DEG; grp.add(wm); wires.push(wm);
-      for (var ws = -1; ws <= 1; ws += 2) sup.box(axisX(wa, ws * (K.AHW + 1.4)) - 0.5, axisX(wa, ws * (K.AHW + 1.4)) + 0.5, D, D + 0.35, axisZ(wa, ws * (K.AHW + 1.4)) - 0.5, axisZ(wa, ws * (K.AHW + 1.4)) + 0.5, cBl);   // sheaves
+    for (i = 0; i < KZ.WIRES.length; i++) {
+      var wa = KZ.WIRES[i], wx = axisX(wa, 0), wz = axisZ(wa, 0);
+      var wm = new T.Mesh(new T.BoxGeometry(2 * KZ.AHW + 2, 0.14, 0.14), wireMat); wm.position.set(wx, D + 0.12, wz); wm.rotation.y = -KZ.ANG * DEG; grp.add(wm); wires.push(wm);
+      for (var ws = -1; ws <= 1; ws += 2) sup.box(axisX(wa, ws * (KZ.AHW + 1.4)) - 0.5, axisX(wa, ws * (KZ.AHW + 1.4)) + 0.5, D, D + 0.35, axisZ(wa, ws * (KZ.AHW + 1.4)) - 0.5, axisZ(wa, ws * (KZ.AHW + 1.4)) + 0.5, cBl);   // sheaves
     }
     // catwalks + railings below the deck edge (not along the ski-jump or the island)
-    for (var cz = -104; cz < K.STERN - 6; cz += 8) {
+    for (var cz = -104; cz < KZ.STERN - 6; cz += 8) {
       var ck = eIdx(cz + 4);
       sup.box(-EPORT[ck] - 1.5, -EPORT[ck], D - 1.3, D - 1.05, cz, cz + 7.6, cG2); sup.box(-EPORT[ck] - 1.55, -EPORT[ck] - 1.45, D - 1.05, D - 0.1, cz, cz + 7.6, cG2);
       if (cz > I.z1 + 2 || cz + 8 < I.z0 - 2) { sup.box(ESTB[ck], ESTB[ck] + 1.5, D - 1.3, D - 1.05, cz, cz + 7.6, cG2); sup.box(ESTB[ck] + 1.45, ESTB[ck] + 1.55, D - 1.05, D - 0.1, cz, cz + 7.6, cG2); }
@@ -37025,7 +37197,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     var TUR = [[26.5, D + 15, -22], [31, D + 15, 30], [-27.5, D - 1.5, -86], [-21.5, D - 1.5, 132], [27, D - 1.5, 128], [28, D - 1.5, -84]];
     for (i = 2; i < TUR.length; i++) sup.box(TUR[i][0] - 2.6, TUR[i][0] + 2.6, D - 3.2, D - 1.5, TUR[i][2] - 3, TUR[i][2] + 3, cG2);
     // Luna landing light housing (port side, abeam the aim point)
-    var olsX = axisX(K.AIM, -20), olsZ = axisZ(K.AIM, -20);
+    var olsX = axisX(KZ.AIM, -20), olsZ = axisZ(KZ.AIM, -20);
     sup.box(olsX - 0.6, olsX + 0.6, D, D + 3.2, olsZ - 1.2, olsZ + 1.2, cBl);
     var supMesh = new T.Mesh(sup.build(), new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.7, metalness: 0.3, flatShading: true }));
     supMesh.castShadow = true; supMesh.receiveShadow = true; grp.add(supMesh);
@@ -37045,7 +37217,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
   // waterline foam strips (bow wave + side wash) in ship-local coordinates
   function buildHullFoam() {
     var z, i, foamTex = foamTexture(), fp = [], fc = [], fu = [], fi = [], FZ = [];
-    for (z = -146; z <= K.STERN + 1; z += 9) FZ.push(z);
+    for (z = -146; z <= KZ.STERN + 1; z += 9) FZ.push(z);
     for (var sd = -1; sd <= 1; sd += 2) {
       var base0 = fp.length / 3;
       for (i = 0; i < FZ.length; i++) {
@@ -37069,8 +37241,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
   // Parked MiG-29s launch from the bow while the catapults live (spawnFree: they do not die with the ship).
   var ENEMY = [], WRECKS = [], SHARED = { scene: null, fx: null };
   var CY = 20;
-  var PARTS = [[27, K.D + 18, 2, 'Island', 900, 20], [-6, K.D + 1.5, -62, 'Catapults', 450, 12], [24, K.D + 1.5, -40, 'Deck lift', 450, 12], [-2, K.D + 1.5, 95, 'Fuel bunker', 450, 12]];
-  var AAS = [[-34, K.D + 0.6, -20], [24, K.D + 0.6, -95], [-21, K.D + 0.6, 125], [27, K.D + 0.6, 112]];
+  var PARTS = [[27, KZ.D + 18, 2, 'Island', 900, 20], [-6, KZ.D + 1.5, -62, 'Catapults', 450, 12], [24, KZ.D + 1.5, -40, 'Deck lift', 450, 12], [-2, KZ.D + 1.5, 95, 'Fuel bunker', 450, 12]];
+  var AAS = [[-34, KZ.D + 0.6, -20], [24, KZ.D + 0.6, -95], [-21, KZ.D + 0.6, 125], [27, KZ.D + 0.6, 112]];
   var PARK = [[13, 62, 0.35], [13, 80, 0.35], [-24, 22, -0.5], [-27, 2, -0.5]];
   var UPV = T ? new T.Vector3(0, 1, 0) : null, nv1 = T ? new T.Vector3() : null, nv2 = T ? new T.Vector3() : null, nv3 = T ? new T.Vector3() : null;
   function KIT() { return root.FL.ENEMY_UTIL && root.FL.ENEMY_UTIL.kit; }
@@ -37111,7 +37283,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
   function ncLaunch(ent, d, ctx, kit) {
     var KS = root.FL.ENEMY_KINDS, kind = KS.mig29 ? 'mig29' : KS.mig21 ? 'mig21' : null; if (!kind) return;
     var f = nv1.set(0, 0, -1).applyQuaternion(ent.q);
-    var p = nv2.set(0, K.D + 6 - CY, K.BOW + 6).applyQuaternion(ent.q).add(ent.pos);
+    var p = nv2.set(0, KZ.D + 6 - CY, KZ.BOW + 6).applyQuaternion(ent.q).add(ent.pos);
     var v = nv3.copy(f).multiplyScalar(88).add(ent.vel); v.y += 16;
     var c = kit.spawnFree(ctx, kind, 0, { pos: p.clone(), vel: v.clone(), launched: ent, drop: 0.6, group: (ent.group != null ? ent.group : 'nc') + '_air', independent: true }, ent);
     if (c) { c.pos.copy(p); c.vel.copy(v); if (c.data) { c.data.drop = 0.6; c.data.launchedBy = ent; } kit.syncGroup(c); }
@@ -37159,15 +37331,15 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     var LIFE = buildDeckLife(false); inner.add(LIFE.group);
     var tilt = { sr: 0, sp: 0, roll: 0, pitch: 0 }, tT = Math.random() * 100, sprT = 0;
     var flag = new T.Mesh(new T.PlaneGeometry(7, 4.6), new T.MeshStandardMaterial({ map: flagTex(), side: T.DoubleSide, roughness: 0.8 }));
-    flag.position.set(27, K.D + 41.5, 4.2); flag.rotation.y = Math.PI / 2; inner.add(flag);
+    flag.position.set(27, KZ.D + 41.5, 4.2); flag.rotation.y = Math.PI / 2; inner.add(flag);
     var emb = new T.Mesh(new T.PlaneGeometry(10, 6.6), new T.MeshStandardMaterial({ map: flagTex(), roughness: 0.8 }));
-    emb.position.set(20.9, K.D + 9, 8); emb.rotation.y = -Math.PI / 2; inner.add(emb);
+    emb.position.set(20.9, KZ.D + 9, 8); emb.rotation.y = -Math.PI / 2; inner.add(emb);
     markOwn(inner);
     var jets = [], KS = root.FL.ENEMY_KINDS || {}, i;
     for (i = 0; i < PARK.length; i++) {
       var jm = null; try { jm = KS.mig29 && KS.mig29.build ? KS.mig29.build(0) : null; } catch (e) { jm = null; }
       if (!jm || !jm.group) continue;
-      jm.group.position.set(PARK[i][0], K.D + 1.9, PARK[i][1]); jm.group.rotation.y = PARK[i][2]; inner.add(jm.group); jets.push(jm.group);
+      jm.group.position.set(PARK[i][0], KZ.D + 1.9, PARK[i][1]); jm.group.rotation.y = PARK[i][2]; inner.add(jm.group); jets.push(jm.group);
     }
     var fm = new T.SpriteMaterial({ map: fireTex(), transparent: true, depthWrite: false, blending: T.AdditiveBlending, color: new T.Color(2.2, 1.6, 1.2) }), fires = [], fp = PARTS.concat(AAS);
     for (i = 0; i < fp.length; i++) { var sp = new T.Sprite(fm); sp.position.set(fp[i][0], fp[i][1] + (i === 0 ? 4 : 3), fp[i][2]); sp.scale.set(14, 18, 1); sp.visible = false; inner.add(sp); fires.push(sp); }
@@ -37229,11 +37401,11 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
   function clearNaval() { for (var i = 0; i < WRECKS.length; i++) { var g = WRECKS[i].g; if (g.parent) g.parent.remove(g); disposeOwn(g); } WRECKS.length = 0; ENEMY.length = 0; }
   // physics: enemy hulls / islands are solid (no deck landings on them)
   function enemySolid(x, y, z, phys) {
-    if (y > K.D + 50 || y < -12) return false;
+    if (y > KZ.D + 50 || y < -12) return false;
     for (var i = 0; i < ENEMY.length; i++) {
       var e = ENEMY[i], dx = x - e.pos.x, dz = z - e.pos.z; if (dx * dx + dz * dz > 175 * 175 || !entOk(e)) continue;
-      var psi = e.data._psi || 0, c = Math.cos(psi), s = Math.sin(psi), lx = dx * c + dz * s, lz = -dx * s + dz * c, I = K.ISL;
-      if ((lx > I.x0 - 5 && lx < I.x1 + 5 && lz > I.z0 - 5 && lz < I.z1 + 5 && y < K.D + I.h) || (inDeckL(lx, lz) && y < K.D + rampH(lz) + 1.5)) { phys.crash('HIT THE ENEMY CARRIER'); return true; }
+      var psi = e.data._psi || 0, c = Math.cos(psi), s = Math.sin(psi), lx = dx * c + dz * s, lz = -dx * s + dz * c, I = KZ.ISL;
+      if ((lx > I.x0 - 5 && lx < I.x1 + 5 && lz > I.z0 - 5 && lz < I.z1 + 5 && y < KZ.D + I.h) || (inDeckL(lx, lz) && y < KZ.D + rampH(lz) + 1.5)) { phys.crash('HIT THE ENEMY CARRIER'); return true; }
     }
     return false;
   }
@@ -37262,25 +37434,356 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
   // ---- start point per map ('runway' | 'carrier' | 'air'), saved in localStorage; default = carrier on maps that have one
   root.FL.startPoint = {
     key: function (m) { return 'flk_start_' + (m || ''); },
-    carrier: function () { return !!(root.FL.friendlyCarrierPos && root.FL.friendlyCarrierPos()); },
-    get: function (m) { var v = null; try { v = localStorage.getItem(this.key(m)); } catch (e) {} if (v !== 'runway' && v !== 'air' && v !== 'carrier') v = this.carrier() ? 'carrier' : 'runway'; return v; },
-    kind: function (m) { var v = this.get(m); return v === 'carrier' && !this.carrier() ? 'runway' : v; },
+    carrier: function (m) {   // map m has the friendly carrier (the live one, or the list for a map not loaded yet)
+      if (m && root.FL.friendlyCarrierMap && root.FL.friendlyCarrierMap() && root.FL.friendlyCarrierMap() !== m) return !!(root.FL.CARRIER_MAPS || {})[m];
+      return !!(root.FL.friendlyCarrierPos && root.FL.friendlyCarrierPos());
+    },
+    get: function (m) { var v = null; try { v = localStorage.getItem(this.key(m)); } catch (e) {} if (v !== 'runway' && v !== 'air' && v !== 'carrier') v = this.carrier(m) ? 'carrier' : 'runway'; return v; },
+    kind: function (m) { var v = this.get(m); return v === 'carrier' && !this.carrier(m) ? 'runway' : v; },
     set: function (m, v) { try { localStorage.setItem(this.key(m), v); } catch (e) {} return v; },
-    cycle: function (m) { var L = this.carrier() ? ['runway', 'carrier', 'air'] : ['runway', 'air'], i = L.indexOf(this.kind(m)); return this.set(m, L[(i + 1) % L.length]); },
+    cycle: function (m) { var L = this.carrier(m) ? ['runway', 'carrier', 'air'] : ['runway', 'air'], i = L.indexOf(this.kind(m)); return this.set(m, L[(i + 1) % L.length]); },
     label: function (m) { var v = this.kind(m); return 'Start: ' + (v === 'carrier' ? 'Carrier' : v === 'air' ? 'Air' : 'Runway'); }
   };
+  // sea maps with the friendly carrier (main.js passes no list -> this one)
+  root.FL.CARRIER_MAPS = { lax: true, cliffs: true, volcano: true, halong: true, rio: true, fjords: true, ocean: true };
+
+  // ================================================================== friendly SUPERCARRIER (Gerald R. Ford / Nimitz layout)
+  // CVB = real metres (333 m LOA, 78 m deck, 9 deg angled deck, 4 catapults: 2 bow + 2 waist, 4 wires, island starboard aft of
+  // midships, no ski-jump). Everything is scaled by SCALE (K.SCALE) for arcade play: 1.3 -> 433 m. Tune SCALE only.
+  // Aircraft, crew and tractors on the deck keep their real size.
+  var SCALE = 1.3;
+  var CVB = {
+    D: 19, BOW: -166.5, STERN: 166.5,
+    // deck outline, port and starboard half widths [z, w]; the starboard bumps are the deck-edge elevators 1, 2 (fwd of the island) and 3 (aft)
+    EP: [[-166.5, 5], [-162, 10], [-155, 14], [-145, 17], [-130, 19.5], [-112, 21], [-92, 22], [-78, 23], [-71, 25], [-66, 31], [-62, 47], [-50, 47.6],
+      [166.5, 26]],   // straight port edge along the angled deck, sharp notch at its forward end
+    ES: [[-166.5, 5], [-162, 10], [-155, 15], [-145, 19], [-130, 22.5], [-112, 25.5], [-92, 27.5], [-78, 28.2], [-77.5, 38.5], [-56.5, 38.5], [-56, 28.6], [-45.5, 28.8],
+      [-45, 38.5], [-23.5, 38.5], [-23, 29], [8, 29.5], [10, 31.5], [54, 31.5], [56, 29.5], [60, 29.5], [60.5, 39], [82, 39], [82.5, 29.5], [130, 29], [150, 27.5], [166.5, 25]],
+    WL: [[-166.5, 0], [-156, 0], [-148, 2.5], [-136, 7.5], [-118, 12.5], [-95, 16.5], [-60, 19.5], [-20, 20.5], [60, 20.5], [110, 20], [145, 18.5], [166.5, 17]],
+    ELEV: [[-77.5, -56.5], [-45, -23.5], [60.5, 82]],
+    ANG: 9, AX0: 2, AZ0: 166.5, ALEN: 218, AHW: 12.5,
+    WIRES: [50, 62, 74, 86], AIM: 68,
+    ISL: { x0: 20.5, x1: 31, z0: 16, z1: 50, h: 28 }, MAST: [26, 35, 48],
+    // launch spots [x, z, heading offset deg (+ = starboard), catapult?, label, track length]; 4-7 = deck run lanes on the angled deck
+    CATS: [[9, -58, 0, 1, 'CAT 1', 100], [-8, -58, 0, 1, 'CAT 2', 100], [-12, 32, -9, 1, 'CAT 3', 96], [-25, 22, -9, 1, 'CAT 4', 78]],
+    RUNS: [[14, -6], [14, 6], [48, -6], [48, 6]],          // [a along the angled deck, lateral l]
+    WAIT: [[12, 66], [12, 90], [12, 114], [13, 138]]
+  };
+  function bAX(a, l) { var A = CVB.ANG * DEG; return CVB.AX0 - a * Math.sin(A) + l * Math.cos(A); }
+  function bAZ(a, l) { var A = CVB.ANG * DEG; return CVB.AZ0 - a * Math.cos(A) - l * Math.sin(A); }
+  var K = (function () {
+    var s = SCALE, B = CVB, o = { SCALE: s, base: B, D: B.D * s, BOW: B.BOW * s, STERN: B.STERN * s, ANG: B.ANG, AX0: B.AX0 * s, AZ0: B.AZ0 * s, ALEN: B.ALEN * s, AHW: B.AHW * s,
+      WIRES: B.WIRES.map(function (w) { return w * s; }), AIM: B.AIM * s, GS: 3.5, DEC: 30, TRAP_MAX: 310 / 3.6, HOOK: 7,
+      ISL: { x0: B.ISL.x0 * s, x1: B.ISL.x1 * s, z0: B.ISL.z0 * s, z1: B.ISL.z1 * s, h: B.ISL.h * s }, MAST: [B.MAST[0] * s, B.MAST[1] * s, B.MAST[2] * s], SPOTS: [] };
+    B.CATS.forEach(function (c) { o.SPOTS.push([c[0] * s, c[1] * s, c[2], 1, c[4], c[5] * s]); });
+    B.RUNS.forEach(function (r, i) { o.SPOTS.push([bAX(r[0], r[1]) * s, bAZ(r[0], r[1]) * s, -B.ANG, 0, 'RUN ' + (i + 1), 0]); });
+    o.WAIT = B.WAIT.map(function (w) { return [w[0] * s, w[1] * s]; });
+    o.R = Math.hypot(o.STERN, 50 * s) + 8;              // bounding radius of the ship (quick reject)
+    return o;
+  })();
+  var CUX = -Math.sin(K.ANG * DEG), CUZ = -Math.cos(K.ANG * DEG), CRX = Math.cos(K.ANG * DEG), CRZ = -Math.sin(K.ANG * DEG);
+  var CET = 0.5, CEN = Math.round((K.STERN - K.BOW) / CET) + 1, CPORT = new Float32Array(CEN), CSTB = new Float32Array(CEN), CWL = new Float32Array(CEN);
+  function lerpZ(T, z) {
+    for (var i = 0; i < T.length - 1; i++) if (z <= T[i + 1][0]) { var a = (z - T[i][0]) / (T[i + 1][0] - T[i][0]); return T[i][1] + (T[i + 1][1] - T[i][1]) * a; }
+    return T[T.length - 1][1];
+  }
+  (function () { for (var i = 0; i < CEN; i++) { var zb = (K.BOW + i * CET) / SCALE; CPORT[i] = lerpZ(CVB.EP, zb) * SCALE; CSTB[i] = lerpZ(CVB.ES, zb) * SCALE; CWL[i] = lerpZ(CVB.WL, zb) * SCALE; } })();
+  function cIdx(lz) { var f = (lz - K.BOW) / CET; return f < 0 ? 0 : f > CEN - 1 ? CEN - 1 : Math.round(f); }
+  function cInDeck(lx, lz) { if (lz < K.BOW || lz > K.STERN) return false; var i = cIdx(lz); return lx >= -CPORT[i] && lx <= CSTB[i]; }
+  function cA(lx, lz) { return (lx - K.AX0) * CUX + (lz - K.AZ0) * CUZ; }
+  function cL(lx, lz) { return (lx - K.AX0) * CRX + (lz - K.AZ0) * CRZ; }
+  function cX(a, l) { return K.AX0 + a * CUX + l * CRX; }
+  function cZ(a, l) { return K.AZ0 + a * CUZ + l * CRZ; }
+
+  // ---- supercarrier deck texture (base metres)
+  var CVDT = null;
+  function cvDeckTexture() {
+    if (CVDT) return CVDT;
+    var B = CVB, W = 512, H = 2048, XMIN = -49, XMAX = 40, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    var g = cv.getContext('2d'), R = rng(78), i, a;
+    function px(x) { return (x - XMIN) / (XMAX - XMIN) * W; }
+    function py(z) { return (z - B.BOW) / (B.STERN - B.BOW) * H; }
+    var mx = W / (XMAX - XMIN), mz = H / (B.STERN - B.BOW);
+    g.fillStyle = '#4a4f54'; g.fillRect(0, 0, W, H);
+    for (i = 0; i < 9000; i++) { var c = 64 + (R() * 22 | 0); g.fillStyle = 'rgba(' + c + ',' + (c + 3) + ',' + (c + 6) + ',0.32)'; g.fillRect(R() * W, R() * H, 2 + R() * 9, 2 + R() * 6); }
+    // landing area: worn, darker, rubber and oil
+    function lanePath(l0, l1, a0, a1) { g.beginPath(); g.moveTo(px(bAX(a0, l0)), py(bAZ(a0, l0))); g.lineTo(px(bAX(a1, l0)), py(bAZ(a1, l0))); g.lineTo(px(bAX(a1, l1)), py(bAZ(a1, l1))); g.lineTo(px(bAX(a0, l1)), py(bAZ(a0, l1))); g.closePath(); }
+    lanePath(-B.AHW, B.AHW, 0, B.ALEN); g.fillStyle = 'rgba(30,32,34,0.35)'; g.fill();
+    lanePath(-5, 5, 30, 130); g.fillStyle = 'rgba(18,18,18,0.22)'; g.fill();
+    // panel seams
+    g.strokeStyle = 'rgba(22,24,26,0.33)'; g.lineWidth = 1;
+    for (var zz = B.BOW; zz < B.STERN; zz += 4) { g.beginPath(); g.moveTo(0, py(zz)); g.lineTo(W, py(zz)); g.stroke(); }
+    for (var xx = XMIN; xx < XMAX; xx += 6) { g.beginPath(); g.moveTo(px(xx), 0); g.lineTo(px(xx), H); g.stroke(); }
+    function aline(a0, l0, a1, l1, col, w, dash) {
+      g.strokeStyle = col; g.lineWidth = w; g.setLineDash(dash || []);
+      g.beginPath(); g.moveTo(px(bAX(a0, l0)), py(bAZ(a0, l0))); g.lineTo(px(bAX(a1, l1)), py(bAZ(a1, l1))); g.stroke(); g.setLineDash([]);
+    }
+    function sline(x0, z0, x1, z1, col, w, dash) { g.strokeStyle = col; g.lineWidth = w; g.setLineDash(dash || []); g.beginPath(); g.moveTo(px(x0), py(z0)); g.lineTo(px(x1), py(z1)); g.stroke(); g.setLineDash([]); }
+    for (i = 0; i < 90; i++) { a = 35 + R() * 120; var l = (R() - 0.5) * 10; aline(a, l, a + 8 + R() * 40, l + (R() - 0.5) * 1.5, 'rgba(12,12,12,' + (0.15 + R() * 0.2).toFixed(2) + ')', 1 + R() * 2.5); }
+    // landing area lines: white edges, dashed centreline, red / white foul-line segment, hash marks
+    aline(0, -B.AHW, B.ALEN, -B.AHW, '#e8e8e0', 2.6); aline(0, B.AHW, B.ALEN, B.AHW, '#e8e8e0', 2.6);
+    aline(4, 0, B.ALEN, 0, '#f2f2ea', 2.0, [6 * mz, 6 * mz]);
+    for (a = 0; a < 60; a += 4) aline(a, B.AHW + 0.6, a + 2, B.AHW + 0.6, '#c43a2c', 2.4);
+    for (a = 6; a < B.ALEN; a += 6) { aline(a, -B.AHW, a, -B.AHW + 1.4, '#e8e8e0', 1.6); aline(a, B.AHW - 1.4, a, B.AHW, '#e8e8e0', 1.6); }
+    // wires + wire numbers
+    for (i = 0; i < B.WIRES.length; i++) aline(B.WIRES[i], -B.AHW - 1, B.WIRES[i], B.AHW + 1, '#141618', 3);
+    g.fillStyle = '#e8e8e0'; g.font = 'bold 22px Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    for (i = 0; i < B.WIRES.length; i++) g.fillText(String(i + 1), px(bAX(B.WIRES[i] - 2.5, -B.AHW - 3)), py(bAZ(B.WIRES[i] - 2.5, -B.AHW - 3)));
+    // aim point ("landing target") boxes either side of the centreline + touchdown box
+    for (var s = -1; s <= 1; s += 2) { g.save(); g.translate(px(bAX(B.AIM, s * 6)), py(bAZ(B.AIM, s * 6))); g.rotate(B.ANG * DEG); g.fillStyle = '#f2f2ea'; g.fillRect(-2.2 * mx, -9 * mz, 4.4 * mx, 18 * mz); g.restore(); }
+    aline(B.WIRES[0] - 6, -3, B.WIRES[0] - 6, 3, '#f2f2ea', 2); aline(B.WIRES[3] + 6, -3, B.WIRES[3] + 6, 3, '#f2f2ea', 2);
+    // round-down at the stern: drop stripes
+    for (var sx2 = -26; sx2 < 24; sx2 += 3) { g.fillStyle = ((sx2 + 26) / 3 & 1) ? '#e8e8e0' : '#c03a2c'; g.fillRect(px(sx2), py(B.STERN - 2.6), 3 * mx, 2.6 * mz); }
+    // catapults: shuttle slot, steel edges, yellow lane lines, blast deflector panel, number
+    g.font = 'bold 26px Arial, sans-serif';
+    B.CATS.forEach(function (C) {
+      var hd = C[2] * DEG, fx = Math.sin(hd), fz = -Math.cos(hd), x0 = C[0], z0 = C[1], x1 = x0 + fx * C[5], z1 = z0 + fz * C[5], rx = -fz, rz = fx;
+      sline(x0 - fx * 4, z0 - fz * 4, x1, z1, 'rgba(150,155,160,0.75)', 3.2); sline(x0 - fx * 4, z0 - fz * 4, x1, z1, '#0d0e0f', 1.2);
+      for (var sd = -1; sd <= 1; sd += 2) sline(x0 + rx * 4.2 * sd, z0 + rz * 4.2 * sd, x1 + rx * 4.2 * sd, z1 + rz * 4.2 * sd, '#d8b030', 1.8, [5 * mz, 4 * mz]);
+      var jx = x0 - fx * 9, jz = z0 - fz * 9;
+      g.save(); g.translate(px(jx), py(jz)); g.rotate(hd); g.fillStyle = 'rgba(28,30,33,0.9)'; g.fillRect(-5.5 * mx, -2 * mz, 11 * mx, 4 * mz); g.strokeStyle = '#d8b030'; g.lineWidth = 1.5; g.strokeRect(-5.5 * mx, -2 * mz, 11 * mx, 4 * mz); g.restore();
+      g.save(); g.translate(px(x0 + fx * 14 + rx * 7.5), py(z0 + fz * 14 + rz * 7.5)); g.rotate(hd); g.fillStyle = '#d8b030'; g.fillText(C[4].slice(-1), 0, 0); g.restore();
+    });
+    // deck-run lanes for jets without a catapult: dashed yellow start lines + chevrons
+    B.RUNS.forEach(function (r) { aline(r[0], r[1] - 3, r[0], r[1] + 3, '#d8b030', 2.2); aline(r[0] + 6, r[1], r[0] + 3, r[1] - 2, '#d8b030', 1.6); aline(r[0] + 6, r[1], r[0] + 3, r[1] + 2, '#d8b030', 1.6); });
+    // elevators: outlines with yellow / black edge
+    B.ELEV.forEach(function (E) {
+      var x0 = 28.6, x1 = 38.5;
+      g.fillStyle = 'rgba(45,48,52,0.55)'; g.fillRect(px(x0), py(E[0]), (x1 - x0) * mx, (E[1] - E[0]) * mz);
+      g.strokeStyle = '#141516'; g.lineWidth = 2.5; g.strokeRect(px(x0), py(E[0]), (x1 - x0) * mx, (E[1] - E[0]) * mz);
+      for (var k = E[0]; k < E[1]; k += 2) { g.fillStyle = ((k - E[0]) / 2 & 1) ? '#d8b030' : '#151515'; g.fillRect(px(x0) - 2, py(k), 3, 2 * mz); }
+    });
+    // yellow taxi lines (bow street, island street, elevator leads)
+    g.strokeStyle = '#c9a42c'; g.lineWidth = 1.6;
+    g.beginPath(); g.moveTo(px(18), py(B.STERN - 12)); g.lineTo(px(17), py(55)); g.lineTo(px(16), py(10)); g.quadraticCurveTo(px(15), py(-40), px(9), py(-58)); g.stroke();
+    g.beginPath(); g.moveTo(px(16), py(10)); g.quadraticCurveTo(px(0), py(-20), px(-8), py(-58)); g.stroke();
+    g.beginPath(); g.moveTo(px(29), py(71)); g.quadraticCurveTo(px(20), py(70), px(17), py(55)); g.stroke();
+    g.beginPath(); g.moveTo(px(29), py(-34)); g.quadraticCurveTo(px(20), py(-34), px(16), py(-20)); g.stroke();
+    g.beginPath(); g.moveTo(px(29), py(-67)); g.quadraticCurveTo(px(18), py(-67), px(14), py(-52)); g.stroke();
+    g.beginPath(); g.moveTo(px(-4), py(B.BOW + 6)); g.lineTo(px(0.5), py(-62)); g.stroke();
+    // hull numbers (bow + aft end of the landing area), readable from astern
+    g.save(); g.fillStyle = '#ececE4'; g.font = 'bold 120px Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.translate(px(0.5), py(-130)); g.scale(1, mz / mx * 0.95); g.fillText('82', 0, 0); g.restore();
+    g.save(); g.fillStyle = 'rgba(236,236,228,0.92)'; g.font = 'bold 96px Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.translate(px(bAX(22, 0)), py(bAZ(22, 0))); g.rotate(B.ANG * DEG); g.scale(1, mz / mx * 0.95); g.fillText('82', 0, 0); g.restore();
+    // deck-edge safety lines (white dashed)
+    g.strokeStyle = 'rgba(235,235,225,0.6)'; g.lineWidth = 1.5; g.setLineDash([3 * mz, 3 * mz]);
+    [[B.EP, -1], [B.ES, 1]].forEach(function (E) { g.beginPath(); for (var k = 0; k < E[0].length; k++) { var q = E[0][k]; var x = E[1] * (q[1] - 1.4); if (k) g.lineTo(px(x), py(q[0])); else g.moveTo(px(x), py(q[0])); } g.stroke(); });
+    g.setLineDash([]);
+    // tie-down pad-eyes (small dots) in the parking areas
+    g.fillStyle = 'rgba(18,19,20,0.6)';
+    for (i = 0; i < 1400; i++) { var ex = XMIN + R() * (XMAX - XMIN), ez = B.BOW + R() * (B.STERN - B.BOW); g.fillRect(px(ex), py(ez), 1.4, 1.4); }
+    var tex = new T.CanvasTexture(cv); tex.encoding = T.sRGBEncoding; tex.anisotropy = 8;
+    return (CVDT = { tex: tex, XMIN: XMIN, XMAX: XMAX });
+  }
+  var CVDEC = null;
+  function cvDecal() {
+    if (CVDEC) return CVDEC;
+    var cv = document.createElement('canvas'); cv.width = 128; cv.height = 128; var g = cv.getContext('2d');
+    g.clearRect(0, 0, 128, 128); g.font = 'bold 96px Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.lineWidth = 5; g.strokeStyle = 'rgba(30,32,34,0.85)'; g.fillStyle = '#f2f2ee'; g.strokeText('82', 64, 70); g.fillText('82', 64, 70);
+    var t = new T.CanvasTexture(cv); t.encoding = T.sRGBEncoding; return (CVDEC = t);
+  }
+
+  // ---- hull + deck + island in base metres (the caller scales the group by SCALE)
+  function buildCVBody() {
+    var B = CVB, D = B.D, grp = new T.Group(), i, j;
+    grp.scale.setScalar(SCALE);
+    var zs = [];
+    for (var z = B.BOW; z < B.STERN; z += 6) zs.push(z);
+    B.EP.concat(B.ES).forEach(function (q) { zs.push(q[0]); });
+    zs.push(B.STERN); zs.sort(function (a, b) { return a - b; });
+    zs = zs.filter(function (v, k) { return k === 0 || v - zs[k - 1] > 0.2; });
+    function pe(z) { return lerpZ(B.EP, z); } function se(z) { return lerpZ(B.ES, z); } function wl(z) { return lerpZ(B.WL, z); }
+    // ---- hull loft: deck edge, overhang underside, flared side, boot top, red bottom
+    var cG = lin(0x5f676f), cG2 = lin(0x535a62), cU = lin(0x3c4248), cB = lin(0x1c1e21), cRd = lin(0x6b2b25), hull = new Acc();
+    var SEGC = [cG2, cU, cG, cG, cB, cRd, cRd, cRd, cRd, cRd, cRd, cB, cG, cG, cU, cG2];
+    function ring(zz, out) {
+      var p = pe(zz), s = se(zz), w = wl(zz), top = D - 0.05;
+      var hp = Math.min(w * 1.1 + 1.2, p - 0.6), hs = Math.min(w * 1.1 + 1.2, s - 0.6);
+      var pts = [[-p, top], [-p, top - 2.2], [-hp, top - 7.5], [-(w * 1.05 + 0.4), 8], [-w, 1.6], [-w, 0], [-w * 0.92, -5.5], [-w * 0.55, -10], [0, -11],
+        [w * 0.55, -10], [w * 0.92, -5.5], [w, 0], [w, 1.6], [w * 1.05 + 0.4, 8], [hs, top - 7.5], [s, top - 2.2], [s, top]];
+      var rk = zz < -118 ? Math.min(1, (-118 - zz) / 48.5) : 0, rs = zz > 150 ? (zz - 150) / 16.5 : 0;
+      for (var q = 0; q < pts.length; q++) { var y = pts[q][1]; out[q] = [pts[q][0], y, zz + (top - y) * 0.55 * rk * (y < top - 2.3 ? 1 : 0) - (top - y) * 0.08 * rs * (y < 8.5 ? 1 : 0)]; }
+      return out;
+    }
+    var r0 = [], r1 = [];
+    for (i = 0; i < zs.length - 1; i++) { ring(zs[i], r0); ring(zs[i + 1], r1); for (j = 0; j < 16; j++) { hull.tri(r0[j], r0[j + 1], r1[j], SEGC[j]); hull.tri(r0[j + 1], r1[j + 1], r1[j], SEGC[j]); } }
+    ring(zs[0], r0); var cb = [0, D * 0.6, zs[0] + 6];
+    for (j = 0; j < 16; j++) hull.tri(cb, r0[j + 1], r0[j], cG2);
+    hull.tri(cb, r0[0], r0[16], cG2);
+    ring(B.STERN, r1); var cs = [0, D * 0.45, B.STERN - 1];
+    for (j = 0; j < 16; j++) hull.tri(cs, r1[j], r1[j + 1], cG2);
+    hull.tri(cs, r1[16], r1[0], cG2);
+    var hm = new T.Mesh(hull.build(), new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.72, metalness: 0.25, flatShading: true })); hm.castShadow = true; hm.receiveShadow = true; grp.add(hm);
+    // ---- flight deck (textured)
+    var DT = cvDeckTexture(), XW = DT.XMAX - DT.XMIN, NC = 10, pos = [], uv = [], idx = [];
+    for (i = 0; i < zs.length; i++) {
+      var x0 = -pe(zs[i]), x1 = se(zs[i]);
+      for (j = 0; j <= NC; j++) { var xx = x0 + (x1 - x0) * j / NC; pos.push(xx, D, zs[i]); uv.push((xx - DT.XMIN) / XW, 1 - (zs[i] - B.BOW) / (B.STERN - B.BOW)); }
+    }
+    for (i = 0; i < zs.length - 1; i++) for (j = 0; j < NC; j++) { var a0 = i * (NC + 1) + j, a1 = a0 + 1, b0 = a0 + NC + 1, b1 = b0 + 1; idx.push(a0, b0, a1, a1, b0, b1); }
+    var dg = new T.BufferGeometry(); dg.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); dg.setAttribute('uv', new T.Float32BufferAttribute(uv, 2)); dg.setIndex(idx); dg.computeVertexNormals();
+    var deck = new T.Mesh(dg, new T.MeshStandardMaterial({ map: DT.tex, roughness: 0.9, metalness: 0.08 })); deck.receiveShadow = true; grp.add(deck);
+    // ---- island (Ford style: compact block, flat-panel radar faces, pri-fly, pole mast) + deck details
+    var sup = new Acc(), cI = lin(0x6c757e), cI2 = lin(0x5c646d), cW = lin(0x121820), cP = lin(0x3d454e), cBl = lin(0x17181a), cWh = lin(0xdfe3e3), cSt = lin(0x5d656e), I = B.ISL, m4 = new T.Matrix4();
+    sup.box(I.x0, I.x1, D, D + 9, I.z0, I.z1, cI);                                   // level 1 (hangar-deck shop, flight deck control)
+    sup.box(I.x0 + 0.6, I.x1 - 0.4, D + 9, D + 17, I.z0 + 2, I.z1 - 4, cI2);           // level 2
+    sup.box(I.x0 + 0.2, I.x1 - 0.2, D + 17, D + 23, I.z0 + 4, I.z1 - 9, cI);           // navigation bridge
+    sup.box(I.x0 + 1.4, I.x1 - 1.2, D + 23, D + 28, I.z0 + 8, I.z1 - 7, cI2);          // pri-fly
+    sup.box(I.x0 + 0.1, I.x1 - 0.1, D + 19.6, D + 22, I.z0 + 3.9, I.z1 - 8.9, cW);     // bridge windows (all round)
+    sup.box(I.x0 + 1.3, I.x1 - 1.1, D + 24.8, D + 27.2, I.z0 + 7.9, I.z1 - 6.9, cW);   // pri-fly windows
+    sup.box(I.x0 - 0.05, I.x1 + 0.05, D + 6.2, D + 7.2, I.z0 + 2, I.z1 - 2, cW);       // flight deck control windows
+    sup.box(I.x0 - 1.8, I.x0 + 0.2, D + 21.2, D + 21.8, I.z0 + 4, I.z0 + 9, cI2);      // bridge wings
+    sup.box(I.x0 - 1.8, I.x0 + 0.2, D + 21.2, D + 21.8, I.z1 - 14, I.z1 - 9, cI2);
+    sup.box(I.x0 + 1.2, I.x1 - 1.0, D + 28, D + 28.5, I.z0 + 8.2, I.z1 - 7.2, cSt);    // roof
+    [9, 17, 23].forEach(function (h) { sup.box(I.x0 - 0.5, I.x1 + 0.3, D + h - 0.2, D + h + 0.25, I.z0 - 0.4, I.z1 - (h > 20 ? 8.6 : h > 10 ? 3.6 : -0.4), cSt); });   // deck ledges
+    sup.box(I.x0 + 1.5, I.x1 - 1.5, D + 17, D + 25, I.z1 - 9, I.z1 - 4.5, cI2);        // aft block (uptakes, stores)
+    sup.box(I.x0 - 0.06, I.x1 + 0.06, D + 1.0, D + 3.4, I.z0 + 3, I.z0 + 6, cBl); sup.box(I.x0 - 0.06, I.x0, D + 1.0, D + 3.4, I.z1 - 8, I.z1 - 5, cBl);   // doors
+    sup.box(I.x0 - 0.06, I.x1 + 0.06, D + 15.3, D + 16.0, I.z0 + 9.5, I.z1 - 7, cW);   // level 2 windows
+    // flat-panel radar arrays: octagons on the four faces (fwd, aft, port fwd, port aft)
+    function panel(x, y, z, ry) { var gg = new T.CylinderGeometry(3.1, 3.1, 0.35, 8); var r = new T.Matrix4().makeRotationX(Math.PI / 2), r2 = new T.Matrix4().makeRotationY(ry); m4.makeTranslation(x, y, z).multiply(r2).multiply(r); sup.geo(gg, m4, cP); }
+    panel((I.x0 + I.x1) / 2, D + 14, I.z0 + 1.8, 0); panel((I.x0 + I.x1) / 2, D + 14, I.z1 - 3.8, 0);
+    panel(I.x0 + 0.4, D + 14, I.z0 + 9, Math.PI / 2); panel(I.x0 + 0.4, D + 14, I.z1 - 11, Math.PI / 2); panel(I.x1 - 0.2, D + 14, (I.z0 + I.z1) / 2, Math.PI / 2);
+    // pole mast + radomes + yardarm + whips
+    var MX = B.MAST[0], MZ = B.MAST[1], MT = B.MAST[2];
+    sup.geo(new T.CylinderGeometry(0.8, 1.3, MT - 28, 8), m4.makeTranslation(MX, D + 28 + (MT - 28) / 2, MZ), cI2);
+    sup.box(MX - 4.5, MX + 4.5, D + 38, D + 38.5, MZ - 0.6, MZ + 0.6, cI2);            // yardarm
+    sup.box(MX - 2.4, MX + 2.4, D + 33, D + 33.6, MZ - 2.4, MZ + 2.4, cI2);            // platform
+    sup.geo(new T.SphereGeometry(1.5, 12, 8), m4.makeTranslation(MX, D + MT + 1, MZ), cWh);
+    sup.geo(new T.SphereGeometry(1.0, 10, 6), m4.makeTranslation(MX - 3.6, D + 39.6, MZ), cWh); sup.geo(new T.SphereGeometry(1.0, 10, 6), m4.makeTranslation(MX + 3.6, D + 39.6, MZ), cWh);
+    sup.geo(new T.SphereGeometry(1.25, 10, 6), m4.makeTranslation(I.x0 + 3, D + 29.6, I.z0 + 11), cWh); sup.geo(new T.SphereGeometry(1.25, 10, 6), m4.makeTranslation(I.x1 - 3, D + 29.6, I.z0 + 11), cWh);
+    for (var ai = 0; ai < 5; ai++) sup.box(I.x0 + 2 + ai * 1.6, I.x0 + 2.12 + ai * 1.6, D + 28.5, D + 34 + (ai % 2) * 2, I.z1 - 9, I.z1 - 8.88, cBl);
+    sup.box(MX - 0.4, MX + 0.4, D + 34, D + 36, MZ - 3.5, MZ - 2.5, cI2);              // radar pedestal (rotating antenna sits on it)
+    // flight deck catwalks + safety nets along the deck edges (skip elevators and island)
+    var cN = lin(0x3e4348);
+    for (var cz = B.BOW + 10; cz < B.STERN - 3; cz += 6) {
+      var zc = cz + 3, p = pe(zc), s2 = se(zc), elev = false;
+      B.ELEV.forEach(function (E) { if (zc > E[0] - 1 && zc < E[1] + 1) elev = true; });
+      sup.box(-p - 1.6, -p, D - 1.4, D - 1.15, cz, cz + 5.7, cN); sup.box(-p - 1.7, -p - 1.55, D - 1.15, D - 0.2, cz, cz + 5.7, cN);
+      if (!elev && !(zc > I.z0 - 3 && zc < I.z1 + 3)) { sup.box(s2, s2 + 1.6, D - 1.4, D - 1.15, cz, cz + 5.7, cN); sup.box(s2 + 1.55, s2 + 1.7, D - 1.15, D - 0.2, cz, cz + 5.7, cN); }
+    }
+    // hangar bay openings under the elevators (starboard hull side) + elevator platforms' underside
+    B.ELEV.forEach(function (E) { var w0 = wl((E[0] + E[1]) / 2); sup.box(w0 * 1.08 + 0.6, w0 * 1.08 + 1.0, 9.5, D - 2.6, E[0] + 1, E[1] - 1, cBl); sup.box(28.6, 38.5, D - 1.2, D - 0.05, E[0], E[1], cSt); });
+    // defensive sponsons: RAM launchers, ESSM boxes (port forward, port aft, starboard aft, starboard forward)
+    var SP = [[-23.5, -108], [-31, 148], [27.5, 150], [28.5, -98]];
+    SP.forEach(function (q, k) {
+      var sx = q[0], sz = q[1], sg = sx < 0 ? -1 : 1;
+      sup.box(sx - 4, sx + 4, D - 4.8, D - 3.2, sz - 5, sz + 5, cG2);
+      if (k & 1) sup.box(sx - 1.4, sx + 1.4, D - 3.2, D - 1.0, sz - 2.2, sz + 2.2, cI2);   // ESSM box launcher
+      else { sup.box(sx - 1.0, sx + 1.0, D - 3.2, D - 1.8, sz - 1.0, sz + 1.0, cI2); sup.box(sx - 0.9 + sg * 0.3, sx + 0.9 + sg * 0.3, D - 1.8, D - 0.5, sz - 1.6, sz + 1.6, cWh); }   // RAM
+    });
+    // LSO platform (port, abeam the aim point) + Fresnel lens box
+    var lx = bAX(B.AIM, -B.AHW - 6), lz = bAZ(B.AIM, -B.AHW - 6);
+    sup.box(-pe(lz + 14) - 3, -pe(lz + 14) + 0.2, D - 1.2, D - 0.9, lz + 8, lz + 20, cN);
+    sup.box(lx - 0.8, lx + 0.8, D, D + 2.8, lz - 1.6, lz + 1.6, cBl);
+    // wire sheaves, catapult blast-deflector hinges, bow bullnose, anchor hawse
+    for (i = 0; i < B.WIRES.length; i++) for (var ws = -1; ws <= 1; ws += 2) { var wx = bAX(B.WIRES[i], ws * (B.AHW + 1.6)), wz = bAZ(B.WIRES[i], ws * (B.AHW + 1.6)); sup.box(wx - 0.5, wx + 0.5, D, D + 0.32, wz - 0.5, wz + 0.5, cBl); }
+    sup.box(-3, 3, D - 6, D - 0.4, B.BOW - 0.4, B.BOW + 1.2, cG2);
+    sup.box(-12, -10, 11, 13, -150, -147, cBl); sup.box(10, 12, 11, 13, -150, -147, cBl);
+    var supMesh = new T.Mesh(sup.build(), new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.68, metalness: 0.3, flatShading: true }));
+    supMesh.castShadow = true; supMesh.receiveShadow = true; grp.add(supMesh);
+    // rotating air-search radar on the mast pedestal
+    var radar = new T.Mesh(new T.BoxGeometry(6, 1.3, 0.4), new T.MeshStandardMaterial({ color: lin(0x3a4046), roughness: 0.6, metalness: 0.4 }));
+    radar.position.set(MX, D + 36.8, MZ - 3); grp.add(radar);
+    // hull numbers on the island sides
+    var dmat = new T.MeshStandardMaterial({ map: cvDecal(), transparent: true, depthWrite: false, roughness: 0.8, polygonOffset: true, polygonOffsetFactor: -2 });
+    var d1 = new T.Mesh(new T.PlaneGeometry(9, 9), dmat); d1.position.set(I.x0 - 0.06, D + 12.5, (I.z0 + I.z1) / 2 + 3); d1.rotation.y = -Math.PI / 2; grp.add(d1);
+    var d2 = new T.Mesh(new T.PlaneGeometry(9, 9), dmat); d2.position.set(I.x1 - 0.34, D + 12.5, (I.z0 + I.z1) / 2 + 3); d2.rotation.y = Math.PI / 2; grp.add(d2);
+    return { group: grp, radar: radar, olsX: lx * SCALE, olsZ: lz * SCALE, cI: cI, cWh: cWh };
+  }
+  // waterline foam strips in scaled ship coordinates
+  function buildCVFoam() {
+    var i, foamTex = foamTexture(), fp = [], fc = [], fu = [], fi = [], FZ = [], b0 = K.BOW + 18 * SCALE;
+    for (var z = b0; z <= K.STERN + 1; z += 10) FZ.push(z);
+    for (var sd = -1; sd <= 1; sd += 2) {
+      var base0 = fp.length / 3;
+      for (i = 0; i < FZ.length; i++) {
+        var wlz = CWL[cIdx(FZ[i])], bowK = Math.max(0, 1 - (FZ[i] - b0) / 90), sternK = Math.max(0, (FZ[i] - (K.STERN - 70)) / 60);
+        var wdt = 4 + 12 * bowK + 9 * sternK, br = 0.25 + 0.75 * Math.max(bowK, sternK * 0.7);
+        fp.push(sd * (wlz + 0.3), 0.35, FZ[i], sd * (wlz + 0.3 + wdt), 0.35, FZ[i] + wdt * 0.6);
+        fc.push(br, br, br, 0, 0, 0); fu.push(0.5, i * 0.3, sd > 0 ? 1 : 0, i * 0.3);
+      }
+      for (i = 0; i < FZ.length - 1; i++) { var p0 = base0 + i * 2; if (sd > 0) fi.push(p0, p0 + 2, p0 + 1, p0 + 1, p0 + 2, p0 + 3); else fi.push(p0, p0 + 1, p0 + 2, p0 + 1, p0 + 3, p0 + 2); }
+    }
+    var fgeo = new T.BufferGeometry(); fgeo.setAttribute('position', new T.Float32BufferAttribute(fp, 3)); fgeo.setAttribute('color', new T.Float32BufferAttribute(fc, 3)); fgeo.setAttribute('uv', new T.Float32BufferAttribute(fu, 2)); fgeo.setIndex(fi);
+    var foamMat = new T.MeshBasicMaterial({ map: foamTex, vertexColors: true, transparent: true, depthWrite: false, blending: T.AdditiveBlending, fog: false, side: T.DoubleSide });
+    return { geo: fgeo, mat: foamMat };
+  }
+  // ---- deck life for the supercarrier (real-size props, scaled positions): Hornets with folded wings, an E-2, a Seahawk, tractors, crew
+  function hornetGeo() {
+    var a = new Acc(), c1 = lin(0x7b848d), c2 = lin(0x69727b), dk = lin(0x1d2328), rd = lin(0xb8bcbf), m4 = new T.Matrix4(), rx = new T.Matrix4().makeRotationX(Math.PI / 2);
+    m4.makeTranslation(0, 0.3, -0.5).multiply(rx); a.geo(new T.CylinderGeometry(0.95, 0.85, 12, 8), m4, c1);
+    m4.makeTranslation(0, 0.3, -8.6).multiply(new T.Matrix4().makeRotationX(-Math.PI / 2)); a.geo(new T.ConeGeometry(0.85, 4.6, 8), m4, rd);
+    a.box(-1.7, 1.7, -0.5, 0.45, -1, 6.2, c2);                                                     // centre body
+    a.box(-3.9, -1.5, 0, 0.22, -0.5, 4.5, c2); a.box(1.5, 3.9, 0, 0.22, -0.5, 4.5, c2);           // inner wings
+    a.box(-4.15, -3.9, 0.1, 2.9, 0.4, 4.2, c1); a.box(3.9, 4.15, 0.1, 2.9, 0.4, 4.2, c1);         // folded outer panels
+    a.box(-2.7, -2.45, 0.3, 3.3, 4.6, 7.6, c2); a.box(2.45, 2.7, 0.3, 3.3, 4.6, 7.6, c2);         // canted fins
+    a.box(-3.2, -1.0, 0, 0.18, 6.0, 8.2, c1); a.box(1.0, 3.2, 0, 0.18, 6.0, 8.2, c1);             // stabilators
+    a.box(-1.8, -0.4, -0.3, 0.05, -3.8, -1.0, c2); a.box(0.4, 1.8, -0.3, 0.05, -3.8, -1.0, c2);   // LEX
+    a.box(-0.45, 0.45, 0.95, 1.55, -6.6, -3.8, dk);                                              // canopy
+    a.box(-0.12, 0.12, -2.4, -0.4, -6.4, -6.0, dk); a.box(-1.5, -1.25, -2.4, -0.5, 0.6, 1.0, dk); a.box(1.25, 1.5, -2.4, -0.5, 0.6, 1.0, dk);
+    return a.build();
+  }
+  function e2Geo() {
+    var a = new Acc(), c1 = lin(0xa7aeb5), c2 = lin(0x8d959d), dk = lin(0x1d2328), wh = lin(0xe4e6e6), m4 = new T.Matrix4(), rx = new T.Matrix4().makeRotationX(Math.PI / 2);
+    m4.makeTranslation(0, 0.4, 0).multiply(rx); a.geo(new T.CylinderGeometry(1.25, 1.0, 17, 10), m4, c1);
+    a.box(-1.4, 1.4, 1.2, 1.6, -3.5, 1.5, c2);                                                    // wing centre section (wings folded aft)
+    a.box(-1.6, -1.2, -0.2, 1.6, -3.0, 9.0, c2); a.box(1.2, 1.6, -0.2, 1.6, -3.0, 9.0, c2);       // folded wings along the body
+    a.box(-2.4, -1.5, -0.4, 0.8, -4.2, -1.0, c2); a.box(1.5, 2.4, -0.4, 0.8, -4.2, -1.0, c2);     // nacelles
+    a.box(-4.0, 4.0, 1.0, 1.2, 7.3, 8.6, c1);                                                     // tailplane
+    for (var t = 0; t < 4; t++) a.box(-3.9 + t * 2.6, -3.7 + t * 2.6, 1.2, 3.8, 7.0, 8.8, c2);     // four fins
+    a.geo(new T.CylinderGeometry(0.35, 0.35, 2.2, 6), m4.makeTranslation(0, 2.6, 0.5), c2);
+    a.geo(new T.CylinderGeometry(3.6, 3.6, 0.7, 20), m4.makeTranslation(0, 4.0, 0.5), wh);         // rotodome
+    a.box(-0.5, 0.5, 0.9, 1.5, -8.0, -5.6, dk);
+    a.box(-0.12, 0.12, -2.5, -0.4, -7.0, -6.6, dk); a.box(-2.1, -1.8, -2.5, -0.5, -2.4, -2.0, dk); a.box(1.8, 2.1, -2.5, -0.5, -2.4, -2.0, dk);
+    return a.build();
+  }
+  function heloGeo() {
+    var a = new Acc(), c1 = lin(0x8f989f), dk = lin(0x1d2328), m4 = new T.Matrix4();
+    a.box(-1.2, 1.2, -1.6, 1.0, -4.5, 2.2, c1); a.box(-0.6, 0.6, -1.0, 0.4, 2.2, 9.5, c1); a.box(-0.12, 0.12, -1, 1.6, 8.6, 9.9, c1);
+    a.box(-0.9, 0.9, -0.6, 0.5, -5.6, -4.5, dk); a.box(-1.25, 1.25, -0.4, 0.4, -4.4, -2.4, dk);
+    a.geo(new T.CylinderGeometry(0.4, 0.4, 0.8, 8), m4.makeTranslation(0, 1.4, -1), dk);
+    for (var b = 0; b < 4; b++) { var r = new T.Matrix4().makeRotationY(b * Math.PI / 2 + 0.3); m4.makeTranslation(0, 1.85, -1).multiply(r); a.geo(new T.BoxGeometry(0.5, 0.08, 7.6).translate(0, 0, -3.8), m4, dk); }
+    a.box(-1.4, -1.25, -2.4, -1.6, -1, 0.2, dk); a.box(1.25, 1.4, -2.4, -1.6, -1, 0.2, dk);
+    return a.build();
+  }
+  var CVLIFEG = null;
+  var CV_CREW = [[11, -50, 0], [6, -52, 1], [13, -60, 1], [-5, -50, 0], [-11, -52, 1], [-10, -60, 2], [-8, 40, 0], [-15, 38, 1], [-20, 30, 1], [-29, 28, 0],
+    [16, 20, 4], [17, 30, 6], [18, 44, 5], [16, 56, 4], [19, 62, 3], [-33, 103, 3], [-34, 106, 3], [-32.5, 108, 3], [-35, 104, 3], [-28, 112, 1], [-27, 118, 1],
+    [18, 132, 6], [22, 145, 5], [24, -20, 0], [24, -40, 6], [20, -75, 1], [-15, -100, 2], [15, -110, 4], [10, 100, 0]];
+  var CV_TRAC = [[21, 70, 0.4, 0], [20, -8, -1.2, 3], [14, 120, 2.0, 0], [-14, -88, 0.2, 0]];
+  var CV_JETS = [[24, -70, 0.9], [24, -51, 0.9], [24, -33, 0.9], [24, -15, 0.9], [23, 2, 0.9], [25, 64, 0.9], [25, 82, 0.9], [25, 100, 0.9], [25, 117, 0.9]];
+  function buildCVLife() {
+    if (!CVLIFEG) CVLIFEG = { crew: crewGeo(), trac: tractorGeo(), jet: hornetGeo(), e2: e2Geo(), helo: heloGeo(), mat: new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.7, metalness: 0.15 }) };
+    var G = CVLIFEG, g = new T.Group(), m4 = new T.Matrix4(), q = new T.Quaternion(), sc = new T.Vector3(1, 1, 1), p = new T.Vector3(), col = new T.Color(), R = rng(199), i, s = SCALE, D = K.D;
+    var crew = new T.InstancedMesh(G.crew, G.mat, CV_CREW.length);
+    for (i = 0; i < CV_CREW.length; i++) { q.setFromAxisAngle(UPV0, R() * 6.283); p.set(CV_CREW[i][0] * s, D, CV_CREW[i][1] * s); crew.setMatrixAt(i, m4.compose(p, q, sc)); col.setHex(VEST[CV_CREW[i][2]]); col.convertSRGBToLinear(); crew.setColorAt(i, col); }
+    crew.castShadow = true; g.add(crew);
+    var tr = new T.InstancedMesh(G.trac, G.mat, CV_TRAC.length);
+    for (i = 0; i < CV_TRAC.length; i++) { q.setFromAxisAngle(UPV0, CV_TRAC[i][2]); p.set(CV_TRAC[i][0] * s, D, CV_TRAC[i][1] * s); tr.setMatrixAt(i, m4.compose(p, q, sc)); col.setHex(CV_TRAC[i][3] ? 0xd0d0cc : 0xd8b030); col.convertSRGBToLinear(); tr.setColorAt(i, col); }
+    tr.castShadow = true; g.add(tr);
+    col.setRGB(1, 1, 1);
+    var jm = new T.InstancedMesh(G.jet, G.mat, CV_JETS.length);
+    for (i = 0; i < CV_JETS.length; i++) { q.setFromAxisAngle(UPV0, CV_JETS[i][2]); p.set(CV_JETS[i][0] * s, D + 2.4, CV_JETS[i][1] * s); jm.setMatrixAt(i, m4.compose(p, q, sc)); jm.setColorAt(i, col); }
+    jm.castShadow = true; jm.receiveShadow = true; g.add(jm);
+    var e2 = new T.Mesh(G.e2, G.mat); e2.position.set(20 * s, D + 2.5, 128 * s); e2.rotation.y = 0.6; e2.castShadow = true; g.add(e2);
+    var he = new T.Mesh(G.helo, G.mat); he.position.set(21 * s, D + 2.4, 150 * s); he.rotation.y = 1.2; he.castShadow = true; g.add(he);
+    return { group: g, crew: crew };
+  }
 
   // ------------------------------------------------------------------ factory
   root.FL.createCarrier = function (opts) {
     opts = opts || {};
     var T = root.THREE, phys = opts.phys, scene = opts.scene, fx = opts.fx || null, combat = opts.combat || null;
     var clock = opts.clock || function () { return Date.now() / 1000; };
-    var MAPS = opts.maps || { cliffs: true };
+    var MAPS = opts.maps || root.FL.CARRIER_MAPS;
     var WIND_FROM = opts.windFromDeg != null ? opts.windFromDeg : 246.4;   // weather.js: wind toward ~066 deg
     var OFFSHORE = opts.offshore || 3000;   // m from the coast to the nearest point of the course
     var headless = typeof document === 'undefined' || !scene || !T;
     SHARED.scene = scene || null; SHARED.fx = fx;
     root.FL.friendlyCarrierPose = function () { return on ? P : null; };   // ship pose {x, z, vx, vz, psi} (jetsig.js: VTOL hover moves with the deck)
+    root.FL.friendlyCarrierMap = function () { return baseWorld ? baseWorld.mapId : null; };
     root.FL.friendlyCarrierPos = function () { return on && course ? { e: course.ce + course.sgn * course.R * course.be, n: course.cn + course.sgn * course.R * course.bn, r: course.Lh + 2 * course.R } : null; };
     var st = phys.st, GEAR_H = phys.GEAR_H || 2.4;
     var baseWorld = null, course = null, on = false, tS = clock();
@@ -37288,22 +37791,23 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     var LX = 0, LZ = 0, QX = 0, QZ = 0;     // last deck-local results (step logic / world queries)
     var fwdV = T ? new T.Vector3() : null, qY = T ? new T.Quaternion() : null, vY = T ? new T.Vector3(0, 1, 0) : null, eul = T ? new T.Euler() : null;
     var trap = { active: false, wire: 0, stopT: 0, done: false, armed: false, sinceTD: 9, prevAH: 0, skipMsg: false, bolterMsg: false };
-    var hold = { on: false, msgT: 0 }, deckState = { stillT: 0, latch: false, fromHangar: false, onDeck: false, relKmh: 0 };
+    var hold = { on: false, msgT: 0 }, deckState = { stillT: 0, latch: false, fromHangar: false, onDeck: false, relKmh: 0, waitT: 0, slot: 0, spot: 0 };
     var msg = { text: '', t: 99 };
     var info = { available: false, mapId: '', pos: T ? new T.Vector3() : null, aim: T ? new T.Vector3() : null, hdgDeg: 0, landHdgDeg: 0, speedKts: 0,
       dist: 0, back: 0, height: 0, glideErr: 0, lineupErr: 0, onFinal: false, call: '', onDeck: false, trapped: false, wire: 0, hold: false,
-      msg: '', msgAge: 99, state: '' };
+      msg: '', msgAge: 99, state: '', spot: '' };
 
     function say(t) { msg.text = t; msg.t = 0; if (opts.flash) { try { opts.flash(t); } catch (e) {} } }
+    function isCat() { var sp = phys.spec ? phys.spec() : null; return !!(sp && sp.carrier === 'catobar'); }
 
     // ---- frame transforms
     function toLocal(x, z) { var dx = x - P.x, dz = z - P.z; QX = dx * P.c + dz * P.s; QZ = -dx * P.s + dz * P.c; }
     function deckL(x, z) {   // world x,z -> sets QX, QZ; true over the flight deck
       if (!on) return false;
-      var dx = x - P.x, dz = z - P.z; if (dx * dx + dz * dz > 170 * 170) return false;
-      toLocal(x, z); return inDeckL(QX, QZ);
+      var dx = x - P.x, dz = z - P.z; if (dx * dx + dz * dz > K.R * K.R) return false;
+      toLocal(x, z); return cInDeck(QX, QZ);
     }
-    function deckTop(x, z) { return deckL(x, z) ? K.D + rampH(QZ) - QX * P.sr - QZ * P.sp : -1e9; }   // + roll / pitch in a rough sea
+    function deckTop(x, z) { return deckL(x, z) ? K.D - QX * P.sr - QZ * P.sp : -1e9; }   // + roll / pitch in a rough sea
 
     // ---- wrapped world for physics
     var anchorOn = false, anchorX = 0, anchorZ = 0;
@@ -37322,7 +37826,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       };
       o.groundY = function (e, n) { var t = deckTop(e, -n); return t > -1e8 ? t : w.groundY(e, n); };
       o.slope = function (e, n) {
-        if (deckL(e, -n) || (anchorOn && Math.abs(e - anchorX) < 12 && Math.abs(-n - anchorZ) < 12)) return QZ < K.RZ0 ? Math.tan(rampAng(QZ)) : 0;
+        if (deckL(e, -n) || (anchorOn && Math.abs(e - anchorX) < 12 && Math.abs(-n - anchorZ) < 12)) return 0;
         return w.slope(e, n);
       };
       o.solidAt = function (x, y, z) { if (shipSolid(x, y, z)) return true; return w.solidAt ? w.solidAt(x, y, z) : false; };
@@ -37333,12 +37837,12 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     // hull below the deck, the island (+ wing margin) and the mast are solid; calls phys.crash with a clear reason
     function shipSolid(x, y, z) {
       if (ENEMY.length && enemySolid(x, y, z, phys)) return true;
-      if (!on || y > K.D + 50 || y < -12) return false;
-      var dx = x - P.x, dz = z - P.z; if (dx * dx + dz * dz > 175 * 175) return false;
+      if (!on || y > K.D + K.MAST[2] + 4 || y < -12) return false;
+      var dx = x - P.x, dz = z - P.z; if (dx * dx + dz * dz > K.R * K.R) return false;
       toLocal(x, z); var lx = QX, lz = QZ, I = K.ISL;
       if (lx > I.x0 - 5 && lx < I.x1 + 5 && lz > I.z0 - 5 && lz < I.z1 + 5 && y < K.D + I.h) { phys.crash('HIT THE CARRIER ISLAND'); return true; }
-      if (Math.abs(lx - 27) < 4 && Math.abs(lz + 0.7) < 4 && y < K.D + 48) { phys.crash('HIT THE CARRIER MAST'); return true; }
-      if (inDeckL(lx, lz) && y < K.D + rampH(lz) - lx * P.sr - lz * P.sp - 1.0) { phys.crash(lz > 132 ? 'RAMP STRIKE — HIT THE CARRIER STERN' : 'HIT THE CARRIER HULL'); return true; }
+      if (Math.abs(lx - K.MAST[0]) < 4 && Math.abs(lz - K.MAST[1]) < 4 && y < K.D + K.MAST[2]) { phys.crash('HIT THE CARRIER MAST'); return true; }
+      if (cInDeck(lx, lz) && y < K.D - lx * P.sr - lz * P.sp - 1.0) { phys.crash(lz > K.STERN - 22 ? 'RAMP STRIKE — HIT THE CARRIER STERN' : 'HIT THE CARRIER HULL'); return true; }
       return false;
     }
 
@@ -37381,14 +37885,14 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     function touchdown() {
       trap.sinceTD = 0; trap.done = false; trap.skipMsg = false; trap.bolterMsg = false;
       var rs = Math.hypot(st.vel.x, st.vel.z);
-      // ROSTER M8: only jets with a tail hook catch the wires (spec.carrier 'catobar' | 'stobar'; VTOL jets land without them)
-      var sp = phys.spec ? phys.spec() : null, hook = true;   // Chad: every jet has a tail hook (game rule; real hooks only on naval jets)
+      var hook = true;   // Chad: every jet has a tail hook (game rule; real hooks only on naval jets)
       trap.armed = st.gearT > 0.9 && rs > 25 && hook;
-      if (!hook && rs > 25 && !(sp && sp.carrier === 'vtol')) { say('NO TAIL HOOK — BRAKE HARD OR GO AROUND'); lso('No hook! Power, go around!', 'x'); }
-      trap.prevAH = axisA(LX, LZ) - K.HOOK;
+      trap.prevAH = cA(LX, LZ) - K.HOOK;
     }
+    function spotDir(i) { var o = (K.SPOTS[i] ? K.SPOTS[i][2] : 0) * DEG + P.psi; dirX = Math.sin(o); dirZ = -Math.cos(o); }   // world launch direction of spot i
+    var dirX = 0, dirZ = -1;
     function deckRoll(dt, inp) {
-      var rs = Math.hypot(st.vel.x, st.vel.z), a = axisA(LX, LZ), l = axisL(LX, LZ), aH = a - K.HOOK;
+      var rs = Math.hypot(st.vel.x, st.vel.z), a = cA(LX, LZ), l = cL(LX, LZ), aH = a - K.HOOK;
       deckState.relKmh = rs * 3.6;
       // arrestor wires: the hook catches the first wire it rolls over after touchdown
       if (!trap.active && trap.armed && !trap.done && trap.sinceTD < 2.5 && Math.abs(l) < K.AHW + 2) {
@@ -37406,57 +37910,55 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
         if (rs > 0.05) { var k = Math.max(0, rs - K.DEC * dt) / rs; st.vel.x *= k; st.vel.z *= k; }
         if (rs < 0.4) { st.vel.x = 0; st.vel.z = 0; trap.stopT += dt; if (trap.stopT > 1.5) { trap.active = false; trap.done = true; trap.armed = false; } }
       }
-      // launch hold: brake held at low speed = restrainers (spool up to full boost, release the brake to launch)
+      // launch hold: brake held at low speed = hold-back bar (spool up to full boost, release the brake to launch)
       var brk = inp && inp.brake ? inp.brake : 0;
-      if (launch.cat > 0) {   // CATOBAR catapult shot: 2.2 s of push to 75 m/s along the deck
+      if (launch.cat > 0) {   // CATOBAR catapult shot: 2.2 s of push to 75 m/s down the track
         launch.cat = Math.max(0, launch.cat - dt); hold.on = false;
-        if (rs < 75) { var ka = Math.min(34 * dt, 75 - rs); st.vel.x += P.s * ka; st.vel.z -= P.c * ka; }
-      } else if (launch.go > 0) { hold.on = false; if (launch.go > 1.2) { var kf = 7 * dt; st.vel.x += P.s * kf; st.vel.z -= P.c * kf; } }   // restrainers released: a kick down the deck
+        spotDir(launch.spotGo);
+        var along = st.vel.x * dirX + st.vel.z * dirZ;
+        if (along < 75) { var ka = Math.min(34 * dt, 75 - along); st.vel.x += dirX * ka; st.vel.z += dirZ * ka; }
+        var side = st.vel.x * dirZ - st.vel.z * dirX; st.vel.x -= dirZ * side * Math.min(1, dt * 20); st.vel.z += dirX * side * Math.min(1, dt * 20);   // the shuttle keeps it on the track
+      } else if (launch.go > 0) {   // deck run (no catapult): a steam-assisted roll down the angled deck
+        hold.on = false;
+        if (launch.go > 0.6) { spotDir(launch.spotGo); var kf = 10 * dt; st.vel.x += dirX * kf; st.vel.z += dirZ * kf; }
+      }
       else if (!trap.active && brk > 0.5 && rs < 1.5) { st.vel.x = 0; st.vel.z = 0; hold.on = true; }
       else if (hold.on && brk <= 0.5) { hold.on = false; if (st.thr > 0.75) say('LAUNCH'); }
       else if (rs >= 1.5) hold.on = false;
-      // ski-jump: follow the ramp, leave it climbing
-      if (LZ < K.RZ0) {
-        var ang = rampAng(LZ), fs = st.vel.x * P.s - st.vel.z * P.c;
-        if (fs > 3) {
-          st.vel.y = Math.max(st.vel.y, fs * Math.tan(ang));
-          var fw = fwdV.set(0, 0, -1).applyQuaternion(st.q), pitch = Math.asin(Math.max(-1, Math.min(1, fw.y)));
-          if (pitch < ang) { eul.set(ang, -Math.atan2(fw.x, -fw.z), 0, 'YXZ'); st.q.setFromEuler(eul); }
-        }
-      }
     }
 
-    // ---- placing the jet on a launch spot
-    var WAIT_SPOT = [10, 78];   // 4th co-op pilot: parks aft of the island, taxis to spot 3 after a few seconds
-    function place(idx) {
-      var sp = idx === 'wait' ? WAIT_SPOT : K.SPOTS[idx || 0] || K.SPOTS[0], lx = sp[0], lz = sp[1];
+    // ---- launch spots: catapult jets -> catapults 1-4, other jets -> the deck run lanes on the angled deck; co-op slot picks one
+    function spotFor(slot) { slot = (slot | 0) % 4; return isCat() ? slot : 4 + slot; }
+    function place(idx, waitIdx) {
+      var sp = waitIdx != null ? K.WAIT[waitIdx % K.WAIT.length] : K.SPOTS[idx] || K.SPOTS[spotFor(0)], lx = sp[0], lz = sp[1], hd = waitIdx != null ? 0 : sp[2] * DEG;
       st.pos.set(P.x + lx * P.c - lz * P.s, K.D + GEAR_H, P.z + lx * P.s + lz * P.c);
-      eul.set(0, -P.psi, 0, 'YXZ'); st.q.setFromEuler(eul);
+      eul.set(0, -(P.psi + hd), 0, 'YXZ'); st.q.setFromEuler(eul);
       st.vel.set(P.vx, 0, P.vz); st.w.set(0, 0, 0);
       st.onGround = true; st.gearDown = true; st.gearT = 1; st.thr = 0; st.belly = false; st.cobraPhase = ''; st.cobra = false;
       trap.active = false; trap.done = true; trap.armed = false; hold.on = false;
-      deckState.stillT = 0; deckState.latch = true;
+      deckState.stillT = 0; deckState.latch = true; if (waitIdx == null) deckState.spot = idx;
     }
+    function spotMsg(i) { var S = K.SPOTS[i]; return S && S[3] ? 'ON ' + S[4] + '. HOLD BRAKE, BOOST, RELEASE BRAKE TO LAUNCH' : 'ON THE ANGLED DECK. HOLD BRAKE, BOOST, RELEASE BRAKE FOR THE DECK RUN'; }
     function spawn(idx) {
       if (!on) return false;
-      var wait = (idx | 0) >= K.SPOTS.length; if (wait) idx = 'wait';
-      var sp = wait ? WAIT_SPOT : K.SPOTS[idx || 0] || K.SPOTS[0];
+      idx = idx | 0; deckState.slot = idx;
+      var wait = idx >= 4, si = spotFor(idx), sp = wait ? K.WAIT[(idx - 4) % K.WAIT.length] : K.SPOTS[si];
       var x = P.x + sp[0] * P.c - sp[1] * P.s, z = P.z + sp[0] * P.s + sp[1] * P.c;
       phys.reset('runway', { e: x, n: -z, h: K.D, hdgDeg: P.psi / DEG });
-      place(idx); deckState.waitT = wait ? 7 : 0;
-      say(wait ? 'ON DECK. WAIT FOR SPOT 3' : 'ON DECK. HOLD BRAKE, BOOST, RELEASE BRAKE TO LAUNCH');
+      if (wait) place(null, idx - 4); else place(si);
+      deckState.waitT = wait ? 7 : 0;
+      say(wait ? 'ON DECK. WAIT FOR A FREE SPOT' : spotMsg(si));
       return true;
     }
     // test / tutorial hook: on final behind the ship, on the glide slope, gear down
     function setupFinal(dist, kmh) {
       if (!on) return false;
       dist = dist || 2000; var sp = (kmh || 250) / 3.6;
-      var ax = axisX(K.AIM, 0), az = axisZ(K.AIM, 0), Ax = P.x + ax * P.c - az * P.s, Az = P.z + ax * P.s + az * P.c;
-      var ux = UX * P.c - UZ * P.s, uz = UX * P.s + UZ * P.c;   // landing direction, world
+      var ax = cX(K.AIM, 0), az = cZ(K.AIM, 0), Ax = P.x + ax * P.c - az * P.s, Az = P.z + ax * P.s + az * P.c;
+      var ux = CUX * P.c - CUZ * P.s, uz = CUX * P.s + CUZ * P.c;   // landing direction, world
       var x = Ax - ux * dist, z = Az - uz * dist, y = K.D + Math.tan(K.GS * DEG) * dist + GEAR_H;
       var hd = Math.atan2(ux, -uz);
       phys.reset('air', { e: x, n: -z, alt: y, hdgDeg: hd / DEG, speed: sp });
-      // aim slightly ahead of where the ship will be
       st.vel.set(ux * sp, -Math.tan(K.GS * DEG) * sp, uz * sp);
       eul.set(6 * DEG, -hd, 0, 'YXZ'); st.q.setFromEuler(eul);
       st.gearDown = true; st.gearT = 1; st.thr = 0.55;
@@ -37486,20 +37988,29 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     var model = null;
     var NW = 44, WAKE_DT = 3.2;
     function buildModel() {
-      var B = buildShipBody(PAL.friend), grp = B.group, D = K.D, i, j, z;
+      var grp = new T.Group(), D = K.D, i, j, z, s = SCALE;
       grp.name = 'carrier';
-      var radar = B.radar, TUR = B.TUR, olsX = B.olsX, olsZ = B.olsZ, cI = B.cI, cWh = B.cWh;
-      var LIFE = buildDeckLife(true); grp.add(LIFE.group);
-      // jet blast deflectors: hinged behind each launch spot, rise while a jet spools up there
-      var jbdMat = new T.MeshStandardMaterial({ color: lin(0x4d5359), roughness: 0.7, metalness: 0.4 }), jbdGeo = new T.BoxGeometry(11, 0.3, 4.6).translate(0, 0.15, 2.3), jbd = [];
-      for (i = 0; i < K.SPOTS.length; i++) { var jp = new T.Group(); jp.position.set(K.SPOTS[i][0], D + 0.02, K.SPOTS[i][1] + 12); var jmesh = new T.Mesh(jbdGeo, jbdMat); jmesh.castShadow = true; jp.add(jmesh); grp.add(jp); jbd.push({ g: jp, a: 0, tgt: 0 }); }
-      // the caught wire (V shape to the hook while trapped)
+      var B = buildCVBody(); grp.add(B.group);
+      var radar = B.radar, olsX = B.olsX, olsZ = B.olsZ, cI = B.cI, cWh = B.cWh;
+      var LIFE = buildCVLife(); grp.add(LIFE.group);
+      // arrestor wires (raised a little)
+      var wires = [], wireMat = new T.MeshStandardMaterial({ color: 0x1a1b1d, roughness: 0.5, metalness: 0.6 });
+      for (i = 0; i < K.WIRES.length; i++) { var wm = new T.Mesh(new T.BoxGeometry(2 * K.AHW + 2.4, 0.14, 0.14), wireMat); wm.position.set(cX(K.WIRES[i], 0), D + 0.12, cZ(K.WIRES[i], 0)); wm.rotation.y = -K.ANG * DEG; grp.add(wm); wires.push(wm); }
+      // catapults: jet blast deflectors (hinged panel aft of each catapult spot) + shuttles
+      var jbdMat = new T.MeshStandardMaterial({ color: lin(0x50565c), roughness: 0.7, metalness: 0.4 }), jbdGeo = new T.BoxGeometry(14, 0.35, 5.2).translate(0, 0.17, 2.6), jbd = [], shut = [];
+      var shGeo = new T.BoxGeometry(0.8, 0.35, 2.2), shMat = new T.MeshStandardMaterial({ color: 0x9aa0a6, roughness: 0.4, metalness: 0.7 });
+      for (i = 0; i < 4; i++) {
+        var S = K.SPOTS[i], hd = S[2] * DEG, fx0 = Math.sin(hd), fz0 = -Math.cos(hd);
+        var jp = new T.Group(); jp.position.set(S[0] - fx0 * 11.5, D + 0.02, S[1] - fz0 * 11.5); jp.rotation.y = -hd;
+        var jmesh = new T.Mesh(jbdGeo, jbdMat); jmesh.castShadow = true; jp.add(jmesh); grp.add(jp); jbd.push({ g: jp, a: 0, tgt: 0 });
+        var sh = new T.Mesh(shGeo, shMat); sh.position.set(S[0] - fx0 * 4, D + 0.1, S[1] - fz0 * 4); sh.rotation.y = -hd; grp.add(sh); shut.push({ m: sh, x0: sh.position.x, z0: sh.position.z, fx: fx0, fz: fz0, t: 0, len: S[5] });
+      }
       var wlg = new T.BufferGeometry(); wlg.setAttribute('position', new T.BufferAttribute(new Float32Array(9), 3)); wlg.attributes.position.setUsage(T.DynamicDrawUsage);
       var wline = new T.Line(wlg, new T.LineBasicMaterial({ color: 0x101112 })); wline.visible = false; wline.frustumCulled = false; grp.add(wline);
-      // night: floodlight wash on the deck
-      var flood = new T.Mesh(new T.PlaneGeometry(80, 300), new T.MeshBasicMaterial({ map: dotTexture(), color: new T.Color(1.0, 0.82, 0.55), transparent: true, opacity: 0, depthWrite: false, blending: T.AdditiveBlending, fog: false }));
-      flood.rotation.x = -Math.PI / 2; flood.position.set(-4, D + 0.4, 10); flood.visible = false; grp.add(flood);
-      // ---- CIWS turrets (visual)
+      var flood = new T.Mesh(new T.PlaneGeometry(100, 400), new T.MeshBasicMaterial({ map: dotTexture(), color: new T.Color(1.0, 0.82, 0.55), transparent: true, opacity: 0, depthWrite: false, blending: T.AdditiveBlending, fog: false }));
+      flood.rotation.x = -Math.PI / 2; flood.position.set(-6, D + 0.4, 10); flood.visible = false; grp.add(flood);
+      // ---- CIWS turrets (visual tracers): port fwd, stb fwd, port aft, stb aft
+      var TUR = [[-23.5 * s, D - 3.2 * s + 0.2, -114 * s], [28.5 * s, D - 3.2 * s + 0.2, -92 * s], [-31 * s, D - 3.2 * s + 0.2, 141 * s], [27.5 * s, D - 3.2 * s + 0.2, 157 * s]];
       var tb = new Acc(); tb.geo(new T.CylinderGeometry(1.3, 1.5, 1.2, 12), new T.Matrix4().makeTranslation(0, 0.6, 0), cI); tb.geo(new T.SphereGeometry(1.15, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), new T.Matrix4().makeTranslation(0, 1.2, 0), cWh);
       var tbG = tb.build(), barG = new T.BoxGeometry(0.32, 0.32, 3.2).translate(0, 0, -1.9), tMat = new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.3 }), bMat = new T.MeshStandardMaterial({ color: lin(0x2a2d30), roughness: 0.5, metalness: 0.6 });
       var turrets = [];
@@ -37507,28 +38018,25 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
         var tg = new T.Group(); tg.position.set(TUR[i][0], TUR[i][1], TUR[i][2]);
         var base = new T.Mesh(tbG, tMat); base.castShadow = true; tg.add(base);
         var piv = new T.Group(); piv.position.set(0, 1.3, 0); tg.add(piv);
-        var bar = new T.Mesh(barG, bMat); piv.add(bar);
+        piv.add(new T.Mesh(barG, bMat));
         tg.rotation.y = TUR[i][0] < 0 ? Math.PI / 2 : -Math.PI / 2;
         grp.add(tg); turrets.push({ g: tg, piv: piv, cool: 0, burst: 0, wp: new T.Vector3() });
       }
       // ---- deck lights (one Points)
       var dot = dotTexture(), LP = [], LC = [];
       function L(x, y, z, r, g, b) { LP.push(x, y, z); LC.push(r, g, b); }
-      for (var a = 0; a <= K.ALEN; a += 15) { L(axisX(a, -K.AHW - 0.3), D + 0.25, axisZ(a, -K.AHW - 0.3), 3.2, 3.2, 3.0); L(axisX(a, K.AHW + 0.3), D + 0.25, axisZ(a, K.AHW + 0.3), 3.2, 3.2, 3.0); }
-      for (a = 5; a <= K.ALEN; a += 10) L(axisX(a, 0), D + 0.2, axisZ(a, 0), 2.4, 2.4, 2.3);
-      for (i = 0; i < K.WIRES.length; i++) { L(axisX(K.WIRES[i], -K.AHW - 1.5), D + 0.3, axisZ(K.WIRES[i], -K.AHW - 1.5), 4, 2.2, 0.5); L(axisX(K.WIRES[i], K.AHW + 1.5), D + 0.3, axisZ(K.WIRES[i], K.AHW + 1.5), 4, 2.2, 0.5); }
-      for (i = 0; i < 7; i++) L(K.AX0, D - 1.5 - i * 1.4, K.STERN + 0.15, 4.5, 2.4, 0.6);   // drop line on the stern
-      for (z = K.BOW + 4; z < K.STERN; z += 20) { var k3 = eIdx(z), yh = D + rampH(z) + 0.2; L(-EPORT[k3] + 0.4, yh, z, 0.6, 1.6, 3.2); L(ESTB[k3] - 0.4, yh, z, 0.6, 1.6, 3.2); }
-      L(-9.5, D + rampH(K.BOW) + 0.3, K.BOW + 0.3, 4.5, 0.3, 0.2); L(9.5, D + rampH(K.BOW) + 0.3, K.BOW + 0.3, 0.3, 4.0, 0.6);
-      for (var xr = -8; xr <= 8; xr += 4) L(xr, D + rampH(K.BOW) + 0.3, K.BOW + 0.4, 3, 3, 2.6);
-      L(27, D + 48.7, -0.7, 5, 0.25, 0.15); L(22, D + 38.9, -0.9, 4, 0.3, 0.2); L(32, D + 38.9, -0.9, 4, 0.3, 0.2);
-      for (i = 0; i < K.SPOTS.length; i++) L(K.SPOTS[i][0], D + 0.25, K.SPOTS[i][1] - 3, 4, 3.2, 0.6);
+      for (var a = 0; a <= K.ALEN; a += 16) { L(cX(a, -K.AHW - 0.3), D + 0.25, cZ(a, -K.AHW - 0.3), 3.2, 3.2, 3.0); L(cX(a, K.AHW + 0.3), D + 0.25, cZ(a, K.AHW + 0.3), 3.2, 3.2, 3.0); }
+      for (a = 5; a <= K.ALEN; a += 11) L(cX(a, 0), D + 0.2, cZ(a, 0), 2.4, 2.4, 2.3);
+      for (i = 0; i < K.WIRES.length; i++) { L(cX(K.WIRES[i], -K.AHW - 1.8), D + 0.3, cZ(K.WIRES[i], -K.AHW - 1.8), 4, 2.2, 0.5); L(cX(K.WIRES[i], K.AHW + 1.8), D + 0.3, cZ(K.WIRES[i], K.AHW + 1.8), 4, 2.2, 0.5); }
+      for (i = 0; i < 8; i++) L(K.AX0, D - 1.5 - i * 1.6, K.STERN + 0.2, 4.5, 2.4, 0.6);   // drop line on the stern
+      for (z = K.BOW + 6; z < K.STERN; z += 22) { var k3 = cIdx(z); L(-CPORT[k3] + 0.5, D + 0.2, z, 0.6, 1.6, 3.2); L(CSTB[k3] - 0.5, D + 0.2, z, 0.6, 1.6, 3.2); }
+      for (i = 0; i < 4; i++) { var S2 = K.SPOTS[i], h2 = S2[2] * DEG; for (var q = 0; q <= S2[5]; q += 20) L(S2[0] + Math.sin(h2) * q, D + 0.2, S2[1] - Math.cos(h2) * q, 3.6, 3.0, 0.6); }
+      L(K.MAST[0], D + K.MAST[2] + 2.6, K.MAST[1], 5, 0.25, 0.15); L(K.MAST[0] - 4.6, D + 38 * s + 0.6, K.MAST[1], 4, 0.3, 0.2); L(K.MAST[0] + 4.6, D + 38 * s + 0.6, K.MAST[1], 4, 0.3, 0.2);
+      L(-6 * s, D + 0.3, K.BOW + 4, 4.5, 0.3, 0.2); L(6 * s, D + 0.3, K.BOW + 4, 0.3, 4.0, 0.6);
       var lg = new T.BufferGeometry(); lg.setAttribute('position', new T.Float32BufferAttribute(LP, 3)); lg.setAttribute('color', new T.Float32BufferAttribute(LC, 3));
-      var lights = new T.Points(lg, new T.PointsMaterial({ size: 1.5, map: dot, vertexColors: true, transparent: true, depthWrite: false, blending: T.AdditiveBlending, sizeAttenuation: true }));
+      var lights = new T.Points(lg, new T.PointsMaterial({ size: 1.6, map: dot, vertexColors: true, transparent: true, depthWrite: false, blending: T.AdditiveBlending, sizeAttenuation: true }));
       lights.frustumCulled = false; grp.add(lights);
-      // ---- hull foam (bow wave + side wash), attached to the ship
-      var HF = buildHullFoam(), foamMat = HF.mat;
-      grp.add(new T.Mesh(HF.geo, foamMat));
+      var HF = buildCVFoam(), foamMat = HF.mat; grp.add(new T.Mesh(HF.geo, foamMat));
       // ---- wake ribbon (world space, follows the course history)
       var wpos = new Float32Array(NW * 2 * 3), wcol = new Float32Array(NW * 2 * 3), wuv = new Float32Array(NW * 2 * 2), widx = [];
       for (i = 0; i < NW; i++) {
@@ -37539,14 +38047,14 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       var wg = new T.BufferGeometry(); wg.setAttribute('position', new T.BufferAttribute(wpos, 3)); wg.setAttribute('color', new T.BufferAttribute(wcol, 3)); wg.setAttribute('uv', new T.BufferAttribute(wuv, 2)); wg.setIndex(widx);
       wg.attributes.position.setUsage(T.DynamicDrawUsage);
       var wake = new T.Mesh(wg, foamMat); wake.frustumCulled = false; wake.name = 'carrierWake';
-      // ---- Luna optical landing system: datum bars + ball (screen-size sprites, seen only from the approach)
+      // ---- Fresnel lens (IFLOLS): datum bars + meatball + wave-off (screen-size sprites, seen only from the approach)
       function spr(r, g, b, sx, sy) {
         var m = new T.SpriteMaterial({ map: dot, color: new T.Color(r, g, b), sizeAttenuation: false, transparent: true, depthWrite: false, blending: T.AdditiveBlending, fog: false });
-        var s = new T.Sprite(m); s.scale.set(sx, sy, 1); s.visible = false; scene.add(s); return s;
+        var sp2 = new T.Sprite(m); sp2.scale.set(sx, sy, 1); sp2.visible = false; scene.add(sp2); return sp2;
       }
-      var ols = [spr(0.3, 3.2, 0.7, 0.03, 0.01), spr(0.3, 3.2, 0.7, 0.03, 0.01), spr(4.5, 2.4, 0.4, 0.016, 0.016), spr(5, 0.25, 0.15, 0.013, 0.013), spr(5, 0.25, 0.15, 0.013, 0.013)];   // datum, ball, wave-off
+      var ols = [spr(0.3, 3.2, 0.7, 0.03, 0.01), spr(0.3, 3.2, 0.7, 0.03, 0.01), spr(4.5, 2.4, 0.4, 0.016, 0.016), spr(5, 0.25, 0.15, 0.013, 0.013), spr(5, 0.25, 0.15, 0.013, 0.013)];
       scene.add(grp); scene.add(wake);
-      return { group: grp, wake: wake, wpos: wpos, wg: wg, radar: radar, turrets: turrets, ols: ols, olsL: [olsX, D + 1.6, olsZ], jbd: jbd, wline: wline, wires: B.wires, flood: flood, lights: lights };
+      return { group: grp, wake: wake, wpos: wpos, wg: wg, radar: radar, turrets: turrets, ols: ols, olsL: [olsX, D + 1.6 * s, olsZ], jbd: jbd, shut: shut, wline: wline, wires: wires, flood: flood, lights: lights };
     }
     if (!headless) { try { model = buildModel(); } catch (e) { model = null; if (root.console) console.warn('carrier model', e); } }
 
@@ -37566,22 +38074,22 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       if (Math.abs(diff) > 2) setT(target, cc);
       else if (diff !== 0) setT(tS + diff * Math.min(1, dt * 0.8), cc);
       deckState.onDeck = contact();
-      // deck: stopped -> hangar (repair + rearm); closing it puts the jet on launch spot 3
+      // deck: stopped -> hangar (repair + rearm); closing it puts the jet on its launch spot
       var rel = deckState.onDeck ? Math.hypot(st.vel.x - P.vx, st.vel.z - P.vz) : 99;
       var camp = opts.getCampaign ? opts.getCampaign() : null;
-      if (deckState.onDeck && rel < 3 && !trap.active && !hold.on && !st.crashed) deckState.stillT += dt;
+      if (deckState.onDeck && rel < 3 && !trap.active && !hold.on && !st.crashed && launch.phase !== 'count') deckState.stillT += dt;
       else { deckState.stillT = 0; if (!deckState.onDeck || rel > 8) deckState.latch = false; }
       if (deckState.stillT > 1.2 && !deckState.latch) {
         deckState.latch = true;
         if (camp && camp.openHangar && !camp.hangarOpen) { camp.openHangar(); deckState.fromHangar = true; }
-        else if (!camp) { st.health = 100; if (combat && combat.rearm) { try { combat.rearm(); } catch (e) {} } say('REPAIRED AND REARMED'); place(0); }
+        else if (!camp) { st.health = 100; if (combat && combat.rearm) { try { combat.rearm(); } catch (e) {} } say('REPAIRED AND REARMED'); place(spotFor(deckState.slot)); }
       }
-      if (deckState.waitT > 0) { if (contact()) { deckState.waitT -= dt; if (deckState.waitT <= 0) { place(0); say('ON SPOT 3. HOLD BRAKE, BOOST, RELEASE BRAKE TO LAUNCH'); } } else deckState.waitT = 0; }
+      if (deckState.waitT > 0) { if (contact()) { deckState.waitT -= dt; if (deckState.waitT <= 0) { var ws = spotFor(deckState.slot); place(ws); say(spotMsg(ws)); } } else deckState.waitT = 0; }
       raidTick(dt, camp);
       launchTick(dt);
       var wth = opts.getWeather ? opts.getWeather() : null; var tw = (wth && wth.turbulence) || 0; SEA.turb += Math.max(-dt * 0.05, Math.min(dt * 0.05, tw - SEA.turb));
       SHARED.night = wth && wth.preset === 'night' ? 1 : 0;
-      if (deckState.fromHangar && camp && !camp.hangarOpen) { deckState.fromHangar = false; if (contact()) { place(0); say('ON SPOT 3. HOLD BRAKE, BOOST, RELEASE BRAKE TO LAUNCH'); } }
+      if (deckState.fromHangar && camp && !camp.hangarOpen) { deckState.fromHangar = false; if (contact()) { var hs = spotFor(deckState.slot); place(hs); say(spotMsg(hs)); } }
       hud();
       if (model) visuals(dt, camera || opts.camera);
     }
@@ -37595,14 +38103,15 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       if (!raid.active) {
         if (!mission) return;
         raid.next -= dt; if (raid.next > 0) return;
-        raid.next = 300 + Math.random() * 300;
+        raid.next = (camp && camp.missionMix && camp.missionMix() === 'naval' ? 200 : 300) + Math.random() * 300;
         if (Math.random() < 0.4 || Math.hypot(st.pos.x - P.x, st.pos.z - P.z) > 30000) return;
         var KS = root.FL.ENEMY_KINDS || {}, a = Math.random() * Math.PI * 2, d = 16000;
         var e = Math.max(-44000, Math.min(44000, P.e + Math.sin(a) * d)), n = Math.max(-44000, Math.min(44000, P.n + Math.cos(a) * d));
-        var hdg = Math.atan2(P.e - e, P.n - n) / DEG, tgt = { e: P.e + P.vx * 75, n: P.n - P.vz * 75 };
+        var hdg = Math.atan2(P.e - e, P.n - n) / DEG;
+        var tgP = { e: P.e + P.vx * 75, n: P.n - P.vz * 75 };
         raid.group = 'CVRAID' + (++raid.n);
         try {
-          if (KS.tu95) combat.spawn('tu95', { e: e, n: n, alt: 3200, count: 1, heading: hdg, target: tgt, escorts: 2, escortKind: KS.mig29 ? 'mig29' : 'mig21', group: raid.group, skill: 0.5 });
+          if (KS.tu95) combat.spawn('tu95', { e: e, n: n, alt: 3200, count: 1, heading: hdg, target: tgP, escorts: 2, escortKind: KS.mig29 ? 'mig29' : 'mig21', group: raid.group, skill: 0.5 });
           else combat.spawn(KS.su25 ? 'su25' : 'bandit', { e: e, n: n, alt: 1500, count: 3, heading: hdg, group: raid.group, skill: 0.5 });
         } catch (er) { return; }
         raid.active = true; raid.t = 0; raid.hits = 0;
@@ -37620,29 +38129,35 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       var gp = null; try { gp = combat.groupPos ? combat.groupPos(raid.group) : null; } catch (er) { gp = null; }
       if (gp && raid.hits < 3 && Math.hypot(gp.x - P.x, gp.z - P.z) < 2200) {
         raid.hits++;
-        if (fx && fx.explosion) for (var i = 0; i < 2; i++) { tv2.set(P.x + (Math.random() - 0.5) * 120, K.D + 2, P.z + (Math.random() - 0.5) * 120); if (fx.impact) fx.impact(Math.random() < 0.6 ? 'boat' : 'cookoff', tv2, { air: false, scale: 1.2 }); else fx.explosion(tv2, 1.4, { water: Math.random() < 0.6, air: false }); }
+        if (fx && fx.explosion) for (var i = 0; i < 2; i++) { tv2.set(P.x + (Math.random() - 0.5) * 150, K.D + 2, P.z + (Math.random() - 0.5) * 150); if (fx.impact) fx.impact(Math.random() < 0.6 ? 'boat' : 'cookoff', tv2, { air: false, scale: 1.2 }); else fx.explosion(tv2, 1.4, { water: Math.random() < 0.6, air: false }); }
         if (raid.hits === 1) call('cvhit', 'Overlord. The carrier is hit! Kill those bombers.');
       }
       if (raid.t > 240) raid.active = false;
     }
 
-    // ---- launch sequence on a spot: hold brake + boost -> blast deflector up, heat haze, 3-2-1, restrainers release
-    var launch = { phase: '', t: 0, spot: -1, go: 0, n: 0, cat: 0 };   // cat > 0: catapult stroke running (catobar jets)
+    // ---- launch sequence on a spot: hold brake + boost -> blast deflector up, heat haze, 3-2-1, release (catapult shot or deck run)
+    var launch = { phase: '', t: 0, spot: -1, go: 0, n: 0, cat: 0, spotGo: 0 };
     function lso(text, key) { if (opts.comms && opts.comms.say) { try { opts.comms.say('lso' + (key || ''), text, 3, 2.2, 'PADDLES'); } catch (e) {} } }
     function launchTick(dt) {
       launch.go = Math.max(0, launch.go - dt);
       var c = contact(), lx = QX, lz = QZ, i, near = -1;
       if (!c) launch.cat = 0;   // off the deck: the catapult stroke is over
-      if (c) for (i = 0; i < K.SPOTS.length; i++) if (Math.abs(lx - K.SPOTS[i][0]) < 6 && Math.abs(lz - K.SPOTS[i][1]) < 9) near = i;
-      if (launch.phase === '' && c && hold.on && st.thr > 0.85 && near >= 0) { launch.phase = 'count'; launch.t = 0; launch.spot = near; launch.n = 3; say('BLAST DEFLECTOR UP. LAUNCH IN 3'); }
+      if (c) for (i = 0; i < K.SPOTS.length; i++) if (Math.abs(lx - K.SPOTS[i][0]) < 7 && Math.abs(lz - K.SPOTS[i][1]) < 10) near = i;
+      if (launch.phase === '' && c && hold.on && st.thr > 0.85 && near >= 0) {
+        launch.phase = 'count'; launch.t = 0; launch.spot = near; launch.n = 3;
+        var catSpot = K.SPOTS[near][3] === 1;
+        say(catSpot && isCat() ? 'HOOKED UP TO ' + K.SPOTS[near][4] + '. LAUNCH IN 3' : catSpot ? 'NO CATAPULT BAR — DECK RUN. LAUNCH IN 3' : 'DECK RUN. LAUNCH IN 3');
+      }
       if (launch.phase === 'count') {
         if (!c || !hold.on) { launch.phase = 'down'; launch.t = 0; }
         else {
           launch.t += dt;
           if (launch.t > 4 - launch.n && launch.n > 1) { launch.n--; say('LAUNCH IN ' + launch.n); }
           if (launch.t >= 3) {
-            var lsp = phys.spec ? phys.spec() : null, cat = !!(lsp && lsp.carrier === 'catobar');
-            launch.phase = 'down'; launch.t = 0; launch.go = 3; launch.cat = cat ? 2.2 : 0;
+            var cat = isCat() && K.SPOTS[launch.spot][3] === 1;
+            launch.phase = 'down'; launch.t = 0; launch.go = 3; launch.cat = cat ? 2.2 : 0; launch.spotGo = launch.spot;
+            if (cat && model && model.shut[launch.spot]) model.shut[launch.spot].t = 0.001;
+            if (cat && fx && fx.smokePuff) { spotDir(launch.spot); var S = K.SPOTS[launch.spot]; for (var q = 0; q < 10; q++) { var dd = q * S[5] / 10; tv2.set(P.x + S[0] * P.c - S[1] * P.s + dirX * dd, K.D + 0.8, P.z + S[0] * P.s + S[1] * P.c + dirZ * dd); fx.smokePuff(tv2, 3 + Math.random() * 2, 1.6, 0.95); } }
             say(cat ? 'CATAPULT — LAUNCH!' : 'LAUNCH!'); lso(cat ? 'Shooter: catapult, launch!' : 'Shooter: launch!', 'l');
           }
           if (fx && fx.smokePuff && Math.random() < dt * 14) {   // heat haze / exhaust behind the nozzles
@@ -37672,11 +38187,11 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     }
 
     function hud() {
-      var o = info, ax = axisX(K.AIM, 0), az = axisZ(K.AIM, 0);
+      var o = info, ax = cX(K.AIM, 0), az = cZ(K.AIM, 0);
       o.available = true;
       o.pos.set(P.x, 0, P.z); o.aim.set(P.x + ax * P.c - az * P.s, K.D, P.z + ax * P.s + az * P.c);
       o.hdgDeg = P.psi / DEG; o.landHdgDeg = ((P.psi / DEG - K.ANG) % 360 + 360) % 360; o.speedKts = Math.hypot(P.vx, P.vz) * 1.944;
-      var ux = UX * P.c - UZ * P.s, uz = UX * P.s + UZ * P.c, rx = RX * P.c - RZ * P.s, rz = RX * P.s + RZ * P.c;
+      var ux = CUX * P.c - CUZ * P.s, uz = CUX * P.s + CUZ * P.c, rx = CRX * P.c - CRZ * P.s, rz = CRX * P.s + CRZ * P.c;
       var dx = st.pos.x - o.aim.x, dy = st.pos.y - GEAR_H - o.aim.y, dz = st.pos.z - o.aim.z;
       var back = -(dx * ux + dz * uz), lat = dx * rx + dz * rz;
       o.dist = Math.sqrt(dx * dx + dy * dy + dz * dz); o.back = back; o.height = dy;
@@ -37698,6 +38213,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       o.call = c;
       lsoTick(o, 1 / 60);
       o.state = st.crashed ? '' : trap.active ? 'trap' : hold.on ? 'hold' : o.onDeck ? 'deck' : o.onFinal ? 'final' : '';
+      o.spot = o.onDeck && K.SPOTS[deckState.spot] ? K.SPOTS[deckState.spot][4] : '';
       o.msg = msg.t < 4 ? msg.text : ''; o.msgAge = msg.t;
       return o;
     }
@@ -37705,8 +38221,13 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     function visuals(dt, camera) {
       var g = model.group, i;
       g.position.set(P.x, 0, P.z); g.rotation.set(P.pitch, -P.psi, -P.roll, 'YXZ'); g.updateMatrixWorld(true);
-      // blast deflectors
-      for (i = 0; i < model.jbd.length; i++) { var J = model.jbd[i]; J.a += Math.max(-dt * 0.9, Math.min(dt * 0.9, J.tgt * 1.05 - J.a)); J.g.rotation.x = -J.a; }
+      for (i = 0; i < model.jbd.length; i++) { var J = model.jbd[i]; J.a += Math.max(-dt * 0.9, Math.min(dt * 0.9, J.tgt * 1.05 - J.a)); J.g.children[0].rotation.x = -J.a; }
+      // catapult shuttles: run down the track with the jet, then return
+      for (i = 0; i < model.shut.length; i++) {
+        var Sh = model.shut[i]; if (!Sh.t) continue;
+        Sh.t += dt; var tr = Sh.t < 2.2 ? Math.min(Sh.len, 0.5 * 34 * Sh.t * Sh.t) : Math.max(0, Sh.len * (1 - (Sh.t - 2.2) / 6));
+        Sh.m.position.set(Sh.x0 + Sh.fx * tr, K.D + 0.1, Sh.z0 + Sh.fz * tr); if (Sh.t > 8.2) { Sh.t = 0; Sh.m.position.set(Sh.x0, K.D + 0.1, Sh.z0); }
+      }
       // caught wire: a V from the sheaves to the hook, springs back after release
       var WL = model.wline, wk = trap.active ? trap.wire - 1 : wireAnim.k;
       if (trap.active && trap.wire) {
@@ -37714,38 +38235,38 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
         wireAnim.k = trap.wire - 1; wireAnim.t = 0; wireAnim.hx = QX; wireAnim.hz = QZ;
       } else if (wireAnim.k >= 0) wireAnim.t += dt;
       if (wk >= 0 && wireAnim.t < 1.2) {
-        var Wa = K.WIRES[wk], bl = Math.min(1, wireAnim.t / 1.2), hx = wireAnim.hx + (axisX(Wa, 0) - wireAnim.hx) * bl, hz = wireAnim.hz + (axisZ(Wa, 0) - wireAnim.hz) * bl, ar = WL.geometry.attributes.position.array;
-        ar[0] = axisX(Wa, -K.AHW - 1.4); ar[1] = K.D + 0.3; ar[2] = axisZ(Wa, -K.AHW - 1.4);
-        ar[3] = hx; ar[4] = K.D + 0.25; ar[5] = hz; ar[6] = axisX(Wa, K.AHW + 1.4); ar[7] = K.D + 0.3; ar[8] = axisZ(Wa, K.AHW + 1.4);
+        var Wa = K.WIRES[wk], bl = Math.min(1, wireAnim.t / 1.2), hx = wireAnim.hx + (cX(Wa, 0) - wireAnim.hx) * bl, hz = wireAnim.hz + (cZ(Wa, 0) - wireAnim.hz) * bl, ar = WL.geometry.attributes.position.array;
+        ar[0] = cX(Wa, -K.AHW - 1.6); ar[1] = K.D + 0.3; ar[2] = cZ(Wa, -K.AHW - 1.6);
+        ar[3] = hx; ar[4] = K.D + 0.25; ar[5] = hz; ar[6] = cX(Wa, K.AHW + 1.6); ar[7] = K.D + 0.3; ar[8] = cZ(Wa, K.AHW + 1.6);
         WL.geometry.attributes.position.needsUpdate = true; WL.visible = true;
         for (var wi = 0; wi < model.wires.length; wi++) model.wires[wi].visible = wi !== wk;
       } else if (WL.visible) { WL.visible = false; wireAnim.k = -1; for (wi = 0; wi < model.wires.length; wi++) model.wires[wi].visible = true; }
       // night lighting
       var sd = baseWorld && baseWorld.sunDir ? baseWorld.sunDir.y : 0.5, dark = Math.max(SHARED.night || 0, Math.min(1, Math.max(0, (0.14 - sd) / 0.16)));
-      model.lights.material.size = 1.5 + dark * 2.6; model.flood.visible = dark > 0.02; model.flood.material.opacity = dark * 0.22;
+      model.lights.material.size = 1.6 + dark * 2.6; model.flood.visible = dark > 0.02; model.flood.material.opacity = dark * 0.22;
       // bow spray at speed
       sprayT -= dt;
       if (sprayT <= 0 && fx && fx.smokePuff) {
         var vs = Math.hypot(P.vx, P.vz); sprayT = vs > 5 ? 0.2 : 1;
-        if (vs > 5) for (var bs = -1; bs <= 1; bs += 2) { var bx = bs * (6 + Math.random() * 3), bz = -136 + Math.random() * 8; tv2.set(P.x + bx * P.c - bz * P.s, 1.2 + Math.random() * 2, P.z + bx * P.s + bz * P.c); fx.smokePuff(tv2, 4 + vs * 0.35, 1.4, 0.92); }
+        if (vs > 5) for (var bs = -1; bs <= 1; bs += 2) { var bx = bs * (6 + Math.random() * 4), bz = K.BOW + 22 * SCALE + Math.random() * 10; tv2.set(P.x + bx * P.c - bz * P.s, 1.2 + Math.random() * 2, P.z + bx * P.s + bz * P.c); fx.smokePuff(tv2, 5 + vs * 0.4, 1.4, 0.92); }
       }
       radarA += dt * 2.2; model.radar.rotation.y = radarA;
       // wake: stern points of the past course
       var wp = model.wpos;
       for (i = 0; i < NW; i++) {
         poseAt(course, tS - i * WAKE_DT, tmpP);
-        var sx = tmpP.x - (K.STERN - 4) * tmpP.s, sz = tmpP.z + (K.STERN - 4) * tmpP.c;   // local (0, 0, +STERN) -> world
-        var hw = 14 + i * 1.9, k = i * 6;
+        var sx = tmpP.x - (K.STERN - 5) * tmpP.s, sz = tmpP.z + (K.STERN - 5) * tmpP.c;
+        var hw = 18 + i * 2.2, k = i * 6;
         wp[k] = sx - hw * tmpP.c; wp[k + 1] = 0.3; wp[k + 2] = sz - hw * tmpP.s;
         wp[k + 3] = sx + hw * tmpP.c; wp[k + 4] = 0.3; wp[k + 5] = sz + hw * tmpP.s;
       }
       model.wg.attributes.position.needsUpdate = true;
-      // OLS
+      // Fresnel lens
       var ols = model.ols, I = info;
       if (camera) {
         var Lx = model.olsL[0], Lz = model.olsL[2], wx = P.x + Lx * P.c - Lz * P.s, wz = P.z + Lx * P.s + Lz * P.c, wy = model.olsL[1];
         var cp = camera.position, ddx = cp.x - wx, ddz = cp.z - wz, ddy = cp.y - wy, dc = Math.sqrt(ddx * ddx + ddy * ddy + ddz * ddz);
-        var ux = UX * P.c - UZ * P.s, uz = UX * P.s + UZ * P.c, rx = RX * P.c - RZ * P.s, rz = RX * P.s + RZ * P.c;
+        var ux = CUX * P.c - CUZ * P.s, uz = CUX * P.s + CUZ * P.c, rx = CRX * P.c - CRZ * P.s, rz = CRX * P.s + CRZ * P.c;
         var back = -(ddx * ux + ddz * uz), lat = ddx * rx + ddz * rz;
         var vis = back > 60 && dc < 7000 && Math.abs(Math.atan2(lat, back)) < 30 * DEG && ddy > -2;
         if (vis) {
@@ -37753,9 +38274,9 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
           ols[0].position.set(wx - rx * sp * 3, wy, wz - rz * sp * 3); ols[1].position.set(wx + rx * sp * 3, wy, wz + rz * sp * 3);
           ols[2].position.set(wx, wy + off * sp, wz);
           var low = ang < -1.2, fl = low && ((tS * 3) % 1) < 0.5;
-          ols[2].material.color.setRGB(low ? 4.5 : 4.5, low ? 0.3 : 2.4, low ? 0.2 : 0.4);
+          ols[2].material.color.setRGB(4.5, low ? 0.3 : 2.4, low ? 0.2 : 0.4);
           ols[2].visible = !fl;
-          var wo = vis && I.call === CALL.vlow && ((tS * 4) % 1) < 0.6;   // wave-off lights flash red
+          var wo = I.call === CALL.vlow && ((tS * 4) % 1) < 0.6;   // wave-off lights flash red
           ols[3].position.set(wx - rx * sp * 4.5, wy + sp * 1.5, wz - rz * sp * 4.5); ols[4].position.set(wx + rx * sp * 4.5, wy + sp * 1.5, wz + rz * sp * 4.5);
           ols[3].visible = ols[4].visible = wo;
         } else { ols[2].visible = false; ols[3].visible = ols[4].visible = false; }
@@ -37766,9 +38287,9 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       if (tgt.scanT <= 0 && combat && combat.hud) {
         tgt.scanT = 0.25; var prev = tgt.pos; tgt.pos = null;
         var H = null; try { H = combat.hud(); } catch (e) { H = null; }
-        var L = H && H.targets, bd = 3500 * 3500;
-        if (L) for (i = 0; i < L.length; i++) {
-          var t = L[i]; if (!t.pos || t.kind === 'navcarrier' || !(t.cat === 'air' || t.kind === 'bandit' || t.kind === 'heli')) continue;
+        var Lt = H && H.targets, bd = 3500 * 3500;
+        if (Lt) for (i = 0; i < Lt.length; i++) {
+          var t = Lt[i]; if (!t.pos || t.kind === 'navcarrier' || !(t.cat === 'air' || t.kind === 'bandit' || t.kind === 'heli')) continue;
           var ex = t.pos.x - P.x, ey = t.pos.y, ez = t.pos.z - P.z, d2 = ex * ex + ez * ez + ey * ey;
           if (d2 < bd && ey < 4000) { bd = d2; tgt.pos = t.pos; }
         }
@@ -37783,14 +38304,13 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
         var tof = tgt.pos.distanceTo(u.wp) / 1000;
         tv1.copy(tgt.pos).addScaledVector(tgtVel, tof).sub(u.wp);
         var dl = tv1.length(); if (dl < 1) continue;
-        // world dir -> ship-local yaw / pitch
         var lx = tv1.x * P.c + tv1.z * P.s, lz = -tv1.x * P.s + tv1.z * P.c, el = Math.asin(tv1.y / dl);
         u.g.rotation.y = Math.atan2(-lx, -lz); u.piv.rotation.x = Math.max(-0.1, el);
         if (el < -0.05) continue;
         u.cool -= dt;
         if (u.cool <= 0 && fx && fx.tracer) {
           u.cool = 0.07 + Math.random() * 0.03; u.burst++;
-          if ((u.burst % 30) > 20) { u.cool = 0.5; continue; }   // short pauses between bursts
+          if ((u.burst % 30) > 20) { u.cool = 0.5; continue; }
           tv1.multiplyScalar(1 / dl);
           tv2.copy(u.wp); tv2.y += 1.3; tv2.addScaledVector(tv1, 3.5);
           var spd = 1000, sprd = 0.012;
@@ -37810,7 +38330,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       hudInfo: function () { return info; },
       available: function () { return on; },
       spawn: spawn,
-      placeOnSpot: function (i) { if (on) place(i); },
+      spotFor: spotFor,
+      placeOnSpot: function (i) { if (on) place(i | 0); },
       setupFinal: setupFinal,
       setWorld: function (w) { phys.setWorld(w); },
       pose: function () { return P; },
@@ -37820,10 +38341,11 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       setClock: function (f) { clock = f || function () { return tS; }; },
       isTargetable: false,               // enemies ignore it (combat has no carrier entity)
       K: K,
-      _debug: { trap: trap, hold: hold, deck: deckState, raid: function () { return raid; }, toLocal: function (x, z) { toLocal(x, z); return [QX, QZ]; }, deckTop: deckTop, shipSolid: shipSolid }
+      _debug: { trap: trap, hold: hold, deck: deckState, launch: launch, raid: function () { return raid; }, toLocal: function (x, z) { toLocal(x, z); return [QX, QZ]; }, deckTop: deckTop, shipSolid: shipSolid, model: function () { return model; } }
     };
     return api;
   };
+  root.FL.CARRIER_K = K;
 })();
 
 </script>
@@ -42888,7 +43410,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
   $('bSetup').addEventListener('click', function () { openSetup(false); });
 
   // ---- map picker (main screen). Clients in a room follow the host map and cannot pick.
-  var MAP_SHORT = { lax: 'Coastal city, beaches and mountains.', fjords: 'Snow mountains and narrow fjords.', cliffs: 'Sea cliffs, stacks, caves and the Cuillin.', canyon: 'Grand Canyon, mesas, arches and slot canyons.', volcano: 'Jungle islands, reefs, sea arches and a volcano.', halong: 'Karst towers in a jade bay.', alps: 'Sheer valleys, waterfalls and 4000 m peaks.', patagonia: 'Granite spires, glaciers and wind.', karakoram: 'The highest peaks and long glaciers.', rio: 'City, beaches and granite domes by the sea.' };
+  var MAP_SHORT = { ocean: 'Deep sea, atolls, your carrier and enemy fleets.', lax: 'Coastal city, beaches and mountains.', fjords: 'Snow mountains and narrow fjords.', cliffs: 'Sea cliffs, stacks, caves and the Cuillin.', canyon: 'Grand Canyon, mesas, arches and slot canyons.', volcano: 'Jungle islands, reefs, sea arches and a volcano.', halong: 'Karst towers in a jade bay.', alps: 'Sheer valleys, waterfalls and 4000 m peaks.', patagonia: 'Granite spires, glaciers and wind.', karakoram: 'The highest peaks and long glaciers.', rio: 'City, beaches and granite domes by the sea.' };
   var mapBusy = false, mapQueued = null, hostMapId = null;
   function mapsAll() { return (FL.MAPS && FL.MAPS.length) ? FL.MAPS : [{ id: 'lax', name: 'Pacific Coast' }]; }
   function mapInfo(id) { var l = mapsAll(); for (var i = 0; i < l.length; i++) if (l[i].id === id) return l[i]; return { id: id, name: id }; }
@@ -45387,7 +45909,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793193200', updShown = false;
+  var BUILD = '1793195673', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
