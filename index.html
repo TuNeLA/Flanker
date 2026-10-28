@@ -235,6 +235,10 @@ button[data-ico] { display: inline-flex; align-items: center; justify-content: c
 #scrMain .mm-tiles:has(#bResume:not([hidden])) #bRun { color: var(--ink); border-color: rgba(147, 255, 196, .5); background: linear-gradient(160deg, rgba(147, 255, 196, .12), rgba(6, 15, 17, .45) 70%); }
 #scrMain .mm-tiles:has(#bResume:not([hidden])) #bRun::before { background: var(--hud); }
 #scrMain .mm-tiles:has(#bResume:not([hidden])) #bRun::after { color: var(--ink-dim); }
+/* paused: four tiles, so the icon goes on top of the label */
+.mm-tiles:has(#bResume:not([hidden])) button.tile { grid-template-columns: minmax(0, 1fr); font-size: 19px; padding: 12px 12px 11px; row-gap: 6px; }
+.mm-tiles:has(#bResume:not([hidden])) button.tile::before { grid-row: 1; width: 24px; height: 24px; }
+.mm-tiles:has(#bResume:not([hidden])) button.tile::after { grid-column: 1; grid-row: 3; font-size: 11.5px; }
 button.tile { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto; align-items: center; justify-content: stretch; column-gap: 12px; row-gap: 7px;
   text-align: left; min-height: 92px; padding: 16px 30px 14px 16px; font: 800 24px/1 var(--display); letter-spacing: .05em; color: var(--ink);
   border-color: rgba(147, 255, 196, .5); background: linear-gradient(160deg, rgba(147, 255, 196, .12), rgba(6, 15, 17, .45) 70%); overflow: hidden; }
@@ -12052,24 +12056,28 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
   // adds setStores / pylonWorld / pylons / gunMuzzle to an aircraft api
   function attachStores(api, type, hit, defaultMesh) {
     const ST = stationsFor(type, hit), mat = common().store, mz = MUZZLES[type] || MUZZLES.su27;
-    let mesh = null, rel = {}, muz = {};
+    let mesh = null, bayMesh = null, bayVis = false, rel = {}, muz = {};
     api.pylons = ST;
     api.gunMuzzle = new T.Vector3(mz[0], mz[1], mz[2]);
     api.gunPair = !!mz[3];
+    // internal weapon bays (station kind 'bay'): their stores are a second mesh, shown only while a bay door is open
+    api.setBayStoresVisible = function (v) { bayVis = !!v; if (bayMesh) bayMesh.visible = bayVis; };
     api.setStores = function (list) {
       if (mesh) { api.group.remove(mesh); mesh.geometry.dispose(); mesh = null; }
+      if (bayMesh) { api.group.remove(bayMesh); bayMesh.geometry.dispose(); bayMesh = null; }
       rel = {}; muz = {};
       if (list == null) { if (defaultMesh && !defaultMesh.parent) api.group.add(defaultMesh); return; }
       if (defaultMesh && defaultMesh.parent) defaultMesh.parent.remove(defaultMesh);
-      const parts = [];
+      const parts = [], bay = [];
       for (const it of list) {
         const st = ST[it && it.pylon]; if (!st || !it.type) continue;
         if ((it.count | 0) <= 0 && it.count !== undefined) continue;
         const r = storeParts(st, it);
-        for (const g of r.parts) parts.push(g.translate(st.x, st.y, st.z));
+        for (const g of r.parts) (st.kind === 'bay' ? bay : parts).push(g.translate(st.x, st.y, st.z));
         rel[st.id] = [st.x + r.release[0], st.y + r.release[1], st.z + r.release[2]];
         if (r.muzzle) muz[st.id] = [st.x + r.muzzle[0], st.y + r.muzzle[1], st.z + r.muzzle[2]];
       }
+      if (bay.length) { bayMesh = new T.Mesh(merge(bay, false, true), mat); bayMesh.castShadow = true; bayMesh.name = 'baystores'; bayMesh.visible = bayVis; api.group.add(bayMesh); }
       if (!parts.length) return;
       mesh = new T.Mesh(merge(parts, false, true), mat);
       mesh.castShadow = true; mesh.receiveShadow = true; mesh.name = 'stores';
@@ -12192,8 +12200,13 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
       const inner = new T.Group(); pv.add(inner);
       add(m.geo, C.bodyMat, inner).name = 'mv-' + m.kind;
       if (m.decal) add(m.decal, C.decalMat, inner).castShadow = false;
-      group.add(pv);
+      group.add(pv); pv.userData.mv = m;
       movers.push({ m, inner, ax: m.axis ? new T.Vector3(...m.axis).normalize() : null });
+    }
+    // m.on = aux name: this mover rides on that moving part (same side), e.g. F-14 flaps on the swinging outer wing
+    for (const M of movers) if (M.m.on) {
+      const Pm = movers.find((q) => q !== M && q.m.aux === M.m.on && Math.sign(q.m.side || 0) === Math.sign(M.m.side || 0));
+      if (Pm) { const pv = M.inner.parent; pv.position.sub(Pm.inner.parent.position); Pm.inner.add(pv); }
     }
 
     // gear: legs, wells, doors
@@ -12293,7 +12306,8 @@ button.back:hover:not(:disabled) { border-color: var(--hud); color: var(--hud); 
         for (const E of eng) {
           if (!E.e.tvc) continue;
           const sd = Math.sign(E.e.x) || 0, max = 15 * DEG;
-          E.pv.rotation.set(-(ctl.p + sd * ctl.r * 0.5) * max, ctl.y * max, 0);
+          if (E.e.tvc === '2d') E.pv.rotation.set(-ctl.p * max * 1.3, 0, 0);   // 2D TVC (F-22, Su-37): pitch only, +-20 deg
+          else E.pv.rotation.set(-(ctl.p + sd * ctl.r * 0.5) * max, ctl.y * max, 0);
         }
       },
     };
@@ -31657,7 +31671,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"x29":{"side":"data:image/webp;base64,UklGRkYgAA
     lax: {
       grade: { exposure: 1.02, temp: 0.1, tint: -0.015, shadows: [0.96, 0.99, 1.06], highlights: [1.035, 1.0, 0.955], sat: 1.1, vib: 0.22,
         lift: [0.012, 0.009, 0.004], contrast: 0.2, vignette: 0.22, shoulder: 0.25, bloom: 1.25, bloomThr: 0.85, glare: 1.3 },
-      scene: { fog: 0xc9cbcb, fogMul: 1.08, sunHex: 0xffe0b4 }
+      scene: { fogMul: 1.08, sunHex: 0xffe0b4 }
     },
     // Norway winter fjords: cold crisp Nordic light, white snow, blue shadows, deep teal water, warm low sun on the peaks
     fjords: {
@@ -41684,7 +41698,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"x29":{"side":"data:image/webp;base64,UklGRkYgAA
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793173089', updShown = false;
+  var BUILD = '1793174690', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
