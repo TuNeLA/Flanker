@@ -21457,6 +21457,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     function loadoutCalc(s, sts) {
       sts = sts || stations(s);
       var out = [], eq = eqOf(P.ac), capKg = (acSpec(P.ac) || {}).maxStoresKg || 0, kg = 0;   // capKg: real max external load (jetsig.js)
+      s.overKg = 0;
       var g = FL.WEAPONS[eq.gun] || FL.WEAPONS.gsh23;
       var noGun = !!(acSpec(P.ac) || {}).noGun;   // e.g. Saab 105: no built-in gun, only gun pods on the pylons (0 rounds; pods still fire on GUN)
       out.push({ slot: 'gun', pylon: 'GUN', id: g.id, spec: specCopy(g, s), type: 'gun', count: 1, ammo: noGun ? 0 : g.ammo, mass: noGun ? 0 : Math.round(g.ammo * g.weight) });
@@ -21470,7 +21471,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
         else if (w.special) ammo = (w.ammo > 1 ? w.ammo : n) * ((acSpec(P.ac) || {}).specialX || 1);   // multi-shot launchers (4AAM, drones, SFFS ...); specialX: X-2 special bay
         var e = { slot: st.id, pylon: st.id, kind: st.kind, side: st.side, index: st.index, frac: st.frac, id: w.id, spec: specCopy(w, s), type: t, count: n, ammo: ammo,
           mass: Math.round(t === 'rocket' ? (w.weight || 0) * ammo + 60 : t === 'gunpod' ? (w.podMass || 500) : n * (w.weight || 0)) };
-        if (capKg && kg + e.mass > capKg) { s.overKg = (s.overKg || 0) + e.mass; return; }   // over the real payload: this store stays home
+        if (capKg && kg + e.mass > capKg) s.overKg = (s.overKg || 0) + Math.min(e.mass, kg + e.mass - capKg);   // over the real payload: allowed (Chad: any store on any pylon); the mass makes the jet heavy
         kg += e.mass;
         if (t === 'aam' && !firstAAM) firstAAM = e;
         out.push(e);
@@ -22691,7 +22692,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       var tot = function (lab, v, sm, ok) { return '<div><span class="flc-lab">' + lab + '</span><b' + (ok ? ' class="ok"' : '') + '>' + v + '</b>' + (sm ? '<small>' + sm + '</small>' : '') + '</div>'; };
       h += '<div class="flc-tot">' + tot('Missiles', s.missiles, s.reserveAAM > 0 && s.missiles ? 'AAM · ' + s.reserveAAM + ' in reserve' : 'air-to-air', true) +
         tot('Ground msl', s.agms, 'air-to-ground') + tot('Bombs', s.bombs, s.bombRack + s.bombRackAdd > 1 ? 'up to ' + clamp(Math.round(s.bombRack + s.bombRackAdd), 1, 4) + ' per pylon' : '1 per pylon') +
-        tot('Rockets', s.rockets, '') + tot('Weight', kg(s.storesMass), 'stores + gun ammo') +
+        tot('Rockets', s.rockets, '') + tot('Weight', kg(s.storesMass), s.overKg > 0 ? '<span style="color:#ffb347">OVERLOAD: ' + kg(s.overKg) + ' over max payload. Slow turns.</span>' : 'stores + gun ammo') +
         tot('Drag', '+' + Math.round(s.storesDrag * 100) + '%', 'top speed ' + Math.round(100 / Math.sqrt(1 + s.storesDrag)) + '%') +
         tot('Handling', hp + '%', hp < 40 ? 'Heavy. Slow turns.' : hp < 70 ? 'Medium' : 'Good') + '</div>';
       h += '<div class="flc-sec">' + esc(spec ? spec.name : P.ac) + ' · ' + sts.open.length + ' of ' + sts.all.length + ' pylons open' +
@@ -44852,7 +44853,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793187464', updShown = false;
+  var BUILD = '1793188524', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
