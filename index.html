@@ -35177,7 +35177,15 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
   }
   // F/X-6 Skuld loyal drones (jetsig.js sets FL.loyalDrones = { n: 2, rebuild: s } while the local jet is a Skuld): extra local instances
   // 'drone1' / 'drone2' (inst.drone = 1 | 2) with the 'skuld_d' model, left and far-right slots, silent radio, rebuild timer instead of "next mission"
-  function droneWant() { var d = FL.loyalDrones; return d && d.n > 0 ? Math.min(2, d.n | 0) : 0; }
+  // Co-op: the HOST also simulates the drones of every client that flies a Skuld (client state 'dn' = [n, rebuild s] -> P.drones /
+  // P.droneRb; key 'rd:<peer id>:<k>', max MAXD drones in the room). Snapshot: wg.d rows [owner slot, k, pos x10, vel, quat x1e4, thr, hp, state].
+  // opt.loyalDrones (createCombat option) overrides FL.loyalDrones for this instance (tests with several game instances in one page).
+  var MAXD = 6;
+  function loyalCfg() { return (R.opt && R.opt.loyalDrones) || FL.loyalDrones; }
+  function droneWant() { var d = loyalCfg(); return d && d.n > 0 ? Math.min(2, d.n | 0) : 0; }
+  function droneRb() { var d = loyalCfg(); return (d && d.rebuild) || 60; }
+  function loyalJet(id) { var F = FL.JET_FIELDS; return id === 'skuld' || !!(F && F[id] && F[id].sig === 'loyal'); }
+  function mateDrones(P) { return P && loyalJet(P.aircraftId) ? clamp(P.drones | 0, 0, 2) : 0; }
   function mkInst(key, P, drone) {
     var inst = { key: key, P: P || null, local: !P, drone: drone || 0, sx: drone === 1 ? -SLOT_X : drone === 2 ? SLOT_X * 2 : SLOT_X, st: newSt(), slot: V(), fS: V(0, 0, -1), rS: V(1, 0, 0), uS: V(0, 1, 0), W: null, O: null };
     inst.W = mkPT(inst);
@@ -35209,7 +35217,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     var c = R.campaign; if (!c || !c.profile) return 0;
     try { var P = c.profile(); return (P && P.upg && P.upg.wingman) | 0; } catch (e) { return 0; }
   }
-  function instLevel(inst) { return inst.drone ? (droneWant() >= inst.drone ? 4 : 0) : inst.local ? campaignLevel() : clamp(inst.P.wingLvl | 0, 0, 5); }
+  function instLevel(inst) { return inst.drone ? ((inst.P ? mateDrones(inst.P) : droneWant()) >= inst.drone ? 4 : 0) : inst.local ? campaignLevel() : clamp(inst.P.wingLvl | 0, 0, 5); }
   function upgV(key, l) {
     var U = FL.UPGRADES || [], u = null; for (var i = 0; i < U.length; i++) if (U[i].id === 'wingman') u = U[i];
     if (u && u.v && u.v[key]) return u.v[key][clamp(l, 0, 5)];
@@ -35255,7 +35263,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     var A = A_(); if (!A) return;
     setupPilot();
     W.id = 'w:' + ownerId(I) + (I.drone ? ':d' + I.drone : '');
-    W.name = I.drone ? 'DRONE ' + I.drone : I.local ? 'TWO' : (String(I.P.name || 'PILOT').toUpperCase().slice(0, 10) + ' 2');
+    W.name = I.drone ? (I.local ? 'DRONE ' + I.drone : String(I.P.name || 'PILOT').toUpperCase().slice(0, 10) + ' D' + I.drone) : I.local ? 'TWO' : (String(I.P.name || 'PILOT').toUpperCase().slice(0, 10) + ' 2');
     frameFromPlayer(0);
     if (I.drone) W.aim.copy(O.pos).addScaledVector(uS, -14).addScaledVector(fS, -20 * I.drone);   // out of the bay, under the jet
     else { W.aim.copy(slot).addScaledVector(fS, -650); W.aim.y += 60; }
@@ -35290,7 +35298,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     st.lostNo = missionNo(); st.lostT = clock;
     despawnW(); setState('down');
     wr('down', pick(['Two is going down! Ejecting!', 'Two is hit! I am out! Ejecting!']), 3, 5);
-    if (I.drone) { radio('ddown', 'Drone ' + I.drone + ' lost. Rebuilding.', 2, 4, 'DRONES', VO_TWO); return; }
+    if (I.drone) { if (I.local) radio('ddown', 'Drone ' + I.drone + ' lost. Rebuilding.', 2, 4, 'DRONES', VO_TWO); return; }
     if (I.local) after(2, function () { note('WINGMAN: NEXT MISSION'); });
   }
   function updateWreck(dt) {
@@ -35526,7 +35534,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       if (lvl < 1 || !pAlive || !air) return;
       var agl = p.pos.y - gAt(p.pos.x, p.pos.z);
       if (agl < 100 || p.vel.length() < 100) return;
-      if (st.state === 'down' && I.drone) { if (clock - st.lostT < ((FL.loyalDrones && FL.loyalDrones.rebuild) || 60)) return; }
+      if (st.state === 'down' && I.drone) { if (clock - st.lostT < (I.P ? clamp(+I.P.droneRb || 60, 20, 120) : droneRb())) return; }
       else if (st.state === 'down') {
         var no = missionNo(), next = no >= 0 ? no > st.lostNo : clock - st.lostT > 120;
         if (!next || clock - st.lostT < 20) return;
@@ -35551,21 +35559,26 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
   }
   // which owners get a wingman: local first, then co-op clients that own the upgrade; MAXW in total
   function manage() {
-    var A = A_(), keys = [], Ps = [], i, k;
+    var A = A_(), keys = [], Ps = [], Ds = [], i, k, P;
     for (k in FULL) delete FULL[k];
-    if (campaignLevel() >= 1) { keys.push('local'); Ps.push(null); }
+    if (campaignLevel() >= 1) { keys.push('local'); Ps.push(null); Ds.push(0); }
     if (A.hosting()) for (i = 0; i < A.pts.length; i++) {
-      var P = A.pts[i]; if (P.local || P.ai || (P.wingLvl | 0) < 1) continue;
-      if (keys.length < MAXW) { keys.push(P.id); Ps.push(P); } else FULL[P.id] = 1;
+      P = A.pts[i]; if (P.local || P.ai || (P.wingLvl | 0) < 1) continue;
+      if (keys.length < MAXW) { keys.push(P.id); Ps.push(P); Ds.push(0); } else FULL[P.id] = 1;
     }
-    for (k = 1; k <= droneWant(); k++) { keys.push('drone' + k); Ps.push(null); }
+    var nd = 0, n;
+    for (k = 1; k <= droneWant(); k++) { keys.push('drone' + k); Ps.push(null); Ds.push(k); nd++; }
+    if (A.hosting()) for (i = 0; i < A.pts.length; i++) {          // co-op clients flying a Skuld: the host flies their drones too
+      P = A.pts[i]; if (P.local || P.ai) continue;
+      for (k = 1, n = mateDrones(P); k <= n && nd < MAXD; k++, nd++) { keys.push('rd:' + P.id + ':' + k); Ps.push(P); Ds.push(k); }
+    }
     for (i = INST.length - 1; i >= 0; i--) {
       var ix = keys.indexOf(INST[i].key);
       if (ix < 0 || (INST[i].P && INST[i].P !== Ps[ix])) { use(INST[i]); despawnW(); INST.splice(i, 1); }
     }
     for (i = 0; i < keys.length; i++) {
       var have = false; for (var j = 0; j < INST.length; j++) if (INST[j].key === keys[i]) have = true;
-      if (!have) INST.push(mkInst(keys[i], Ps[i], /^drone/.test(keys[i]) ? +keys[i].slice(5) : 0));
+      if (!have) INST.push(mkInst(keys[i], Ps[i], Ds[i]));
     }
   }
   function updateWings(dt) {
@@ -35582,24 +35595,31 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
 
   // host -> clients: wingman rows in the entity snapshot (combat.sendSnapshot calls combat._wingSnap)
   function wingSnap() {
-    var A = A_(), r = [], s = {}, k;
+    var A = A_(), r = [], s = {}, d = [], k;
     for (var i = 0; i < INST.length; i++) {
-      var n = INST[i], w = n.W, oid = ownerId(n);
+      var n = INST[i], w = n.W, oid = ownerId(n), q = w.q;
+      if (n.drone) {                    // loyal drone: short row, the owner is a slot in the snapshot pilot list (pl), model 'skuld_d'
+        var sl = A.pts.indexOf(n.local ? A.LP : n.P);
+        if (sl >= 0 && !w.alive && n.st.state === 'down') d.push([sl, n.drone, -1]);    // shot down, rebuilding
+        else if (sl >= 0 && w.alive) d.push([sl, n.drone, Math.round(w.aim.x * 10), Math.round(w.aim.y * 10), Math.round(w.aim.z * 10), Math.round(w.vel.x), Math.round(w.vel.y), Math.round(w.vel.z),
+          Math.round(q.x * 1e4), Math.round(q.y * 1e4), Math.round(q.z * 1e4), Math.round(q.w * 1e4), Math.round(w.thr * 100), Math.round(w.hp), CODES.indexOf(n.st.state)]);
+        continue;
+      }
       if (n.st.state === 'down') s[oid] = 'next';
       if (!w.alive) continue;
-      var q = w.q;
       r.push([w.id, oid, w.name, w.aircraftId, Math.round(w.aim.x * 10), Math.round(w.aim.y * 10), Math.round(w.aim.z * 10),
         Math.round(w.vel.x), Math.round(w.vel.y), Math.round(w.vel.z), Math.round(q.x * 1e4), Math.round(q.y * 1e4), Math.round(q.z * 1e4), Math.round(q.w * 1e4),
         Math.round(w.thr * 100), Math.round(w.ab * 100), Math.round(w.hp), CODES.indexOf(n.st.state)]);
     }
     for (k in FULL) s[k] = 'full';
-    return { r: r, s: s };
+    return d.length ? { r: r, s: s, d: d } : { r: r, s: s };
   }
 
   // ======================================================================= co-op client: friendly views of the host's wingmen
   var VIEWS = {}, VIEWS_N = 0, hostWing = false, lastWgT = -99, myStatus = '', ownSeen = false;
   function clearViews() { var A = A_(); for (var id in VIEWS) { if (A) A.drop(VIEWS[id].pt); VIEWS[id].pt.alive = false; delete VIEWS[id]; } VIEWS_N = 0; }
-  function wingApply(wg, T0) {
+  var NO_ROWS = [];
+  function wingApply(wg, T0, pl) {
     var A = A_(); if (!A || !A.isClient()) return;
     if (!wg) return;
     hostWing = true; lastWgT = clock;
@@ -35619,7 +35639,26 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       if (A.pts.indexOf(pt) < 0) A.pts.push(pt);
       if (own) { ownSeen = true; if (pt.state === 'form' && !v.joinSaid) { v.joinSaid = true; radio('join', 'Two, on your wing.', 2, 20, 'TWO', VO_TWO); } }
     }
-    for (id in VIEWS) if (!seen[id]) { A.drop(VIEWS[id].pt); VIEWS[id].pt.alive = false; delete VIEWS[id]; VIEWS_N--; }
+    var D = wg.d || NO_ROWS;
+    for (i = 0; i < D.length; i++) {          // loyal drones (own + other Skuld pilots, host-simulated)
+      var dr = D[i], oid = pl && pl[dr[0]], dk = dr[1] | 0; if (!oid || dk < 1) continue;
+      id = 'w:' + oid + ':d' + dk;
+      var dv = VIEWS[id];
+      if (dr.length < 4) { if (dv && dv.drone) radio('ddown', 'Drone ' + dk + ' lost. Rebuilding.', 2, 4, 'DRONES', VO_TWO); continue; }   // down: the view goes below
+      seen[id] = 1;
+      if (!dv) { dv = VIEWS[id] = { pt: mkPT(null), rp: V(), rv: V(), rq: new T.Quaternion(), rt: 0, fresh: true, joinSaid: false, drone: 0 }; dv.pt.id = id; VIEWS_N++; }
+      var dp = dv.pt, mine = oid === me, oN = '';
+      if (!mine) for (var jj = 0; jj < A.pts.length; jj++) if (A.pts[jj].id === oid && !A.pts[jj].ai) oN = String(A.pts[jj].name || '').toUpperCase().slice(0, 10);
+      dp.name = mine ? 'DRONE ' + dk : (oN || 'SKULD') + ' D' + dk; dp.aircraftId = 'skuld_d'; dv.drone = mine ? dk : 0;
+      dv.rp.set(dr[2] / 10, dr[3] / 10, dr[4] / 10); dv.rv.set(dr[5], dr[6], dr[7]); dv.rq.set(dr[8] / 1e4, dr[9] / 1e4, dr[10] / 1e4, dr[11] / 1e4).normalize(); dv.rt = T0 || A.now();
+      dp.thr = dr[12] / 100; dp.ab = 0; dp.hp = dr[13]; dp.state = CODES[dr[14]] || ''; dp.alive = true;
+      if (dv.fresh) { dv.fresh = false; dp.aim.copy(dv.rp); dp.vel.copy(dv.rv); dp.q.copy(dv.rq); }
+      if (A.pts.indexOf(dp) < 0) A.pts.push(dp);
+    }
+    for (id in VIEWS) if (!seen[id]) {
+      if (VIEWS[id].drone && R.opt.player.alive && R.opt.player.alive()) radio('ddown', 'Drone ' + VIEWS[id].drone + ' lost. Rebuilding.', 2, 4, 'DRONES', VO_TWO);
+      A.drop(VIEWS[id].pt); VIEWS[id].pt.alive = false; delete VIEWS[id]; VIEWS_N--;
+    }
   }
   function clientTick(dt) {
     var A = A_();
@@ -44697,7 +44736,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793184620', updShown = false;
+  var BUILD = '1793185090', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
