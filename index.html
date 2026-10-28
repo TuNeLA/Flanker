@@ -34264,12 +34264,19 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
     S(torusG(6.4, 0.25, 32, 3), WHITE, 0, 10.55, 115.2, Math.PI / 2); B(9, 0.32, 8, 0x4a5550, 0, 10.48, 106.6);
     B(24, 0.25, 0.5, WHITE, 0, 10.5, 124.6);
     SY(box(0.2, 1.2, 60), DARK, 13.95, 10.9, 70);                                                                               // deck-edge bulwark
+    // superstructure windows, yardarms, sat-com domes
+    for (i = 0; i < 12; i++) SY(box(0.2, 0.7, 1.1), DARK, 10.05, 15.4, -57 + i * 3);
+    for (i = 0; i < 12; i++) SY(box(0.2, 0.7, 1.1), DARK, 9.05, 15.0, -16 + i * 4.2);
+    for (i = 0; i < 5; i++) SY(box(0.2, 0.6, 1.0), DARK, 6.05, 23.0, 0 + i * 3);
+    B(15, 0.3, 0.3, DARK, 0, 37.5, -18); SY(box(0.15, 1.6, 0.15), DARK, 6.8, 38.2, -18); B(11, 0.3, 0.3, DARK, 0, 34.6, 22);
+    SY(sph(1.1, 10, 6), WHITE, 3.8, 35.0, -18); SY(sph(1.0, 10, 6), WHITE, 3.4, 33.9, 22); SY(sph(0.9, 10, 6), WHITE, 5.2, 25.7, -36);
+    SY(cylY(0.9, 1.1, 1.6, 10), SUP2, 7.4, 18.3, 14); SY(sph(1.0, 10, 6), WHITE, 7.4, 19.3, 14);
     // Andreyevsky flag staff at the stern, jack staff at the bow
     B(0.25, 6, 0.25, DARK, 0, 13.4, 124); B(0.15, 2.0, 3.0, WHITE, 0, 15.4, 125.5); B(0.17, 0.35, 3.4, 0x2a56c6, 0, 15.4, 125.5, 0.6); B(0.17, 0.35, 3.4, 0x2a56c6, 0, 15.4, 125.5, -0.6);
     return a.geo();
   }
   // Top Pair (two big back-to-back mattress antennas) and Top Plate heads, spun by the model
-  function geoKTopPair(s) { var a = new Acc(); a.add(box(9 * s, 4.2 * s, 0.6 * s), 0x2a2f33, 0, 0, -1.1 * s); a.add(box(7 * s, 3.2 * s, 0.6 * s), 0x30363b, 0, 0.4 * s, 1.1 * s); a.add(box(1.4 * s, 4 * s, 2.6 * s), 0x8a949a, 0, -1 * s, 0); a.add(box(9.4 * s, 0.4 * s, 0.4 * s), 0x8a949a, 0, 2.2 * s, -1.1 * s); return a.geo(); }
+  function geoKTopPair(s) { var a = new Acc(); a.add(box(9 * s, 4.2 * s, 0.6 * s), 0x4a5257, 0, 0, -1.1 * s); a.add(box(7 * s, 3.2 * s, 0.6 * s), 0x545c61, 0, 0.4 * s, 1.1 * s); a.add(box(1.4 * s, 4 * s, 2.6 * s), 0x8a949a, 0, -1 * s, 0); a.add(box(9.4 * s, 0.4 * s, 0.4 * s), 0x8a949a, 0, 2.2 * s, -1.1 * s); return a.geo(); }
   function geoKTopPlate(s) { var a = new Acc(); a.add(box(7.4 * s, 3 * s, 0.4 * s), 0x2a2f33, 0, 0, -0.7 * s); a.add(box(7.4 * s, 3 * s, 0.4 * s), 0x2a2f33, 0, 0, 0.7 * s); a.add(box(1.2 * s, 3.4 * s, 1.8 * s), 0x8a949a, 0, -0.4 * s, 0); a.add(cylY(0.9 * s, 1.1 * s, 1.6 * s, 10), 0x8a949a, 0, -2.2 * s, 0); return a.geo(); }
   // AK-130: faceted turret with a sloped face, twin 130 mm barrels (aim -z)
   function geoKGun(s) {
@@ -34423,7 +34430,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
     var NA = [[-3.8, 2.25, 1.25], [-2.5, 2.35, 1.32], [9, 2.4, 1.35], [13.6, 2.26, 1.2], [15.4, 2.1, 1.1]].map(function (q) { return nac(q[0], q[1], q[2], -1.75); });
     a.sym(loft(NA, W2), null, 4.3, 0, 0);
     a.sym(box(1.8, 2.0, 0.3), DK, 3.2, -1.75, -3.75); a.sym(box(1.8, 2.0, 0.3), DK, 5.4, -1.75, -3.75);
-    a.sym(box(0.14, 2.7, 3.2), W, 4.3, -1.75, -4.6);
+    a.sym(box(0.1, 2.5, 1.4), W2, 4.3, -1.75, -4.4);
     [3.15, 5.45].forEach(function (x) { a.sym(lathe([[15.2, 0.95], [16.6, 0.86], [17.0, 0.8]], 14), NZ, x, -1.8, 0); a.sym(cylZ(0.62, 0.62, 0.2, 12), 0x14161a, x, -1.8, 16.95); });
     a.add(box(1.4, 0.3, 12), N, 0, -2.1, -6); a.add(box(1.4, 0.3, 10), N, 0, -2.0, 8);                                      // weapon bay doors
     // tail: fin (upper third all-moving), stabilisers on the fin, tail cone ECM
@@ -34825,7 +34832,6 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
     a.add(sph(2.2, 14, 10), 0x0c1014, 0, -3.4, -31); a.add(cylY(2.4, 2.4, 1.2, 14), P, 0, -2.4, -31);
     a.add(box(1, 0.4, 30), RED, 0, 6.65, -10); a.add(box(0.2, 2.6, 2.4), D, 0, 7.6, 12, 0, 0, 0); a.sym(box(0.2, 1.8, 1.8), D, 6, 6.0, 18);
     for (i = 0; i < 14; i++) { var px = 22 + (i % 7) * 7.6, pz = -42 + px * 0.65 + 8 + (i >> 3) * 0 + (i < 7 ? 2 : 12); a.sym(box(5.2, 0.12, 6.4), i % 3 ? P : 0x3e454d, px, msTop(px, pz + 3) + 0.04, pz + 3, 0, -0.1); }
-    for (i = 0; i < 6; i++) { var lx = 8 + i * 12; a.sym(box(10.4, 0.3, 1.4), 0x1d2126, lx, msTop(lx, -42 + lx * 0.65 + 1.0) - 0.05, -42 + lx * 0.65 + 1.0, 0, -0.576); }
     a.sym(box(0.4, 1.2, 0.4), D, 80, 1.6, 14);
     return a.geo();
   }
@@ -37315,7 +37321,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
   $('bSetup').addEventListener('click', function () { openSetup(false); });
 
   // ---- map picker (main screen). Clients in a room follow the host map and cannot pick.
-  var MAP_SHORT = { lax: 'City, beach and mountains. Large airport.', fjords: 'Snow mountains and narrow fjords.', cliffs: 'Sea cliffs, arches and caves.', canyon: 'Red rock canyon at sunset.', volcano: 'Jungle islands and an active volcano.' };
+  var MAP_SHORT = { lax: 'City, beach and mountains. Large airport.', fjords: 'Snow mountains and narrow fjords.', cliffs: 'Sea cliffs, arches and caves.', canyon: 'Grand Canyon, mesas, arches and slot canyons.', volcano: 'Jungle islands, reefs, sea arches and a volcano.' };
   var mapBusy = false, mapQueued = null, hostMapId = null;
   function mapsAll() { return (FL.MAPS && FL.MAPS.length) ? FL.MAPS : [{ id: 'lax', name: 'Los Angeles' }]; }
   function mapInfo(id) { var l = mapsAll(); for (var i = 0; i < l.length; i++) if (l[i].id === id) return l[i]; return { id: id, name: id }; }
@@ -39747,7 +39753,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"mig21":{"side":"data:image/webp;base64,UklGRiQn
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793161613', updShown = false;
+  var BUILD = '1793162192', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
