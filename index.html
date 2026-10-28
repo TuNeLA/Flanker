@@ -22064,8 +22064,9 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       var z;
       if (type === 'naval') {
         var lt = laneTarget();
-        if (!lt) { type = m.type = 'strike'; m.title = TYPE.strike.title; z = chooseZone(type); }
-        else z = { id: 'lane', name: 'the sea lane', e: lt.e, n: lt.n, r: 2500, hdg: lt.hdg };
+        var szn = lt ? null : seaZone();   // no sea lane in range: a frigate in open water (sea zones / deep water)
+        if (!lt && !szn) { type = m.type = 'strike'; m.title = TYPE.strike.title; z = chooseZone(type); }
+        else z = lt ? { id: 'lane', name: 'the sea lane', e: lt.e, n: lt.n, r: 2500, hdg: lt.hdg } : szn;
       } else if (type === 'carrier') {
         var ns = FL.navalSpot(w, pE(), pN(), 13000, FL.friendlyCarrierPos ? FL.friendlyCarrierPos() : null);
         if (!ns) { type = m.type = 'strike'; m.title = TYPE.strike.title; z = chooseZone(type); }
@@ -36843,15 +36844,19 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
 </script>
 <script>
 /* ---- carrier.js ---- */
-/* carrier.js — Flanker: friendly aircraft carrier (Kuznetsov style: ski-jump bow, 7 deg angled deck, starboard island).
+/* carrier.js — Flanker: friendly SUPERCARRIER (Gerald R. Ford / Nimitz layout, scaled by K.SCALE = 1.3 -> 433 m: 9 deg angled deck,
+ * 4 catapults (CAT 1-2 bow, CAT 3-4 waist), 4 wires, island starboard aft of midships, no ski-jump). Catapult jets (spec.carrier 'catobar')
+ * launch from the catapults; every other jet makes a steam-assisted deck run down the angled deck (RUN 1-4). Every jet has a hook (game rule).
+ * The enemy carrier group (navcarrier) keeps the old Kuznetsov hull (KZ data). Also: cargo ships (naval convoy missions), FL.startPoint,
+ * FL.CARRIER_MAPS (sea maps with the friendly carrier).
  * FL.createCarrier({scene, world, phys, combat, fx, camera, getCampaign, flash, clock, maps}) -> carrier
  *
  * - Sails a fixed "stadium" course in open water, into-the-wind leg first (wind from the WSW, as in weather.js).
  *   Course + position are pure functions of the clock (default Date.now()) -> every co-op peer sees the same ship, no network.
  * - Physics: wraps phys.setWorld / phys.step (no physics.js edit). The wrapped world reports the deck as ground
  *   (sampleH / isWater / slope / groundY / solidAt), the step runs in the deck frame while the jet is on the deck,
- *   and the jet is carried with the ship. Arrestor wires, launch hold ("chocks"), ski-jump, hull / island crash.
- * - Stopped on the deck: opens the campaign hangar (repair + rearm on close), then puts the jet on launch spot 3.
+ *   and the jet is carried with the ship. Arrestor wires, launch hold ("chocks"), catapult stroke / deck run, hull / island crash.
+ * - Stopped on the deck: opens the campaign hangar (repair + rearm on close), then puts the jet back on its launch spot.
  * - Point-defence guns (visual only) fire tracers at enemy aircraft near the ship. Combat has no carrier target,
  *   so enemies never attack it.
  * Local ship frame: -Z = bow, +X = starboard, +Y = up, origin = waterline amidships. Heading psi: compass, rad.
@@ -37511,7 +37516,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
   var CARGOG = null;
   function cargoGeo() {
     if (CARGOG) return CARGOG;
-    var a = new Acc(), L = 120, B = 10, i, j, k, hull = lin(0x1f3448), red = lin(0x7a2a24), wh = lin(0xe4e4de), dk = lin(0x1c1e20), gr = lin(0x55595d), R = rng(55);
+    var a = new Acc(), L = 120, B = 10, i, j, k, hull = lin(0x2a2d31), red = lin(0x8a2c24), wh = lin(0xe4e4de), dk = lin(0x1c1e20), gr = lin(0x55595d), R = rng(55);
     var bz = -L / 2 + 16, tip = -L / 2;
     a.box(-B, B, -6, 7, bz, L / 2, hull); a.box(-B * 0.97, B * 0.97, -7.5, -5.9, bz + 1, L / 2 - 1, red);
     var P = [[-B, 7, bz], [B, 7, bz], [0, 8.5, tip], [-B * 0.85, -6, bz], [B * 0.85, -6, bz], [0, -6, tip + 9]];
@@ -37565,7 +37570,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
   (function defineCargo() {
     var KS = root.FL.ENEMY_KINDS, U = root.FL.ENEMY_UTIL;
     if (!KS || !U || !U.kit || !T || KS.cargoship) return;
-    KS.cargoship = { kind: 'cargoship', category: 'sea', label: 'Cargo ship', hp: 420, points: 900, lockRange: 14000, radius: 16, hitLen: 55, hitRad: 11, radarRange: 0,
+    KS.cargoship = { kind: 'cargoship', category: 'sea', label: 'Cargo ship', hp: 380, points: 900, lockRange: 14000, radius: 16, hitLen: 55, hitRad: 11, radarRange: 0,
       killMsg: 'CARGO SHIP SUNK', needsBombs: false, build: buildCargo, spawn: cargoSpawn, think: cargoThink };
   })();
 
@@ -37576,7 +37581,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       if (m && root.FL.friendlyCarrierMap && root.FL.friendlyCarrierMap() && root.FL.friendlyCarrierMap() !== m) return !!(root.FL.CARRIER_MAPS || {})[m];
       return !!(root.FL.friendlyCarrierPos && root.FL.friendlyCarrierPos());
     },
-    get: function (m) { var v = null; try { v = localStorage.getItem(this.key(m)); } catch (e) {} if (v !== 'runway' && v !== 'air' && v !== 'carrier') v = this.carrier(m) ? 'carrier' : 'runway'; return v; },
+    get: function (m) { var v = null; try { v = localStorage.getItem(this.key(m)); } catch (e) {} if (v !== 'runway' && v !== 'air' && v !== 'carrier') v = this.carrier(m) && m !== 'lax' ? 'carrier' : 'runway'; return v; },   // default: carrier (Pacific Coast keeps the runway: first flight + tutorial)
     kind: function (m) { var v = this.get(m); return v === 'carrier' && !this.carrier(m) ? 'runway' : v; },
     set: function (m, v) { try { localStorage.setItem(this.key(m), v); } catch (e) {} return v; },
     cycle: function (m) { var L = this.carrier(m) ? ['runway', 'carrier', 'air'] : ['runway', 'air'], i = L.indexOf(this.kind(m)); return this.set(m, L[(i + 1) % L.length]); },
@@ -37826,8 +37831,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     radar.position.set(MX, D + 36.8, MZ - 3); grp.add(radar);
     // hull numbers on the island sides
     var dmat = new T.MeshStandardMaterial({ map: cvDecal(), transparent: true, depthWrite: false, roughness: 0.8, polygonOffset: true, polygonOffsetFactor: -2 });
-    var d1 = new T.Mesh(new T.PlaneGeometry(9, 9), dmat); d1.position.set(I.x0 - 0.06, D + 12.5, (I.z0 + I.z1) / 2 + 3); d1.rotation.y = -Math.PI / 2; grp.add(d1);
-    var d2 = new T.Mesh(new T.PlaneGeometry(9, 9), dmat); d2.position.set(I.x1 - 0.34, D + 12.5, (I.z0 + I.z1) / 2 + 3); d2.rotation.y = Math.PI / 2; grp.add(d2);
+    var d1 = new T.Mesh(new T.PlaneGeometry(7, 7), dmat); d1.position.set(I.x0 - 0.06, D + 12.8, (I.z0 + I.z1) / 2 - 1); d1.rotation.y = -Math.PI / 2; grp.add(d1);
+    var d2 = new T.Mesh(new T.PlaneGeometry(7, 7), dmat); d2.position.set(I.x1 - 0.34, D + 12.8, (I.z0 + I.z1) / 2 + 1); d2.rotation.y = Math.PI / 2; grp.add(d2);
     return { group: grp, radar: radar, olsX: lx * SCALE, olsZ: lz * SCALE, cI: cI, cWh: cWh };
   }
   // waterline foam strips in scaled ship coordinates
@@ -37849,18 +37854,25 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     return { geo: fgeo, mat: foamMat };
   }
   // ---- deck life for the supercarrier (real-size props, scaled positions): Hornets with folded wings, an E-2, a Seahawk, tractors, crew
-  function hornetGeo() {
-    var a = new Acc(), c1 = lin(0x7b848d), c2 = lin(0x69727b), dk = lin(0x1d2328), rd = lin(0xb8bcbf), m4 = new T.Matrix4(), rx = new T.Matrix4().makeRotationX(Math.PI / 2);
-    m4.makeTranslation(0, 0.3, -0.5).multiply(rx); a.geo(new T.CylinderGeometry(0.95, 0.85, 12, 8), m4, c1);
-    m4.makeTranslation(0, 0.3, -8.6).multiply(new T.Matrix4().makeRotationX(-Math.PI / 2)); a.geo(new T.ConeGeometry(0.85, 4.6, 8), m4, rd);
-    a.box(-1.7, 1.7, -0.5, 0.45, -1, 6.2, c2);                                                     // centre body
-    a.box(-3.9, -1.5, 0, 0.22, -0.5, 4.5, c2); a.box(1.5, 3.9, 0, 0.22, -0.5, 4.5, c2);           // inner wings
-    a.box(-4.15, -3.9, 0.1, 2.9, 0.4, 4.2, c1); a.box(3.9, 4.15, 0.1, 2.9, 0.4, 4.2, c1);         // folded outer panels
-    a.box(-2.7, -2.45, 0.3, 3.3, 4.6, 7.6, c2); a.box(2.45, 2.7, 0.3, 3.3, 4.6, 7.6, c2);         // canted fins
-    a.box(-3.2, -1.0, 0, 0.18, 6.0, 8.2, c1); a.box(1.0, 3.2, 0, 0.18, 6.0, 8.2, c1);             // stabilators
-    a.box(-1.8, -0.4, -0.3, 0.05, -3.8, -1.0, c2); a.box(0.4, 1.8, -0.3, 0.05, -3.8, -1.0, c2);   // LEX
-    a.box(-0.45, 0.45, 0.95, 1.55, -6.6, -3.8, dk);                                              // canopy
-    a.box(-0.12, 0.12, -2.4, -0.4, -6.4, -6.0, dk); a.box(-1.5, -1.25, -2.4, -0.5, 0.6, 1.0, dk); a.box(1.25, 1.5, -2.4, -0.5, 0.6, 1.0, dk);
+  function hornetGeo() {   // F/A-18 style, wings folded, gear down (origin = CG, wheels at y -2.4, nose -Z)
+    var a = new Acc(), c1 = lin(0x8d969f), c2 = lin(0x78818a), c3 = lin(0x666e76), dk = lin(0x1d2328), gl = lin(0x24343e), m4 = new T.Matrix4(), rx = new T.Matrix4().makeRotationX(Math.PI / 2);
+    function quad(p0, p1, p2, p3, col) { a.tri(p0, p1, p2, col); a.tri(p0, p2, p3, col); a.tri(p0, p2, p1, col); a.tri(p0, p3, p2, col); }
+    m4.makeTranslation(0, 0.25, 0.4).multiply(rx); a.geo(new T.CylinderGeometry(0.72, 0.92, 11.5, 10), m4, c1);                  // fuselage
+    m4.makeTranslation(0, 0.25, -7.1).multiply(new T.Matrix4().makeRotationX(-Math.PI / 2)); a.geo(new T.ConeGeometry(0.72, 3.4, 10), m4, c3);   // radome
+    m4.makeTranslation(0, 0.85, -3.9).multiply(new T.Matrix4().makeScale(1, 0.72, 2.7)); a.geo(new T.SphereGeometry(0.52, 10, 6), m4, gl);   // canopy
+    a.box(-1.55, 1.55, -0.55, 0.35, -1.2, 6.2, c2);                                                                            // engine body
+    a.box(-1.45, -0.75, -0.75, 0.15, -2.4, -0.2, c3); a.box(0.75, 1.45, -0.75, 0.15, -2.4, -0.2, c3);                          // intakes
+    for (var sd = -1; sd <= 1; sd += 2) {
+      quad([sd * 0.8, 0.2, -5.6], [sd * 1.9, 0.12, -1.2], [sd * 1.6, 0.12, 0.2], [sd * 0.8, 0.2, -0.6], c2);                // LEX
+      quad([sd * 1.55, 0.1, -1.0], [sd * 4.1, 0.1, 1.2], [sd * 4.1, 0.1, 2.9], [sd * 1.55, 0.1, 3.6], c1);                 // inner wing
+      quad([sd * 4.1, 0.15, 1.3], [sd * 4.35, 2.9, 2.0], [sd * 4.35, 2.9, 2.85], [sd * 4.1, 0.15, 2.9], c2);               // folded outer panel
+      quad([sd * 1.35, 0.15, 5.6], [sd * 3.3, 0.05, 7.4], [sd * 3.3, 0.05, 8.3], [sd * 1.35, 0.15, 8.0], c1);              // stabilator
+      quad([sd * 1.1, 0.4, 4.4], [sd * 2.1, 3.4, 6.4], [sd * 2.15, 3.4, 7.6], [sd * 1.15, 0.4, 7.2], c2);                  // canted fin
+      m4.makeTranslation(sd * 0.55, -0.05, 6.9).multiply(rx); a.geo(new T.CylinderGeometry(0.46, 0.42, 1.3, 8), m4, dk);    // nozzle
+      a.box(sd * 1.3 - 0.12, sd * 1.3 + 0.12, -2.2, -0.4, 0.9, 1.25, dk);                                                     // main gear leg
+      m4.makeTranslation(sd * 1.38, -1.95, 1.1).multiply(new T.Matrix4().makeRotationZ(Math.PI / 2)); a.geo(new T.CylinderGeometry(0.42, 0.42, 0.3, 10), m4, dk);
+    }
+    a.box(-0.1, 0.1, -2.2, -0.4, -5.6, -5.3, dk); m4.makeTranslation(0, -2.05, -5.45).multiply(new T.Matrix4().makeRotationZ(Math.PI / 2)); a.geo(new T.CylinderGeometry(0.33, 0.33, 0.3, 8), m4, dk);
     return a.build();
   }
   function e2Geo() {
@@ -38192,7 +38204,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       }
       var ols = [spr(0.3, 3.2, 0.7, 0.03, 0.01), spr(0.3, 3.2, 0.7, 0.03, 0.01), spr(4.5, 2.4, 0.4, 0.016, 0.016), spr(5, 0.25, 0.15, 0.013, 0.013), spr(5, 0.25, 0.15, 0.013, 0.013)];
       scene.add(grp); scene.add(wake);
-      return { group: grp, wake: wake, wpos: wpos, wg: wg, radar: radar, turrets: turrets, ols: ols, olsL: [olsX, D + 1.6 * s, olsZ], jbd: jbd, shut: shut, wline: wline, wires: wires, flood: flood, lights: lights };
+      return { group: grp, life: LIFE.group, wake: wake, wpos: wpos, wg: wg, radar: radar, turrets: turrets, ols: ols, olsL: [olsX, D + 1.6 * s, olsZ], jbd: jbd, shut: shut, wline: wline, wires: wires, flood: flood, lights: lights };
     }
     if (!headless) { try { model = buildModel(); } catch (e) { model = null; if (root.console) console.warn('carrier model', e); } }
 
@@ -38359,9 +38371,41 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       return o;
     }
 
+    // ---- generic tail hook for jets without a modelled hook (game rule: every jet has one); drops with the gear near the carrier
+    var hookV = { plane: null, piv: null, a: 0, has: false };
+    var hookMat = T ? new T.MeshStandardMaterial({ color: 0x2a2c2e, roughness: 0.5, metalness: 0.6 }) : null;
+    function hookTick(dt) {
+      var pl = opts.getPlane ? opts.getPlane() : null; if (!pl || !pl.group) return;
+      if (pl !== hookV.plane) {
+        hookV.plane = pl; hookV.piv = null; hookV.a = 0;
+        var id = opts.getAircraftId ? opts.getAircraftId() : (phys.spec && phys.spec() ? phys.spec().id : '');
+        hookV.has = !!(root.FL.SIG_AUX && root.FL.SIG_AUX[id] && root.FL.SIG_AUX[id].indexOf('hook') >= 0);
+        if (!hookV.has) {
+          var G = pl.group, p0 = G.position.clone(), q0 = G.quaternion.clone(), s0 = G.scale.clone(), vis = G.visible;
+          G.position.set(0, 0, 0); G.quaternion.identity(); G.scale.set(1, 1, 1); G.updateMatrixWorld(true);
+          var bb = new T.Box3().setFromObject(G);
+          G.position.copy(p0); G.quaternion.copy(q0); G.scale.copy(s0); G.visible = vis; G.updateMatrixWorld(true);
+          if (isFinite(bb.max.z) && bb.max.z > 2) {
+            var L = Math.min(3.2, Math.max(1.8, (bb.max.z - bb.min.z) * 0.13)), piv = new T.Group();
+            piv.position.set(0, Math.max(bb.min.y + 0.25, -1.1), bb.max.z - Math.max(1.4, (bb.max.z - bb.min.z) * 0.12));
+            var rod = new T.Mesh(new T.BoxGeometry(0.09, 0.09, L).translate(0, 0, L / 2), hookMat), head = new T.Mesh(new T.BoxGeometry(0.16, 0.12, 0.22).translate(0, -0.04, L), hookMat);
+            rod.name = head.name = 'genericHook'; piv.add(rod); piv.add(head); piv.name = 'genericHook'; G.add(piv); hookV.piv = piv;
+          }
+        }
+      }
+      if (!hookV.piv) return;
+      var near = st.gearT > 0.5 && on && Math.hypot(st.pos.x - P.x, st.pos.z - P.z) < 8000;
+      hookV.a += Math.max(-dt * 1.5, Math.min(dt * 1.5, (near ? 1 : 0) - hookV.a));
+      hookV.piv.rotation.x = 0.7 * hookV.a; hookV.piv.visible = hookV.a > 0.02 || near;
+    }
     function visuals(dt, camera) {
       var g = model.group, i;
-      g.position.set(P.x, 0, P.z); g.rotation.set(P.pitch, -P.psi, -P.roll, 'YXZ'); g.updateMatrixWorld(true);
+      try { hookTick(dt); } catch (e) {}
+      g.position.set(P.x, 0, P.z); g.rotation.set(P.pitch, -P.psi, -P.roll, 'YXZ');
+      // distance LOD (FL.GFX tier 0 = laptops: nearer): deck life + CIWS mounts only near the ship, no spray far away
+      var camD = camera ? Math.hypot(camera.position.x - P.x, camera.position.z - P.z, camera.position.y) : 0, farL = camD > (root.FL.GFX && root.FL.GFX.tier === 0 ? 2500 : 4500);
+      if (model.life.visible === farL) { model.life.visible = !farL; for (i = 0; i < model.turrets.length; i++) model.turrets[i].g.visible = !farL; }
+      g.updateMatrixWorld(true);
       for (i = 0; i < model.jbd.length; i++) { var J = model.jbd[i]; J.a += Math.max(-dt * 0.9, Math.min(dt * 0.9, J.tgt * 1.05 - J.a)); J.g.children[0].rotation.x = -J.a; }
       // catapult shuttles: run down the track with the jet, then return
       for (i = 0; i < model.shut.length; i++) {
@@ -38388,7 +38432,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       // bow spray at speed
       sprayT -= dt;
       if (sprayT <= 0 && fx && fx.smokePuff) {
-        var vs = Math.hypot(P.vx, P.vz); sprayT = vs > 5 ? 0.2 : 1;
+        var vs = Math.hypot(P.vx, P.vz); sprayT = vs > 5 && camD < 9000 ? 0.2 : 1; if (camD >= 9000) vs = 0;
         if (vs > 5) for (var bs = -1; bs <= 1; bs += 2) { var bx = bs * (6 + Math.random() * 4), bz = K.BOW + 22 * SCALE + Math.random() * 10; tv2.set(P.x + bx * P.c - bz * P.s, 1.2 + Math.random() * 2, P.z + bx * P.s + bz * P.c); fx.smokePuff(tv2, 5 + vs * 0.4, 1.4, 0.92); }
       }
       radarA += dt * 2.2; model.radar.rotation.y = radarA;
@@ -46056,7 +46100,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793197029', updShown = false;
+  var BUILD = '1793198798', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
@@ -46421,7 +46465,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       Object.defineProperty(player, 'health', { get: function () { return st.health; } });
       Object.defineProperty(player, 'cobra', { get: function () { return !!st.cobraPhase && st.cobraPhase !== 'down'; } });
       combat = FL.createCombat({ scene: scene, world: world, fx: fx, buildFlanker: FL.buildFlanker, player: player, camera: camera, sound: sound });
-      if (FL.createCarrier) { try { carrier = FL.createCarrier({ scene: scene, world: world, phys: phys, combat: combat, fx: fx, camera: camera, getCampaign: function () { return campaign; }, flash: flash, comms: comms, getWeather: function () { return weather; } }); syncStartBtn(); } catch (e) { carrier = null; console.warn('carrier', e); } }
+      if (FL.createCarrier) { try { carrier = FL.createCarrier({ scene: scene, world: world, phys: phys, combat: combat, fx: fx, camera: camera, getPlane: function () { return plane; }, getAircraftId: function () { return aircraftId; }, getCampaign: function () { return campaign; }, flash: flash, comms: comms, getWeather: function () { return weather; } }); syncStartBtn(); } catch (e) { carrier = null; console.warn('carrier', e); } }
       if (combat.setLocalInfo) combat.setLocalInfo({ name: playerName(), aircraftId: aircraftId });
       if (combat.setPlayerModel) { try { combat.setPlayerModel(plane); } catch (e) {} }
       if (FL.createCampaign) {
