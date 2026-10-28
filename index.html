@@ -34287,7 +34287,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"uh60m":{"side":"data:image/webp;base64,UklGRgAn
     W({ id: 'boomerang', name: 'Boomerang AAM', short: 'BOOMRNG', type: 'missile', cz: 'boomerang', cat: 'aam', guidance: 'ir', targets: ['air'], range: 9000, minRange: 300, speed: 900, g: 55, gimbal: 180, life: 28,
       lockTimeMul: 0.9, damage: 100, blast: 12, weight: 120, price: 35000, unlockLevel: 20, icon: 'qaam', desc: 'Heat seeker. If it misses, it turns around and attacks again. Two more tries.' }),
     W({ id: 'splitter', name: 'Splitter AAM', short: 'SPLIT', type: 'missile', cz: 'splitter', cat: 'aam', guidance: 'radar', targets: ['air'], range: 22000, minRange: 1000, speed: 1100, g: 30, lockTimeMul: 1.2, split: 3,
-      splitDist: 1300, splitR: 1500, subDamage: 80, subBlast: 12, subSpeed: 1000, subG: 45, subGuidance: 'radar', subGimbal: 120, splitFan: 0.12, subProx: 18, damage: 60, blast: 10, weight: 230, price: 48000, unlockLevel: 26, icon: 'sffs',
+      splitDist: 1300, splitR: 1500, subDamage: 80, subBlast: 12, subSpeed: 1000, subG: 60, subGuidance: 'radar', subGimbal: 120, splitFan: 0.12, subProx: 30, damage: 60, blast: 10, weight: 230, price: 48000, unlockLevel: 26, icon: 'sffs',
       desc: 'Radar missile. 1.3 km from the target it splits into 3 small radar missiles. Each one goes for a different jet.' }),
     W({ id: 'hunter', name: 'Hunter-killer drone missile', short: 'HUNTER', type: 'missile', cz: 'hunter', special: true, guidance: 'drone', targets: GS, range: 15000, speed: 230, g: 22, gimbal: 170, sustain: 45, life: 45, retarget: true,
       lockTimeMul: 0.6, damage: 170, blast: 14, scale: 0.8, ammo: 2, weight: 180, storeKg: 360, station: 'wing belly', price: 88000, unlockLevel: 40, icon: 'drone',
@@ -34748,6 +34748,9 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"uh60m":{"side":"data:image/webp;base64,UklGRgAn
       if (m.czB < 4 && hs > 55 && m.vel.y < 0) {
         m.czB++; ST.bounces++;
         m.pos.y = 0.7; m.vel.y = Math.abs(m.vel.y) * 0.42 + 5; m.vel.x *= 0.8; m.vel.z *= 0.8;
+        var bs = null, bd = 700 * 700, hv = Math.hypot(m.vel.x, m.vel.z);   // each skip turns it up to 15° toward the nearest ship ahead (arcade)
+        for (var i = 0; i < tgts.length; i++) { var t = tgts[i]; if (!t.alive || t.cat !== 'sea') continue; var dx = t.aim.x - m.pos.x, dz = t.aim.z - m.pos.z, dd = dx * dx + dz * dz; if (dd < bd && dx * m.vel.x + dz * m.vel.z > 0) { bd = dd; bs = t; } }
+        if (bs && hv > 1) { var ax = bs.aim.x - m.pos.x, az = bs.aim.z - m.pos.z, a0 = Math.atan2(m.vel.x, m.vel.z), a1 = Math.atan2(ax, az), da = Math.atan2(Math.sin(a1 - a0), Math.cos(a1 - a0)); da = clamp(da, -0.26, 0.26); m.vel.x = Math.sin(a0 + da) * hv; m.vel.z = Math.cos(a0 + da) * hv; }
         if (!m.ghost) K.fxImpact('czSkip', m.pos, { water: true, air: false }, false);
         return false;
       }
@@ -34755,7 +34758,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"uh60m":{"side":"data:image/webp;base64,UklGRgAn
       m.czSunk = true; ST.sinks++;
       if (!m.ghost) {
         vA.set(m.pos.x, -6, m.pos.z);
-        var sb = null, sd = 150 * 150;   // backspin: it rolls on under the nearest hull in 150 m
+        var sb = null, sd = 250 * 250;   // backspin: it rolls on under the nearest hull in 250 m
         for (var i = 0; i < tgts.length; i++) { var t = tgts[i]; if (!t.alive || t.cat !== 'sea') continue; var dx = t.aim.x - vA.x, dz = t.aim.z - vA.z; if (dx * dx + dz * dz < sd) { sd = dx * dx + dz * dz; sb = t; } }
         if (sb) { vA.x = sb.aim.x; vA.z = sb.aim.z; }
         later(1.1, 'sink', vA, m.owner, m.T.spec);
@@ -34899,7 +34902,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"uh60m":{"side":"data:image/webp;base64,UklGRgAn
         } else if (!m.ghost && tgt && tgt.alive && tgt.cat) { K.damage(tgt, 20, 'missile', m.owner, s); K.fxImpact('aam_s', m.pos, { air: true, scale: 0.5 }, false); }
         K.free(m); return true;
       }
-      if (cz === 'tesla' && tgt) {
+      if (cz === 'tesla' && tgt && tgt.kind !== 'flare') {
         if (m.ghost) { K.free(m); return true; }
         K.fxImpact('czZap', m.pos, { air: tgt.cat === 'air' }, false);
         K.damage(tgt, T.dmg || 140, 'missile', m.owner, s);
@@ -35295,7 +35298,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"uh60m":{"side":"data:image/webp;base64,UklGRgAn
         if (H.real && !K.client() && H.t < 3) for (var tp = 0; tp < tgts.length; tp++) {   // pull jets and helicopters in
           var tq = tgts[tp]; if (!tq.alive || !(tq.kind === 'bandit' || tq.kind === 'heli') || !tq.pos || !tq.pos.isVector3) continue;
           vB.subVectors(H.p, tq.pos); var dq = vB.length(); if (dq > R * 1.4 || dq < 5) continue;
-          tq.pos.addScaledVector(vB, Math.min(1, 90 * h / dq) * (1 - dq / (R * 1.4)));
+          tq.pos.lerp(H.p, 1 - Math.exp(-h * 7 * (1 - dq / (R * 1.4))));   // strong pull: they cannot fly away
         }
         // pull: targets (host), the local player (everyone)
         H.tick = (H.tick || 0) + h;
@@ -35434,7 +35437,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"uh60m":{"side":"data:image/webp;base64,UklGRgAn
       }
       if (shockLocal && shockLocal.on) {
         var dc = K.camera ? K.camera.position.distanceTo(shockLocal.p) : 1e9;
-        if (dc > shockLocal.r && dc < 9000) {
+        if (dc > shockLocal.r && dc < 9000 && (!warnTxt || dc < 3200)) {   // own nuke warning first, unless the shock is a danger
           var eta = 0, rr = shockLocal.r; while (rr < dc && eta < 30) { rr += shockSpeed(rr) * 0.1; eta += 0.1; }
           warnTxt = 'SHOCKWAVE<small>' + eta.toFixed(1) + ' s · ' + (dc / 1000).toFixed(1) + ' km</small>'; warnRed = dc < 3200;
         }
@@ -35490,9 +35493,9 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"uh60m":{"side":"data:image/webp;base64,UklGRgAn
       }, [0.72, 0.64, 0.56], [0.3, 0.26, 0.23], 0.16, 4.1);
       var stem = new THREE.Mesh(stemG, mat({ opacity: 0.96 })); stem.renderOrder = 2;
       // skirt (condensation ring around the stem) + base surge
-      var torG = shapeGeo(new THREE.TorusGeometry(1, 0.3, 10, 48).rotateX(Math.PI / 2), function (x, y, z) { Q4[0] = x; Q4[1] = y; Q4[2] = z; Q4[3] = y * 1.5 + 0.5; return Q4; }, [0.96, 0.96, 0.96], [0.62, 0.6, 0.58], 0.12, 2.3);
+      var torG = shapeGeo(new THREE.TorusGeometry(1, 0.3, 10, 48).rotateX(Math.PI / 2), function (x, y, z) { Q4[0] = x; Q4[1] = y; Q4[2] = z; Q4[3] = y * 1.5 + 0.5; return Q4; }, [0.84, 0.78, 0.7], [0.48, 0.43, 0.38], 0.22, 2.3);
       var skirt = new THREE.Mesh(torG, mat({ opacity: 0.55, depthWrite: false })); skirt.renderOrder = 4;
-      var surge = new THREE.Mesh(torG, mat({ opacity: 0.6, depthWrite: false })); surge.renderOrder = 4;
+      var surge = new THREE.Mesh(torG, mat({ opacity: 0.45, depthWrite: false })); surge.renderOrder = 4;
       // fireball (HDR colour, blooms)
       var ballG = shapeGeo(new THREE.SphereGeometry(1, 30, 18), function (x, y, z) { Q4[0] = x; Q4[1] = y; Q4[2] = z; Q4[3] = y * 0.5 + 0.5; return Q4; }, [1, 1, 1], [1, 0.8, 0.6], 0.07, 0.4);
       var ball = new THREE.Mesh(ballG, new THREE.MeshBasicMaterial({ vertexColors: true, color: new THREE.Color(9, 7, 4), transparent: true, fog: false }));
@@ -35558,7 +35561,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"uh60m":{"side":"data:image/webp;base64,UklGRgAn
       V.cap.position.y = H + cR * 0.12; V.cap.scale.set(cR, cR * 0.95, cR); V.cap.rotation.y += h * 0.05; V.cap.visible = t > 0.4;
       V.cap2.position.y = V.cap.position.y; V.cap2.scale.set(cR * 1.14, cR * 1.15, cR * 1.14); V.cap2.rotation.y -= h * 0.03;
       V.skirt.position.y = H * 0.62; var skR = sR * 2.4 * clamp((t - 3) / 4, 0, 1); V.skirt.scale.set(Math.max(1, skR), Math.max(1, skR * 0.5), Math.max(1, skR)); V.skirt.visible = t > 3;
-      V.surge.position.y = 30; var suR = Math.min(V.r * 0.55, 2600); V.surge.scale.set(Math.max(1, suR), Math.max(1, 140 + suR * 0.05), Math.max(1, suR)); V.surge.visible = t > 0.8;
+      V.surge.position.y = 30; var suR = Math.min(V.r * 0.55, 2600); V.surge.scale.set(Math.max(1, suR), Math.max(1, 260 + suR * 0.1), Math.max(1, suR)); V.surge.visible = t > 0.8;
       // glow colour of the cloud: hot orange -> grey smoke
       var hot = clamp(1 - (t - 2) / 12, 0, 1);
       cTmp.copy(GREY).lerp(HOT, hot); V.cap.material.color.copy(cTmp); V.stem.material.color.copy(cTmp);
@@ -35570,7 +35573,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"uh60m":{"side":"data:image/webp;base64,UklGRgAn
       // long fade: the cloud stays ~1 min
       var A = clamp(1 - (t - 50) / 20, 0, 1);
       V.cap.material.opacity = 0.98 * A; V.cap2.material.opacity = 0.4 * A; V.stem.material.opacity = 0.96 * A * clamp((t - 0.6) / 1.5, 0, 1);
-      V.skirt.material.opacity = 0.55 * A * clamp(1 - (t - 14) / 10, 0, 1); V.surge.material.opacity = 0.6 * A * clamp(1 - (t - 18) / 14, 0, 1);
+      V.skirt.material.opacity = 0.55 * A * clamp(1 - (t - 14) / 10, 0, 1); V.surge.material.opacity = 0.45 * A * clamp(1 - (t - 18) / 14, 0, 1);
       // soft smoke puffs on the cap and the base (budget by GFX tier)
       var budget = [12, 24, 40][tier()];
       V.puffT -= h;
@@ -52965,7 +52968,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"uh60m":{"side":"data:image/webp;base64,UklGRgAn
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793216743', updShown = false;
+  var BUILD = '1793218613', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
