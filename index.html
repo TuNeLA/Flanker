@@ -13104,7 +13104,10 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     planPath: function (ctx, A, B) { return resample(ctx, planPath(ctx, A, B, 150), 20, true); },
     material: mat,
     // fighter pilot kit for friendly AI (wingman.js): bank-to-turn flight, BFM wish, lead point
-    flyBTT: flyBTT, bfm: bfm, leadPoint: leadPoint
+    flyBTT: flyBTT, bfm: bfm, leadPoint: leadPoint,
+    // plug-in kit for kinds defined outside this file (carrier.js: enemy carrier group)
+    kit: { aaThink: aaThink, samThink: samThink, mountSpawn: mountSpawn, followMount: followMount, mountGone: mountGone, selfDestruct: selfDestruct,
+      spawnFree: spawnFree, perceive: perceive, syncGroup: syncGroup, boom: boom, puff: puff, charGroup: charGroup, fireSprite: fireSprite, ensure: ensure }
   };
   // ---- model kit for the host's built-in targets (combat.js uses these when present; visual only)
   FL.ENEMY_MODELS = {
@@ -17589,7 +17592,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
           var om = tF.crossVectors(r, vrel).divideScalar(Math.max(dist * dist, 1));
           var vc = Math.max(-vrel.dot(rh), T.bomb ? 30 : 150);
           acc.crossVectors(om, rh).multiplyScalar(T.N * vc);
-          if (T.bomb) acc.y += G;                   // guided bomb: glide compensation (lift)
+          if (T.bomb) acc.y += G * 0.5;             // guided bomb: small fins carry half its weight (glides, still gains speed)
           if (T.skim && ap === skimAim) acc.y += clamp((skimAim.y - m.pos.y) * 0.8 - m.vel.y * 1.2, -30, 30);
           acc.addScaledVector(dir, -acc.dot(dir));
           var al = acc.length(), amax = T.g * G;
@@ -19063,7 +19066,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       for (i = 0; i < pts.length; i++) tm.push([pts[i].kills, pts[i].alive ? 1 : 0, Math.round(pts[i].hp)]);
       net.sendState({ k: 's', i: snapSeq++, T: Math.round(net.now() * 10) / 10, pl: ptIds(), e: e, m: m, tm: tm,
         g: [wave, score, combo, Math.round(comboT * 10), bestCombo, enemiesLeft(), combat.active ? 1 : 0, waveMsgT > 0 ? waveMsg : '', mode === 'director' ? 1 : 0],
-        wp: waypoint ? [r1(waypoint.x), r1(waypoint.y), r1(waypoint.z)] : null });
+        wp: waypoint ? [r1(waypoint.x), r1(waypoint.y), r1(waypoint.z)] : null, wg: combat._wingSnap ? combat._wingSnap() : undefined });
     }
     function sendLocalState(dt) {
       // world-frame angular velocity from successive orientations
@@ -19084,7 +19087,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         w: [Math.round(angW.x * 1000) / 1000, Math.round(angW.y * 1000) / 1000, Math.round(angW.z * 1000) / 1000],
         a: [Math.round(localVis.thr * 100), Math.round(localVis.ab * 100), Math.round(localVis.gearT * 100)],
         al: pAlive ? 1 : 0, ab: player.airborne && !player.airborne() ? 0 : 1, hp: Math.round(player.health || 0),
-        dm: LO.detectMul, vd: Math.round(viewDelayMs()), lk: lockId, ld: locked ? 1 : 0, n: stateSeq % C.stateHz === 1 ? localInfo.name : undefined, ac: stateSeq % C.stateHz === 1 ? localInfo.aircraftId : undefined });
+        dm: LO.detectMul, vd: Math.round(viewDelayMs()), lk: lockId, ld: locked ? 1 : 0, n: stateSeq % C.stateHz === 1 ? localInfo.name : undefined, ac: stateSeq % C.stateHz === 1 ? localInfo.aircraftId : undefined, wl: stateSeq % C.stateHz === 1 ? (localInfo.wingLvl | 0) : undefined });
     }
     function viewDelayMs() { return client ? snapClock.base + snapClock.delay : 0; }
     function syncPeers() {
@@ -19097,7 +19100,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         if (!P) { log('NET join ' + (pr.name || pr.id)); P = makePT(pr.id, false); P.smooth = new Smooth(); P.clock = new Clock(33); P.dispQ = new THREE.Quaternion(); P.dispP = new THREE.Vector3(); pts.push(P); }
         P.name = String(pr.name || P.name || '').slice(0, 24); P.aircraftId = String(pr.aircraftId || P.aircraftId || '').slice(0, 24); P.ping = pr.ping;
       }
-      for (i = pts.length - 1; i >= 1; i--) if (!seen[pts[i].id]) dropPT(pts[i]);
+      for (i = pts.length - 1; i >= 1; i--) if (!seen[pts[i].id] && !pts[i].ai) dropPT(pts[i]);   // ai = wingman (wingman.js)
     }
     function dropPT(P) {
       log('NET drop ' + (P.name || P.id));
@@ -19117,7 +19120,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         P.smooth.push([msg.T, msg.p[0], msg.p[1], msg.p[2], msg.v[0], msg.v[1], msg.v[2], msg.q[0] / 1e4, msg.q[1] / 1e4, msg.q[2] / 1e4, msg.q[3] / 1e4, msg.w[0], msg.w[1], msg.w[2]]);
         P.stAlive = !!msg.al; P.airborne = !!msg.ab; P.hp = msg.hp; P.detectMul = msg.dm || 1; P.viewDelay = (msg.vd || 0) / 1000;
         P.thr = msg.a[0] / 100; P.ab = msg.a[1] / 100; P.gearT = msg.a[2] / 100; P.lockId = msg.lk; P.locked = !!msg.ld;
-        if (msg.n) P.name = String(msg.n).slice(0, 24); if (msg.ac) P.aircraftId = String(msg.ac).slice(0, 24);
+        if (msg.n) P.name = String(msg.n).slice(0, 24); if (msg.ac) P.aircraftId = String(msg.ac).slice(0, 24); if (msg.wl != null) P.wingLvl = clamp(msg.wl | 0, 0, 5);
         P.lastRx = now;
       } else if (msg.k === 's' && client) {
         if (msg.i <= lastSnapI && lastSnapI - msg.i < 1000) return;    // older than what we have
@@ -19129,6 +19132,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     function playerBySlot(pl, s) { if (s < 0 || !pl || s >= pl.length) return null; var id = pl[s]; return id === myId() ? LP : ptById(id); }
     function applySnapshot(msg) {
       var T = msg.T, i, row, t;
+      if (combat._wingApply) { try { combat._wingApply(msg.wg || null, T); } catch (e) { /* ignore */ } }   // wingmen (wingman.js)
       for (i = 0; i < msg.e.length; i++) {
         row = msg.e[i]; t = ents[row[0]];
         if (!t || !t.alive) continue;
@@ -19783,7 +19787,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     combat.off = function (ev, fn) { var l = listeners[ev]; if (l) { var i = l.indexOf(fn); if (i >= 0) l.splice(i, 1); } };
     combat.hud = hud;
     combat.setNet = setNet;
-    combat.setLocalInfo = function (o) { if (o) { if (o.name) localInfo.name = String(o.name).slice(0, 24); if (o.aircraftId) { localInfo.aircraftId = o.aircraftId; LP.aircraftId = o.aircraftId; } } };
+    combat.setLocalInfo = function (o) { if (o) { if (o.name) localInfo.name = String(o.name).slice(0, 24); if (o.aircraftId) { localInfo.aircraftId = o.aircraftId; LP.aircraftId = o.aircraftId; } if (o.wingLvl != null) localInfo.wingLvl = o.wingLvl | 0; } };
     combat.setLocalVisual = function (o) { if (o) { if (o.thr != null) localVis.thr = +o.thr || 0; if (o.ab != null) localVis.ab = +o.ab || 0; if (o.gearT != null) localVis.gearT = +o.gearT || 0; } };
     combat.remotePlayers = function () {
       // not flying (menu / lobby): update() does not run, so refresh the teammate poses here (startGame needs them to air-start)
@@ -19810,7 +19814,8 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       launch: function (p, v, t, wid, owner, msp, mg) { return launchMissile('player', p, v, t, playerMT(specOf(wid) || DEF_W.msl, msp || 800, mg || 40), owner); },
       addFlare: function (p, v) { return addFlare(p, v); }, decoy: function (P, made, eff) { decoyMissiles(P, made, eff); },
       desig: function () { return desig; }, locked: function () { return locked; }, time: function () { return time; },
-      netOn: function () { return !!(net && net.connected); }, isClient: function () { return client; },
+      netOn: function () { return !!(net && net.connected); }, isClient: function () { return client; }, hosting: function () { return hosting(); },
+      myId: function () { return myId(); }, now: function () { return nowMs(); },
       drop: function (P) { var i = pts.indexOf(P); if (i > 0) pts.splice(i, 1); for (i = 0; i < tgts.length; i++) if (tgts[i].tp === P) { tgts[i].tp = LP; tgts[i].detect = false; } } };
     // per-jet gun muzzle: local Vector3 (nose -Z, right +X), e.g. model.gunMuzzle; pair = true -> guns on both sides (alternate)
     combat._dbg.fireAt = function (t) { var w = selW(); return w ? fireOne(w, t, tagSeq++) : false; };
@@ -22047,13 +22052,13 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     // ---- fog / sky white colour: world mixes them after tone mapping (display space); in the HDR target we
     // feed the scene-linear value that ACES maps back to the same display colour, so horizon matching survives.
     const fogSave = new T.Color(), fogLin = new T.Color(), fogKey = new T.Color(-1, -1, -1);
-    let fogKeyEx = -1, skyU = null, skySearched = false;
+    let fogKeyEx = -1, skyU0 = null, skySearched = false;
     const skySave = new T.Vector3(), skyLin = new T.Color(), skyKey = new T.Color(-1, -1, -1), tmpC = new T.Color();
     let skyKeyEx = -1;
     function findSky() {
-      skySearched = true; skyU = null;
+      skySearched = true; skyU0 = null;
       const s = scene.getObjectByName('sky');
-      if (s && s.material && s.material.uniforms && s.material.uniforms.uWhiteCol) skyU = s.material.uniforms.uWhiteCol;
+      if (s && s.material && s.material.uniforms && s.material.uniforms.uWhiteCol) skyU0 = s.material.uniforms.uWhiteCol;
     }
 
     // ---- scratch
@@ -22139,13 +22144,14 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       getResolutionScale: function () { return resScale; },
       refreshMaterials: refreshMaterials,
       setBloom: function (o) { for (const k in o) if (k in BLOOM) BLOOM[k] = o[k]; },
-      render: function (dt, fx) {
+      render: function (dt, fx, scnO, camO) {   // scnO/camO: optional other scene + camera (hangar3d.js)
+        const scn = scnO || scene, cam = camO || camera;
         time = (time + (dt || 0)) % 1000;
         const info = renderer.info;
         if (!post.enabled || quality === 'off' || !supported) {
           apply('direct');
           renderer.setRenderTarget(null);
-          renderer.render(scene, camera);
+          renderer.render(scn, cam);
           post.info.passes = 1;
           return;
         }
@@ -22171,13 +22177,14 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         const ex = renderer.toneMappingExposure || 1;
 
         // 1. scene -> HDR target (fog/sky-white colours swapped to scene-linear equivalents)
-        const fog = scene.fog;
+        const fog = scn.fog;
         if (fog) {
           fogSave.copy(fog.color);
           if (!fogSave.equals(fogKey) || ex !== fogKeyEx) { fogKey.copy(fogSave); fogKeyEx = ex; displayToSceneLinear(fogSave, ex, fogLin); }
           fog.color.copy(fogLin);
         }
         if (!skySearched) findSky();
+        const skyU = scnO ? null : skyU0;
         if (skyU) {
           skySave.copy(skyU.value); tmpC.setRGB(skySave.x, skySave.y, skySave.z);
           if (!tmpC.equals(skyKey) || ex !== skyKeyEx) { skyKey.copy(tmpC); skyKeyEx = ex; displayToSceneLinear(tmpC, ex, skyLin); }
@@ -22187,7 +22194,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         setActive(sceneRT, sw, sh);
         renderer.setRenderTarget(sceneRT);
         tqBegin(0);
-        renderer.render(scene, camera);
+        renderer.render(scn, cam);
         tqEnd();
         if (fog) fog.color.copy(fogSave);
         if (skyU) skyU.value.copy(skySave);
@@ -22245,9 +22252,9 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
         // sun projection (camera matrices are fresh after the scene render)
         let sunI = 0;
         if (fx && fx.sunWorld && (fx.sunVisible === undefined || fx.sunVisible > 0)) {
-          v3.copy(fx.sunWorld).applyMatrix4(camera.matrixWorldInverse);
+          v3.copy(fx.sunWorld).applyMatrix4(cam.matrixWorldInverse);
           if (v3.z < 0) {
-            v3.applyMatrix4(camera.projectionMatrix);
+            v3.applyMatrix4(cam.projectionMatrix);
             const ux = v3.x * 0.5 + 0.5, uy = v3.y * 0.5 + 0.5;
             const out = Math.max(Math.max(-ux, ux - 1), Math.max(-uy, uy - 1));
             sunI = (fx.sunVisible === undefined ? 1 : Math.min(1, fx.sunVisible)) * (out > 0 ? Math.max(0, 1 - out / 0.12) : 1) * (1 - 0.85 * cloud);
@@ -22255,14 +22262,14 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
           }
         }
         if (sunI <= 0) cu.uSun.value.z = 0;
-        if (camera.isPerspectiveCamera) {
-          const ry = Math.tan(0.9 * Math.PI / 180) / (2 * Math.tan(camera.fov * Math.PI / 360) / (camera.zoom || 1));
-          cu.uSunR.value.set(ry / camera.aspect, ry);
+        if (cam.isPerspectiveCamera) {
+          const ry = Math.tan(0.9 * Math.PI / 180) / (2 * Math.tan(cam.fov * Math.PI / 360) / (cam.zoom || 1));
+          cu.uSunR.value.set(ry / cam.aspect, ry);
         }
         // heat shimmer centre: projected nozzle point if given, else lower centre (chase-view exhaust)
         if (boost > 0 && fx && fx.heatWorld) {
-          v3b.copy(fx.heatWorld).applyMatrix4(camera.matrixWorldInverse);
-          if (v3b.z < 0) { v3b.applyMatrix4(camera.projectionMatrix); cu.uHeat.value.set(v3b.x * 0.5 + 0.5, v3b.y * 0.5 + 0.5); }
+          v3b.copy(fx.heatWorld).applyMatrix4(cam.matrixWorldInverse);
+          if (v3b.z < 0) { v3b.applyMatrix4(cam.projectionMatrix); cu.uHeat.value.set(v3b.x * 0.5 + 0.5, v3b.y * 0.5 + 0.5); }
         } else cu.uHeat.value.set(0.5, 0.27);
 
         const cm = compMat();
@@ -25402,21 +25409,16 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     return o;
   }
 
-  // find open water for the course: distance-to-shallows field on a 1 km grid, then test stadium candidates
-  var COURSES = {};
-  function fitCourse(world, windFromDeg) {
-    var N = 97, G = 1000, i, j, k;
-    var d = new Float32Array(N * N), INF = 1e9;
+  // ---- deep-water clearance field: distance (m) from every cell to the nearest shallow (> -14 m), solid or map-edge cell
+  function seaField(world, G) {
+    var N = Math.round(96000 / G) + 1, i, j, k, d = new Float32Array(N * N), INF = 1e9, h2 = G * 0.45;
+    var o = [[0, 0], [h2, 0], [-h2, 0], [0, h2], [0, -h2]];
     for (j = 0; j < N; j++) for (i = 0; i < N; i++) {
       var e = -48000 + i * G, n = -48000 + j * G, ok = Math.abs(e) < 43500 && Math.abs(n) < 43500;
-      if (ok) {
-        var o = [[0, 0], [450, 0], [-450, 0], [0, 450], [0, -450]];
-        for (k = 0; k < 5 && ok; k++) { var h = world.sampleH(e + o[k][0], n + o[k][1]); if (!(h < -14)) ok = false; }
-        if (ok && world.solidAt && (world.solidAt(e, 10, -n) || world.solidAt(e, 40, -n))) ok = false;
-      }
+      for (k = 0; k < 5 && ok; k++) { var h = world.sampleH(e + o[k][0], n + o[k][1]); if (!(h < -14)) ok = false; }
+      if (ok && world.solidAt && (world.solidAt(e, 10, -n) || world.solidAt(e, 40, -n))) ok = false;
       d[j * N + i] = ok ? INF : 0;
     }
-    // chamfer distance (cells), two passes
     var S2 = Math.SQRT2;
     for (j = 0; j < N; j++) for (i = 0; i < N; i++) {
       var q = j * N + i, v = d[q]; if (!v) continue;
@@ -25430,40 +25432,64 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       if (i < N - 1 && j < N - 1) v2 = Math.min(v2, d[q2 + N + 1] + S2); if (i > 0 && j < N - 1) v2 = Math.min(v2, d[q2 + N - 1] + S2);
       d[q2] = v2;
     }
-    function dAt(e, n) {
+    return function dAt(e, n) {
       var fx = (e + 48000) / G, fy = (n + 48000) / G; if (fx < 0 || fy < 0 || fx >= N - 1 || fy >= N - 1) return 0;
       var x0 = Math.floor(fx), y0 = Math.floor(fy), a = fx - x0, b = fy - y0, q = y0 * N + x0;
       return G * ((d[q] * (1 - a) + d[q + 1] * a) * (1 - b) + (d[q + N] * (1 - a) + d[q + N + 1] * a) * b);
-    }
-    var home = world.spawn || { e: 0, n: 0 }, lanes = world.seaLanes || [], M = 2200, H0 = windFromDeg, tmp = {};
-    var OFFS = [0, 15, -15, 30, -30, 45, -45, 60, -60, 90, -90], LENS = [5000, 3500, 2200, 1200, 400], R = 1500;
+    };
+  }
+  var FIELDS = {};
+  function fieldOf(world) { var id = world.mapId || '?'; if (!FIELDS[id] || FIELDS[id].w !== world) FIELDS[id] = { w: world, f: seaField(world, 500) }; return FIELDS[id].f; }
+  // friendly course: a stadium whose closest point is ~`offshore` m from the coast, as near the home base as possible
+  var COURSES = {};
+  function fitCourse(world, windFromDeg, offshore) {
+    var dAt = fieldOf(world), home = world.hangar || world.spawn || { e: 0, n: 0 }, tmp = {};
+    var R = 800, target = Math.max(1200, (offshore || 3000) - 400), M = Math.min(1500, target * 0.7);   // field counts from the -14 m line (~400 m out)
+    var cs = [];
+    for (var cn = -41000; cn <= 41000; cn += 1000) for (var ce = -41000; ce <= 41000; ce += 1000) if (dAt(ce, cn) >= M) cs.push([ce, cn, Math.hypot(ce - home.e, cn - home.n)]);
+    cs.sort(function (a, b) { return a[2] - b[2]; });
+    var LENS = [4000, 3000, 2200, 1500, 800];
     for (var li = 0; li < LENS.length; li++) {
-      var best = null, bestS = -1e18;
-      for (var oi = 0; oi < OFFS.length; oi++) for (var sg = -1; sg <= 1; sg += 2) {
-        for (var cn = -40000; cn <= 40000; cn += 2000) for (var ce = -40000; ce <= 40000; ce += 2000) {
-          if (dAt(ce, cn) < M) continue;
-          var Hh = (H0 + OFFS[oi]) * DEG, me = ce + sg * R * Math.cos(Hh), mn = cn - sg * R * Math.sin(Hh), dh = Math.hypot(me - home.e, mn - home.n);
-          if (-Math.abs(OFFS[oi]) * 60 - dh * 0.25 + 1050 <= bestS) continue;   // cannot beat the best: skip the path test
-          var c = makeCourse(ce, cn, H0 + OFFS[oi], LENS[li], R, sg), per = 4 * LENS[li] + 2 * Math.PI * R, ns = Math.ceil(per / 350), mind = 1e9, fail = false;
-          for (k = 0; k < ns; k++) {
-            // sample by arc length: map to time per segment
-            var sArc = per * k / ns, t;
-            if (sArc < 2 * c.Lh) t = sArc / c.vA; else if ((sArc -= 2 * c.Lh) < Math.PI * R) t = c.tA + sArc / c.vT;
-            else if ((sArc -= Math.PI * R) < 2 * c.Lh) t = c.tA + c.tT + sArc / c.vB; else t = c.tA + c.tT + c.tB + (sArc - 2 * c.Lh) / c.vT;
-            poseAt(c, t, tmp); var dd = dAt(tmp.e, tmp.n);
-            if (dd < M) { fail = true; break; } if (dd < mind) mind = dd;
+      var Lh = LENS[li], per = 4 * Lh + 2 * Math.PI * R, ns = Math.ceil(per / 300), best = null, bestS = -1e18;
+      for (var ci = 0; ci < cs.length; ci++) {
+        var C = cs[ci];
+        if (-(C[2] - R) * 0.25 <= bestS) break;            // sorted by distance: nothing further can win
+        for (var hd = 0; hd < 360; hd += 15) {
+          var dw = Math.abs(((hd - windFromDeg) % 360 + 540) % 360 - 180), angPen = dw * 3;
+          for (var sg = -1; sg <= 1; sg += 2) {
+            var Hh = hd * DEG, me = C[0] + sg * R * Math.cos(Hh), mn = C[1] - sg * R * Math.sin(Hh), ub = -Math.hypot(me - home.e, mn - home.n) * 0.25 - angPen;
+            if (ub <= bestS) continue;
+            var c = makeCourse(C[0], C[1], hd, Lh, R, sg), mind = 1e9, msum = 0, fail = false;
+            for (var k = 0; k < ns; k++) {
+              var sArc = per * k / ns, t;
+              if (sArc < 2 * Lh) t = sArc / c.vA; else if ((sArc -= 2 * Lh) < Math.PI * R) t = c.tA + sArc / c.vT;
+              else if ((sArc -= Math.PI * R) < 2 * Lh) t = c.tA + c.tT + sArc / c.vB; else t = c.tA + c.tT + c.tB + (sArc - 2 * Lh) / c.vT;
+              poseAt(c, t, tmp); var dd = dAt(tmp.e, tmp.n);
+              if (dd < M) { fail = true; break; } if (dd < mind) mind = dd; msum += dd;
+            }
+            if (fail) continue;
+            var sc = ub - (Math.abs(mind - target) + 0.5 * (msum / ns - mind)) * 2;   // closest point at the target, and stay near it
+            if (sc > bestS) { bestS = sc; best = c; best.mind = mind; }
           }
-          if (fail) continue;
-          var lp = 0;
-          for (var L = 0; L < lanes.length; L++) for (var p = 0; p < lanes[L].length; p++) { var dl = Math.hypot(lanes[L][p][0] - me, lanes[L][p][1] - mn); if (dl < 2500) lp = Math.max(lp, 2500 - dl); }
-          var sc = -Math.abs(OFFS[oi]) * 60 - dh * 0.25 + Math.min(mind, 3500) * 0.3 - lp * 0.6;
-          if (sc > bestS) { bestS = sc; best = c; }
         }
       }
       if (best) return best;
     }
     return null;
   }
+  // a patch of open water for an enemy carrier group: ~`want` m from (e, n), a 3.5 km disk of deep water, away from `avoid` {e, n}
+  root.FL.navalSpot = function (world, e, n, want, avoid) {
+    if (!world || !world.sampleH) return null;
+    var dAt = fieldOf(world), best = null, bs = -1e18, W = want || 13000;
+    for (var r = 6000; r <= 26000; r += 1000) for (var k = 0; k < 36; k++) {
+      var a = k / 36 * Math.PI * 2, pe = e + Math.sin(a) * r, pn = n + Math.cos(a) * r, dd = dAt(pe, pn);
+      if (dd < 3800) continue;
+      var sc = -Math.abs(r - W) - (avoid ? Math.max(0, 8000 - Math.hypot(pe - avoid.e, pn - avoid.n)) * 2 : 0) + Math.min(dd, 6000) * 0.2;
+      if (sc > bs) { bs = sc; best = { e: pe, n: pn, r: Math.min(dd - 800, 4000) }; }
+    }
+    if (!best && world.openSea) best = { e: world.openSea.e, n: world.openSea.n, r: Math.min(4000, world.openSea.r * 0.4) };
+    return best;
+  };
 
   // ------------------------------------------------------------------ visual kit (module level)
   var T = root.THREE;
@@ -25482,7 +25508,9 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     g.computeVertexNormals(); g.computeBoundingSphere(); return g;
   };
   function rng(seed) { var s = seed >>> 0; return function () { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
+  var DTC = null, DOTC = null, FOAMC = null;
   function deckTexture() {
+    if (DTC) return DTC;
     var W = 256, H = 1024, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
     var g = cv.getContext('2d'), XMIN = -40, XMAX = 32, R = rng(63);
     function px(x) { return (x - XMIN) / (XMAX - XMIN) * W; }
@@ -25525,14 +25553,16 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     for (i = 0; i < K.EDGE.length; i++) { E = K.EDGE[i]; if (i) g.lineTo(px(E[2] - 1.2), py(E[0])); else g.moveTo(px(E[2] - 1.2), py(E[0])); }
     g.stroke();
     var tex = new T.CanvasTexture(cv); tex.encoding = T.sRGBEncoding; tex.anisotropy = 8;
-    return { tex: tex, XMIN: XMIN, XMAX: XMAX };
+    return (DTC = { tex: tex, XMIN: XMIN, XMAX: XMAX });
   }
   function dotTexture() {
+    if (DOTC) return DOTC;
     var cv = document.createElement('canvas'); cv.width = cv.height = 64; var g = cv.getContext('2d');
     var gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.25, 'rgba(255,255,255,0.85)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
-    g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return new T.CanvasTexture(cv);
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return (DOTC = new T.CanvasTexture(cv));
   }
   function foamTexture() {
+    if (FOAMC) return FOAMC;
     var cv = document.createElement('canvas'); cv.width = 64; cv.height = 256; var g = cv.getContext('2d'), R = rng(7);
     g.fillStyle = '#000'; g.fillRect(0, 0, 64, 256);
     for (var i = 0; i < 900; i++) {
@@ -25542,7 +25572,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     // soft edges
     var gr = g.createLinearGradient(0, 0, 64, 0); gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(0.25, 'rgba(0,0,0,0)'); gr.addColorStop(0.75, 'rgba(0,0,0,0)'); gr.addColorStop(1, 'rgba(0,0,0,1)');
     g.fillStyle = gr; g.fillRect(0, 0, 64, 256);
-    var t = new T.CanvasTexture(cv); t.wrapS = T.ClampToEdgeWrapping; t.wrapT = T.RepeatWrapping; return t;
+    var t = new T.CanvasTexture(cv); t.wrapS = T.ClampToEdgeWrapping; t.wrapT = T.RepeatWrapping; return (FOAMC = t);
   }
 
   // hull + deck + island for one palette (geometry built per call; the friendly ship and each enemy carrier)
@@ -25635,6 +25665,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     var clock = opts.clock || function () { return Date.now() / 1000; };
     var MAPS = opts.maps || { cliffs: true };
     var WIND_FROM = opts.windFromDeg != null ? opts.windFromDeg : 246.4;   // weather.js: wind toward ~066 deg
+    var OFFSHORE = opts.offshore || 3000;   // m from the coast to the nearest point of the course
     var headless = typeof document === 'undefined' || !scene || !T;
     var st = phys.st, GEAR_H = phys.GEAR_H || 2.4;
     var baseWorld = null, course = null, on = false, tS = clock();
@@ -25813,7 +25844,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
       var id = w && w.mapId;
       course = null; on = false;
       if (w && (MAPS === 'auto' || MAPS[id])) {
-        if (!(id in COURSES)) { try { COURSES[id] = fitCourse(w, WIND_FROM); } catch (e) { COURSES[id] = null; } }
+        if (!(id in COURSES) || COURSES[id] && COURSES[id].w !== w) { var cc = null; try { cc = fitCourse(w, WIND_FROM, OFFSHORE); } catch (e) { cc = null; } if (cc) cc.w = w; COURSES[id] = cc; }
         course = COURSES[id];
       }
       on = !!course; pw = on ? makePW(w) : null;
@@ -26290,11 +26321,15 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
     }
     drag = { x: e.clientX, y: e.clientY };
   });
+  // chorded buttons (fire while the right button zooms) do not fire a second pointerdown — mousedown/mouseup do
+  canvas.addEventListener('mousedown', function (e) { if (!mouseFlyOn()) return; if (e.button === 0) mouseBtn.l = true; else if (e.button === 2) mouseBtn.r = true; });
+  addEventListener('mouseup', function (e) { if (e.button === 0) mouseBtn.l = false; else if (e.button === 2) mouseBtn.r = false; });
   // side buttons must not navigate the page back / forward while flying
   addEventListener('mouseup', function (e) { if ((e.button === 3 || e.button === 4) && started) e.preventDefault(); });
   canvas.addEventListener('contextmenu', function (e) { e.preventDefault(); });
   addEventListener('pointerup', function (e) { drag = null; if (e.button === 0) mouseBtn.l = false; if (e.button === 2) mouseBtn.r = false; });
   addEventListener('pointermove', function (e) {
+    if (e.pointerType === 'mouse' && started && mouseFlyOn() && typeof e.buttons === 'number') { mouseBtn.l = !!(e.buttons & 1); mouseBtn.r = !!(e.buttons & 2); }
     if (e.pointerType === 'mouse' && started && lastDevice !== 'mouse') {
       var nowS = performance.now() / 1000; if (nowS - mouseAccT > 0.3) mouseAcc = 0; mouseAccT = nowS;
       mouseAcc += Math.abs(e.movementX || 0) + Math.abs(e.movementY || 0);
@@ -29064,7 +29099,7 @@ body.touchui .comms { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) +
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793150934', updShown = false;
+  var BUILD = '1793151117', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
