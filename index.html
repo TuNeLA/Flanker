@@ -22572,7 +22572,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       '.flo-pyl{display:grid;grid-template-columns:repeat(auto-fit,minmax(66px,1fr));gap:4px;margin-bottom:10px}',
       '.flc .flo-pc{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:3px;min-height:48px;padding:6px 7px;text-transform:none;letter-spacing:0;text-align:left;border-color:var(--line);color:var(--ink);background:rgba(4,12,12,.6);min-width:0;touch-action:manipulation}',
       '.flo-pc *{pointer-events:none}.flo-pc .k{font:10px/1 var(--mono);letter-spacing:.06em;color:var(--g);text-transform:uppercase;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}',
-      '.flo-pc b{font:700 12px/1.1 var(--disp);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.flo-pc i{font:normal 10px/1 var(--mono);color:var(--dim)}',
+      '.flo-pc .k small{font-size:9px;color:var(--dim);letter-spacing:.04em}.flo-pc b{font:700 12px/1.1 var(--disp);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.flo-pc i{font:normal 10px/1 var(--mono);color:var(--dim)}',
       '.flc .flo-pc.empty b{color:var(--dim)}.flc .flo-pc.lock{opacity:.45;border-style:dashed}',
       '.flc .flo-pc.t-agm{border-left:3px solid #9fd3ff}.flc .flo-pc.t-aam{border-left:3px solid var(--g)}.flc .flo-pc.t-bomb{border-left:3px solid var(--a)}.flc .flo-pc.t-rocket{border-left:3px solid #d6ff7a}.flc .flo-pc.t-tank{border-left:3px solid #c3ccc8}.flc .flo-pc.t-gunpod{border-left:3px solid #ff9f7a}',
       '.flc .flo-pc.sel{border-color:var(--a);background:rgba(255,190,85,.16);box-shadow:inset 0 0 0 1px var(--a)}.flc .flo-pc.sel .k{color:var(--a)}',
@@ -22988,7 +22988,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
         var e = st.open ? mk(st) : null, w = st.open ? FL.WEAPONS[eq.pyl[st.id]] : null;
         var v = !st.open ? 'Closed' : e && w ? shortName(w) : 'Empty', n = e ? (e.type === 'rocket' || e.type === 'gunpod' ? e.ammo : '×' + e.count) : '';
         return '<button class="flo-pc' + (st.id === selSlot ? ' sel' : '') + (!st.open ? ' lock' : !e ? ' empty' : '') + (e ? ' t-' + e.type : '') + '" data-act="slot" data-id="' + st.id + '" data-key="pyl-' + st.id + '" aria-pressed="' + (st.id === selSlot) + '" title="Pylon ' + st.id + ' (' + KIND_NAME[st.kind] + '): ' + esc(v) + '">' +
-          '<span class="k">' + st.id + ' · ' + KIND_NAME[st.kind] + '</span><b>' + esc(v) + '</b>' + (n ? '<i>' + n + '</i>' : '') + '</button>';
+          '<span class="k">' + st.id + ' <small>' + ({ tip: 'tip', wing: 'wing', belly: 'ctr', bay: 'bay' }[st.kind] || '') + '</small></span><b>' + esc(v) + '</b>' + (n ? '<i>' + n + '</i>' : '') + '</button>';
       }).join('') + '</div>';
       h += '<div class="flc-lo flo' + (pickOpen ? ' pk-open' : '') + '"><div class="flo-l">';
       // 2) top view with markers; markers are spread so they never overlap (the chips above are the main control)
@@ -27231,6 +27231,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
         for (var q = 0; q < nS; q++) list.push(sl.length ? sl[q % sl.length] : (desig && desig.alive && tgtOK(desig, s) ? desig : null));
         fireOne(w, list[0], tagSeq++);
         for (var q2 = 1; q2 < list.length; q2++) ripple.push({ t: time + q2 * 0.12, w: w, tgt: list[q2] });
+        markEngaged(list, s); advanceFree(s);
         return true;
       }
       var lockNearly = !locked && s.guidance !== 'sarh' && lockT >= lockNeed(s) * (0.8 - 0.35 * Math.min(aaVal(), 1));   // assist: an almost-full lock counts
@@ -27241,7 +27242,30 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       list.length = Math.min(list.length, w.ammo);
       fireOne(w, list[0], tagSeq++);
       for (var k = 1; k < list.length; k++) ripple.push({ t: time + k * 0.18, w: w, tgt: list[k] });
+      markEngaged(list, s);
+      if (s.multi && LO.multiLock > 1 && list[0]) advanceFree(s);   // multi-lock: the next press goes to the next group
       return true;
+    }
+    // targets with our missiles on the way (time-based estimate of the flight time)
+    function engaged(t) { return !!t && t._engUntil > time && t.alive; }
+    function markEngaged(list, s) {
+      for (var i = 0; i < list.length; i++) { var t = list[i]; if (!t || !t.aim || !player) continue;
+        var tt = clamp(t.aim.distanceTo(player.pos) / Math.max(300, (s && s.speed) || 900) + 1.5, 2, 14); t._engUntil = Math.max(t._engUntil || 0, time + tt); }
+    }
+    // after a multi-lock / salvo shot: make the best target with no missile on it the new MAIN (it keeps its track lock)
+    function advanceFree(s) {
+      if (!pAlive || !desig || !engaged(desig)) return;
+      var best = null, bs = -1e9, i;
+      for (i = 0; i < trk.length; i++) { var k = trk[i]; if (!k.t.alive || engaged(k.t) || !tgtOK(k.t, s)) continue; var sc = (k.locked ? 10 : 0) + k.lockT + coneAngle(k.t, null); if (sc > bs) { bs = sc; best = k.t; } }
+      if (!best) for (i = 0; i < tgts.length; i++) { var t = tgts[i]; if (!t.alive || engaged(t) || !tgtOK(t, s)) continue; var c = coneAngle(t, null); if (c > cosCone && c > bs) { bs = c; best = t; } }
+      if (!best) return;
+      var ni = trackIdx(best), nLT = 0, nLk = false;
+      if (ni >= 0) { nLT = trk[ni].lockT / 1.5; nLk = trk[ni].locked; dropTrack(ni); }
+      if (trk.length >= trackMax() - 1) dropTrack(trk.length - 1);
+      trk.push(newTrack(desig, lockT * 1.5, locked));
+      desig = best; desigOut = 0; lockOut = 0; multiT = 0;
+      locked = nLk; lockT = nLk ? lockNeed(s) : Math.min(nLT, lockNeed(s));
+      if (locked) play('lock');
     }
     // ======================================================================
     // Special weapons: GPS points, multi-target salvos, submunitions, drones, napalm, EMP, laser beam, railgun
@@ -27262,7 +27286,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
         var t = tgts[i]; if (!t.alive) continue;
         var c = coneAngle(t, s); if (c < cosA) continue;
         if (!aspectFine(t, s)) continue;
-        t._sc = c + (t === desig ? 1 : 0) + (trackIdx(t) >= 0 ? 0.5 : 0); salvoC.push(t);   // main first, then tracks
+        t._sc = c + (t === desig ? 1 : 0) + (trackIdx(t) >= 0 ? 0.5 : 0) - (engaged(t) ? 3 : 0); salvoC.push(t);   // main first, then tracks; targets with our missiles in flight last
       }
       salvoC.sort(salvoSort);
       for (i = 0; i < salvoC.length && salvoOut.length < Math.max(1, s.autoLock || 1); i++) salvoOut.push(salvoC[i]);
@@ -27956,7 +27980,10 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       // multi-lock salvo (s.multi missiles): the locked secondary tracks, up to multiLock - 1
       var nMax = s && s.type === 'missile' && s.multi ? Math.max(1, LO.multiLock | 0) : 1;
       multi.length = 0;
-      if (locked && nMax > 1) for (var i = 0; i < trk.length && multi.length < nMax - 1; i++) if (trk[i].locked && tgtOK(trk[i].t, s)) multi.push(trk[i].t);
+      if (locked && nMax > 1) for (var pass = 0; pass < 2; pass++) for (var i = 0; i < trk.length && multi.length < nMax - 1; i++) {
+        var tk = trk[i]; if (!tk.locked || !tgtOK(tk.t, s) || (engaged(tk.t) ? 0 : 1) !== 1 - pass) continue;   // pass 0: no missile on it yet; pass 1: the rest
+        multi.push(tk.t);
+      }
     }
     // ---- target tracks: the radar keeps up to max(3, multiLock) contacts; secondaries lock in parallel (x1.5 time).
     //      cycleTarget swaps the MAIN among tracks and keeps every lock. A track drops after 2 s out of cone / masked.
@@ -45322,7 +45349,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793191527', updShown = false;
+  var BUILD = '1793191937', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
