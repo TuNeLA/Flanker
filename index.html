@@ -383,7 +383,7 @@ body.flk-cover > .xm-pop, body.flk-cover > .xm-ban, body.flk-cover > .xm-card { 
           <h2 class="sh" id="msTtl"><span class="sec">1.1</span>Mission setup <span id="mapNote" class="note-inline"></span></h2>
           <div id="mapGrid" class="maps" role="group" aria-label="Maps"></div>
           <div class="opt"><span>Start point<small>Where Fly starts on this map.</small></span><button id="bStart" class="small" title="Where Fly starts on this map">Start: Runway</button></div>
-          <label class="opt"><span>Missions<small id="mixNote">Select more air targets or more ground targets.</small></span><select id="optMix"><option value="air">Air only</option><option value="airmost">Mostly air</option><option value="mixed" selected>Mixed</option><option value="ground">Mostly ground</option></select></label>
+          <label class="opt"><span>Missions<small id="mixNote">Select more air targets or more ground targets.</small></span><select id="optMix"><option value="air">Air only</option><option value="airmost">Mostly air</option><option value="mixed" selected>Mixed</option><option value="ground">Mostly ground</option><option value="naval">Naval (sea maps)</option></select></label>
           <label class="opt"><span>Difficulty<small id="diffNote">Harder: more and better enemies, more credits and XP.</small></span><select id="optDiff"><option value="easy">Easy (fewer enemies, x0.75 rewards)</option><option value="normal" selected>Normal</option><option value="hard">Hard (more enemies, x1.35 rewards)</option><option value="ace">Ace (many enemies, x1.75 rewards)</option></select></label>
           <label class="opt"><span>Weather<small id="wxNote">The host selects the weather.</small></span><select id="optWx"><option value="clear">Clear</option><option value="scattered" selected>Scattered clouds</option><option value="overcast">Overcast</option><option value="heavy">Heavy clouds</option><option value="thunderstorm">Thunderstorm</option><option value="fog">Fog</option><option value="snow">Snow</option><option value="sunset">Sunset</option><option value="night">Night</option></select></label>
         </div>
@@ -466,7 +466,7 @@ body.flk-cover > .xm-pop, body.flk-cover > .xm-ban, body.flk-cover > .xm-card { 
         </div>
         <div id="coRoom" class="coroom" hidden><span class="lbl">ROOM</span><strong id="coCodeBig">—</strong><button id="bCopy" class="small">Copy invite link</button></div>
         <p id="coMap" class="comap"></p>
-        <label class="opt mixrow"><span>Missions<small id="coMixNote">The host selects. All pilots fly the same missions.</small></span><select id="coMix"><option value="air">Air only</option><option value="airmost">Mostly air</option><option value="mixed" selected>Mixed</option><option value="ground">Mostly ground</option></select></label>
+        <label class="opt mixrow"><span>Missions<small id="coMixNote">The host selects. All pilots fly the same missions.</small></span><select id="coMix"><option value="air">Air only</option><option value="airmost">Mostly air</option><option value="mixed" selected>Mixed</option><option value="ground">Mostly ground</option><option value="naval">Naval (sea maps)</option></select></label>
         <label class="opt mixrow"><span>Difficulty<small id="coDiffNote">The host selects. All pilots fly the same difficulty.</small></span><select id="coDiff"><option value="easy">Easy (fewer enemies, x0.75 rewards)</option><option value="normal" selected>Normal</option><option value="hard">Hard (more enemies, x1.35 rewards)</option><option value="ace">Ace (many enemies, x1.75 rewards)</option></select></label>
         <label class="opt mixrow"><span>Weather<small id="coWxNote">The host selects the weather.</small></span><select id="coWx"><option value="clear">Clear</option><option value="scattered" selected>Scattered clouds</option><option value="overcast">Overcast</option><option value="heavy">Heavy clouds</option><option value="thunderstorm">Thunderstorm</option><option value="fog">Fog</option><option value="snow">Snow</option><option value="sunset">Sunset</option><option value="night">Night</option></select></label>
         <ul id="coPeers" class="copeers"></ul>
@@ -7077,7 +7077,7 @@ body.flk-cover > .xm-pop, body.flk-cover > .xm-ban, body.flk-cover > .xm-card { 
     const TOWNS = [
       { e: -10900, n: -12000, r: 380, count: 34, style: 'tropical', harbor: true, church: true, seed: 1401, name: 'Port Tern' },
       { e: 27900, n: 24400, r: 320, count: 22, style: 'tropical', harbor: true, seed: 1402, name: 'Black Rock' }];
-    const cG1 = lin(0x1f4a18), cG2 = lin(0x3a6a22), cScrub = lin(0x8d8a58), cSand = lin(0xe6dcc0), cSea = lin(0xe2d8b8), cRock = lin(0x3a3633), cWet = lin(0x2a2622), cCoral = lin(0xd8cfb0);
+    const cG1 = lin(0x1f4a18), cG2 = lin(0x3a6a22), cScrub = lin(0x8d8a58), cSand = lin(0xe6dcc0), cSea = lin(0xe2d8b8), cRock = lin(0x3a3633), cWet = lin(0x2a2622), cCoral = lin(0xd8cfb0), cLag = lin(0x0a7c78), cShal = lin(0x5fbfb0);
     const def = {
       name: 'Open Ocean', region: 'Central Pacific', N: 400, lodK: 0.06,
       sky: { sunAz: 205, sunEl: 52, fog: 0xb4cfe8, fogD: 0.0000072, hfogA: 0.000005, hfogB: 1 / 700, zenith: [0.018, 0.09, 0.42], glow: [0.95, 0.88, 0.7], glowW: 0.16, sunCol: [1.0, 0.97, 0.9], disk: 30,
@@ -7092,7 +7092,8 @@ body.flk-cover > .xm-pop, body.flk-cover > .xm-ban, body.flk-cover > .xm-card { 
         if (Math.hypot(e - BASE.e, n - BASE.n) < 2600) return 2e5;
         return hi > 1 ? hi - Math.max(lo, -20) + 40 : (hi > -8 ? 20 : 0); } }],
       color: function (e, n, h, il, curv, o) {
-        if (h < 0) { mix3(o, cSea, cSand, sstep(-6, 0, h)); mix3(o, o, cWet, Math.max(1 - sstep(0.75, 0.92, il), sstep(3, 10, curv)) * 0.7); return 0; }
+        // under water: lagoon / reef colours (only seen where a coarse terrain LOD triangle spans a narrow reef rim and pokes out)
+        if (h < 0) { mix3(o, cLag, cShal, sstep(-7, -0.5, h)); return 0; }
         const blk = Math.hypot(e - 29600, n - 24200) < 1100 ? 1 : 0;
         mix3(o, cG1, cG2, sstep(0.35, 0.7, fbm(e / 600, n / 600, 3, 1421)));
         mix3(o, o, cScrub, sstep(0.55, 0.75, fbm(e / 1400 + 2, n / 1400, 2, 1423)) * 0.6);
@@ -21874,7 +21875,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       if (k !== kind && (kind === 'aa_gun')) o.variant = o.variant || 'aaa';
       o.skill = skill01();
       // difficulty: more (or fewer) enemies per group; single main objectives stay single
-      if (!/^(structure|compound|carrier|train|tank|tu95)$/.test(k) && !(k === 'boat' && o.variant === 'frigate')) {
+      if (!/^(structure|compound|carrier|train|tank|tu95|cargoship|kirov|navcarrier|ekranoplan)$/.test(k) && !(k === 'boat' && o.variant === 'frigate')) {
         if (o.count) o.count = diffCount(o.count);
         if (o.trucks) o.trucks = diffCount(o.trucks);
       }
@@ -21892,11 +21893,13 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       cave: { title: 'CAVE RUN', base: 4200 }, bomber: { title: 'INTERCEPT', base: 4500 }, train: { title: 'TRAIN HUNT', base: 3600 },
       compound: { title: 'ASSAULT', base: 5000 }, boss: { title: 'BOSS', base: 6000 },   // + boss bounty (missionx.js): the bounty is the big number
       intercept: { title: 'INTERCEPT', base: 2200 }, samsite: { title: 'SAM SITE', base: 2000 },
-      carrier: { title: 'CARRIER STRIKE', base: 9000 }
+      carrier: { title: 'CARRIER STRIKE', base: 9000 },
+      // naval mix (sea maps): boat swarm, frigate group, cargo convoy, defend the friendly carrier
+      boatswarm: { title: 'BOAT SWARM', base: 3000 }, flotilla: { title: 'SURFACE GROUP', base: 4200 }, shipconvoy: { title: 'SHIP CONVOY', base: 3600 }, fleetdef: { title: 'FLEET DEFENSE', base: 3800 }
     };
 
     // mission mix (solo player or co-op host): 'air' = air only, 'airmost', 'mixed', 'ground' = mostly ground
-    var MIXES = { air: { air: 1, ground: 0 }, airmost: { air: 3, ground: 0.5 }, mixed: { air: 1, ground: 1 }, ground: { air: 0.35, ground: 1.4 } };
+    var MIXES = { air: { air: 1, ground: 0 }, airmost: { air: 3, ground: 0.5 }, mixed: { air: 1, ground: 1 }, ground: { air: 0.35, ground: 1.4 }, naval: { air: 0.5, ground: 0.2 } };   // naval: chooseNaval() on sea maps
     var AIR_T = { cap: 1, bomber: 1, intercept: 1, boss: 1 };
     var mix = 'mixed';
     try { var mx0 = root.localStorage && localStorage.getItem('flanker.missionMix'); if (mx0 && MIXES[mx0]) mix = mx0; } catch (e) {}
@@ -21919,6 +21922,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     function chooseType() {
       var w = W0(), sea = !!(w.seaLanes && w.seaLanes.length), cand = [];
       var MX = MIXES[mix] || MIXES.mixed;
+      if (mix === 'naval' && navalOk(w)) return chooseNaval(w, MX);
       if (mix === 'air' || mix === 'airmost') {
         if (missionNo === 1) return 'intercept';
         if (missionNo >= 10 && missionNo % 5 === 0) return 'boss';
@@ -21933,7 +21937,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       function add(t, wt) { wt *= AIR_T[t] ? MX.air : MX.ground; if (t !== lastType && wt > 0) cand.push([t, wt]); }
       if (MX.air >= 1) { add('intercept', 1.5); if (!late) add('bomber', hasKind('tu95') ? 1.2 : 0.6); }
       add('strike', 3); add('cap', 2.5); add('convoy', 2); add('bridge', 1.2); add('sead', late ? 2 : 1);
-      if (sea) add('naval', 2);
+      if (sea) { add('naval', 2); add('boatswarm', 0.8); add('shipconvoy', hasKind('cargoship') ? 0.8 : 0); }
+      if (sea && X && missionNo >= 6) add('seaboss', 0.5);   // missionx.js: ekranoplan / battlecruiser / carrier group boss on sea maps
       if (missionNo >= 4 && hasKind('navcarrier') && FL.navalSpot && (w.openSea || sea)) add('carrier', late ? 1.6 : 1);   // carrier.js: enemy carrier group
       if (late) {
         add('compound', hasKind('compound') ? 2 : 0.8);
@@ -21944,6 +21949,38 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       var tot = cand.reduce(function (a, c) { return a + c[1]; }, 0), r = Math.random() * tot;
       for (var i = 0; i < cand.length; i++) { r -= cand[i][1]; if (r <= 0) return cand[i][0]; }
       return MX.ground > 0 ? 'strike' : 'cap';
+    }
+    // ---- naval mix: ships, boat swarms, convoys, the enemy carrier, fleet defense, sea bosses + some air waves
+    function navalOk(w) { return !!(w && FL.navalSpot && ((w.seaLanes && w.seaLanes.length) || w.openSea)); }
+    function chooseNaval(w, MX) {
+      if (missionNo === 1) return 'boatswarm';
+      if (missionNo === 2) return 'naval';
+      if (missionNo === 3) return hasKind('cargoship') ? 'shipconvoy' : 'naval';
+      if (X && missionNo >= 4 && missionNo % 4 === 0) return 'seaboss';
+      var cand = [];
+      function add(t, wt) { if (t !== lastType && wt > 0) cand.push([t, wt]); }
+      add('boatswarm', 2); add('naval', 2); add('shipconvoy', hasKind('cargoship') ? 2 : 0); add('flotilla', missionNo >= 4 ? 2.2 : 1);
+      if (missionNo >= 5 && hasKind('navcarrier')) add('carrier', 1.4);
+      if (FL.friendlyCarrierPos && FL.friendlyCarrierPos()) add('fleetdef', 1.6);
+      add('cap', 1.2 * MX.air); add('intercept', 0.8 * MX.air);
+      if (X && missionNo >= 6) add('seaboss', 0.6);
+      var tot = cand.reduce(function (a, c) { return a + c[1]; }, 0), r = Math.random() * tot;
+      for (var i = 0; i < cand.length; i++) { r -= cand[i][1]; if (r <= 0) return cand[i][0]; }
+      return 'naval';
+    }
+    // open-water zone for a naval mission: the map's 'sea' zones in range, else a deep-water spot 8-12 km out, else a sea lane
+    function seaZone() {
+      var w = W0(), best = null, bw = -1;
+      (w.zones || []).forEach(function (q) { if (!q || q.type !== 'sea' || q.id === lastZoneId) return; var d = dist(q.e, q.n), wt = (d >= ZMIN && d <= ZMAX + 4000 ? 3 : d < 22000 ? 0.4 : 0) * Math.random(); if (wt > bw) { bw = wt; best = q; } });
+      if (best && bw > 0) {
+        var n0 = null; try { n0 = FL.navalSpot(w, best.e, best.n, 0); } catch (e) { n0 = null; }
+        var ok = n0 && Math.hypot(n0.e - best.e, n0.n - best.n) < 5000;
+        return { id: best.id, name: best.name, e: ok ? n0.e : best.e, n: ok ? n0.n : best.n, r: 3000 };
+      }
+      var ns = null; try { ns = FL.navalSpot(w, pE(), pN(), rnd(8000, 12000), FL.friendlyCarrierPos ? FL.friendlyCarrierPos() : null); } catch (e) { ns = null; }
+      if (ns && dist(ns.e, ns.n) < 22000) return { id: 'sea', name: 'the open sea', e: ns.e, n: ns.n, r: 3000 };
+      var lt = laneTarget(); if (lt) return { id: 'lane', name: 'the sea lane', e: lt.e, n: lt.n, r: 3000, hdg: lt.hdg };
+      return null;
     }
     function zoneTypeOk(z, type) {
       if (type === 'naval') return true;
@@ -22006,6 +22043,10 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       convoy: ['Convoy at {zone}, {dir}, {km}. Stop it.', 'Trucks on the road, {dir}, {km}. Flak with them.'],
       bridge: ['Bridge at {zone}, {dir}, {km}. Drop it.'],
       naval: ['Frigate on the sea lane, {dir}, {km}. Sink it.'],
+      boatswarm: ['Fast attack boats at {zone}, {dir}, {km}. A whole swarm. Sink them all.', 'Boat swarm, {dir}, {km}. Guns and rockets work well. Sink them.'],
+      flotilla: ['Surface group at {zone}, {dir}, {km}. Frigates with SAMs. Use anti-ship missiles, or come in low and fast.'],
+      shipconvoy: ['Enemy cargo convoy, {dir}, {km}. Sink the cargo ships. Frigates escort them.', 'Supply ships on {zone}, {dir}, {km}. Sink them before they reach port.'],
+      fleetdef: ['Enemy strike on our carrier! Bombers and attack boats close in. Our ship is {dir}, {km}. Stop them.'],
       carrier: ['Enemy carrier group, {dir}, {km}. Kill the island, the catapults, the lift and the fuel. Watch the ship flak and the SAMs.'],
       cave: ['Depot in the sea cave at {zone}, {dir}, {km}. Fly in, drop, fly out.'],
       bomber: ['Bombers heading for {zone}. Intercept them, {dir}, {km}.'],
@@ -22017,6 +22058,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     function newMission() {
       missionNo++;
       var type = X ? X.chooseType(missionNo, chooseType) : chooseType(), w = W0();   // missionx.js: arc bosses, debug type
+      if (!TYPE[type]) type = navalOk(w) ? 'naval' : 'strike';   // e.g. 'seaboss' with no sea boss possible
       var m = { no: missionNo, type: type, groups: [], objs: [], t: 0, tZone: 0, dmg: 0, kills: 0, chain: 0, maxChain: 0,
         spawned: false, entered: false, mainDone: false, ambush: null, samCall: false, title: TYPE[type].title, label: '', variant: null };
       var z;
@@ -22028,6 +22070,13 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
         var ns = FL.navalSpot(w, pE(), pN(), 13000, FL.friendlyCarrierPos ? FL.friendlyCarrierPos() : null);
         if (!ns) { type = m.type = 'strike'; m.title = TYPE.strike.title; z = chooseZone(type); }
         else z = { id: 'carrier', name: 'the open sea', e: ns.e, n: ns.n, r: 3000 };
+      } else if (type === 'boatswarm' || type === 'flotilla' || type === 'shipconvoy') {
+        var lc = type === 'shipconvoy' ? laneTarget() : null;
+        z = lc ? { id: 'lane', name: 'the sea lane', e: lc.e, n: lc.n, r: 3000, hdg: lc.hdg } : seaZone();
+        if (!z) { type = m.type = 'strike'; z = chooseZone(type); }
+      } else if (type === 'fleetdef') {
+        var fp = FL.friendlyCarrierPos ? FL.friendlyCarrierPos() : null, cp = FL.friendlyCarrierPose ? FL.friendlyCarrierPose() : null, hb3 = w.hangar || w.spawn || { e: 0, n: 0 };
+        z = cp ? { id: 'fleet', name: 'our carrier', e: cp.x, n: -cp.z, r: 3000, fleet: true } : fp ? { id: 'fleet', name: 'our carrier', e: fp.e, n: fp.n, r: 3000, fleet: true } : { id: 'home', name: 'our airfield', e: hb3.e, n: hb3.n, r: 2000 };
       } else if (type === 'cave') {
         var cv = pick(w.caves);
         z = { id: 'cave', name: 'the cliffs', e: cv.e, n: cv.n, r: 2000, cave: cv };
@@ -22043,7 +22092,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       if (type === 'strike') m.variant = missionNo === 3 ? 'depot' : pick(['command', 'depot', 'bunker']);
       m.label = { strike: 'Destroy the ' + TGT_NAME[m.variant], sead: 'Kill radar and SAMs', cap: 'Clear the bandits', convoy: 'Destroy the convoys',
         bridge: 'Destroy the bridge', naval: 'Sink the frigate', cave: 'Destroy the cave depot', bomber: 'Stop the bombers', train: 'Destroy the train',
-        compound: 'Bomb the HQ', boss: 'Destroy the Sky Carrier', carrier: 'Sink the carrier', intercept: 'Shoot down the MiGs', samsite: 'Destroy the SAM site' }[type] || 'Destroy the target';
+        compound: 'Bomb the HQ', boss: 'Destroy the Sky Carrier', carrier: 'Sink the carrier', boatswarm: 'Sink the boat swarm', flotilla: 'Sink the surface group', shipconvoy: 'Sink the cargo ships', fleetdef: 'Protect the carrier', intercept: 'Shoot down the MiGs', samsite: 'Destroy the SAM site' }[type] || 'Destroy the target';
       var zn2 = (z.name || '').toUpperCase();
       m.title = short(TYPE[type].title + (zn2 ? ' · ' + zn2 : ''), 40);
       // ambush plan
@@ -22130,6 +22179,32 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
         obj(spawn('compound', P2(r * 0.1, { variant: 'command' }), m), 'HQ', true);
         obj(spawn('sam', P2(r * 0.8, { count: sc(2, 4) }), m), 'SAM', false, 500);
         obj(spawn(hasKind('tank') ? 'tank' : 'convoy', P2(r * 0.6, { count: 1 }), m), 'Armor', false, 400);
+      } else if (t === 'boatswarm') {
+        var nb = sc(rint(4, 6), 10), g1 = Math.ceil(nb / 2);
+        obj(spawn('boat', { e: z.e, n: z.n, variant: 'patrol', heading: rnd(0, 360), count: g1 }, m), 'Attack boats', true);
+        obj(spawn('boat', { e: z.e + rnd(-1600, 1600), n: z.n + rnd(-1600, 1600), variant: 'patrol', heading: rnd(0, 360), count: Math.max(2, nb - g1) }, m), 'Attack boats', true);
+        if (m.no >= 5) obj(spawn(hasKind('ka52') ? 'ka52' : 'heli', { e: z.e, n: z.n, alt: 220, count: 1 }, m), 'Helo', false, 400);
+      } else if (t === 'flotilla') {
+        obj(spawn('boat', { e: z.e, n: z.n, variant: 'frigate', heading: rnd(0, 360), count: sc(2, 3) }, m), 'Frigates', true);
+        if (m.no >= 4 && hasKind('kirov')) {
+          var nk = null; try { nk = FL.navalSpot(W0(), z.e, z.n, 2500); } catch (e) { nk = null; }
+          if (nk && Math.hypot(nk.e - z.e, nk.n - z.n) < 6000) obj(spawn('kirov', { e: nk.e, n: nk.n, variant: 1, count: 1, heading: rnd(0, 360), radius: 1500 }, m), 'Destroyer', true);
+        }
+        obj(spawn('boat', { e: z.e + rnd(-1200, 1200), n: z.n + rnd(-1200, 1200), variant: 'patrol', count: sc(2, 4) }, m), 'Patrol boats', false, 400);
+      } else if (t === 'shipconvoy') {
+        var hd0 = z.hdg != null ? z.hdg : rnd(0, 360), sh0 = hd0 * DEG, ncg = sc(3, 5), ck = hasKind('cargoship') ? 'cargoship' : 'boat';
+        for (var ci = 0; ci < ncg; ci++) obj(spawn(ck, { e: z.e - Math.sin(sh0) * ci * 520, n: z.n - Math.cos(sh0) * ci * 520, heading: hd0, count: 1, variant: 'frigate' }, m), 'Cargo ship', true);
+        obj(spawn('boat', { e: z.e + Math.cos(sh0) * 700, n: z.n - Math.sin(sh0) * 700, variant: 'frigate', heading: hd0, count: m.no >= 5 ? 2 : 1 }, m), 'Escort', false, 700);
+        obj(spawn('boat', { e: z.e - Math.cos(sh0) * 700, n: z.n + Math.sin(sh0) * 700, variant: 'patrol', heading: hd0, count: sc(1, 3) }, m), 'Patrol boats', false, 400);
+      } else if (t === 'fleetdef') {
+        var fa = rnd(0, 360) * DEG, fe = clamp(z.e + Math.sin(fa) * 15000, -LIM, LIM), fn = clamp(z.n + Math.cos(fa) * 15000, -LIM, LIM), fh = Math.atan2(z.e - fe, z.n - fn) / DEG;
+        var bk = hasKind('tu95') ? 'tu95' : hasKind('su25') ? 'su25' : 'bandit', bAlt = bk === 'tu95' ? 3200 : 700;
+        var sg = obj(spawn(bk, { e: fe, n: fn, alt: bAlt, count: bk === 'tu95' ? (m.no >= 8 ? 2 : 1) : sc(2, 4), heading: fh, target: { e: z.e, n: z.n } }, m), bk === 'tu95' ? 'Bombers' : 'Strike jets', true);
+        obj(spawn(hasKind('mig29') ? 'mig29' : 'bandit', { e: fe + 600, n: fn + 600, alt: bAlt + 300, heading: fh, count: sc(2, 3), escort: sg.group }, m), 'Escorts', false, 600);
+        var ba = fa + rnd(1.2, 2.2), be = z.e + Math.sin(ba) * 9000, bn = z.n + Math.cos(ba) * 9000;
+        obj(spawn('boat', { e: be, n: bn, variant: 'patrol', heading: Math.atan2(z.e - be, z.n - bn) / DEG, count: sc(2, 4) }, m), 'Attack boats', true);
+        m.trackGroup = sg.group;
+        if (FL.friendlyCarrierWatch) { try { FL.friendlyCarrierWatch(sg.group); } catch (e) {} }
       } else if (t === 'carrier') {
         obj(spawn('navcarrier', { e: z.e, n: z.n, count: 1, heading: rnd(0, 360) }, m), 'Carrier', true);
         obj(spawn('boat', { e: z.e + rnd(-1500, 1500), n: z.n + rnd(-1500, 1500), variant: 'frigate', count: 1 }, m), 'Frigate', false, 600);
@@ -22210,7 +22285,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       if (ev.by && /^(ai|enemy|env)$/.test(ev.by)) return;
       var mine = !ev.by || ev.by === 'local', s = curStats(), pts = ev.points || 0, st = phys.st;
       if (X) { try { X.kill(ev, mine); } catch (e) {} }
-      var gk = /sam|convoy|structure|boat|train|compound|tank|aa_gun|carrier|truck/.test(ev.kind || '');
+      var gk = /sam|convoy|structure|boat|train|compound|tank|aa_gun|carrier|truck|cargo|kirov|ekr_/.test(ev.kind || '');
       if (mine) {
         // jet mastery and kill perks: my own kills only (also as a co-op client)
         var mm = mastery(P.ac); if (gk) mm.ground++; else mm.kills++;
@@ -22765,8 +22840,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       '.flp-list{display:flex;flex-direction:column;gap:3px;overflow-y:auto;max-height:min(50vh,400px);min-height:120px;overscroll-behavior:contain;padding:2px 3px 2px 0}',
       '.flp-h{font:10.5px/1 var(--mono);letter-spacing:.14em;color:var(--a);text-transform:uppercase;margin:6px 0 2px}',
       '.flp-r{display:flex;gap:3px;min-width:0}.flp-r[hidden],.fls-r[hidden],.fla-t[hidden],.flp-none[hidden]{display:none!important}',
-      '.flc .flp-b{flex:1;min-width:0;display:grid;grid-template-columns:44px minmax(0,1fr) auto;align-items:center;gap:8px;padding:5px 8px;min-height:38px;text-transform:none;letter-spacing:0;text-align:left;border-color:var(--line);color:var(--ink);background:rgba(4,12,12,.55)}',
-      '.flp-i{display:block;width:44px;height:16px}',
+      '.flc .flp-b{flex:1;min-width:0;display:grid;grid-template-columns:36px minmax(0,1fr) auto;align-items:center;gap:8px;padding:5px 8px;min-height:38px;text-transform:none;letter-spacing:0;text-align:left;border-color:var(--line);color:var(--ink);background:rgba(4,12,12,.55)}',
+      '.flp-i{display:block;width:36px;height:14px}',
       '.flp-n{min-width:0;display:flex;flex-direction:column;gap:2px}.flp-n b{font:700 13px/1.1 var(--disp);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.flp-n small{font:10.5px/1.15 var(--mono);color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
       '.flp-k{font:10.5px/1.25 var(--mono);color:var(--dim);text-align:right;white-space:nowrap}.flp-k.cr{font:700 13px/1 var(--disp);color:var(--a)}.flp-k.cr.no{color:var(--red)}',
       '.flc .flp-r.on .flp-b{border-color:var(--a);background:rgba(255,190,85,.12)}.flc .flp-r.on .flp-n b::before{content:"● ";color:var(--a)}',
@@ -22806,7 +22881,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       '.flo.pk-open .flc-pick.flo-pick{display:flex;position:fixed;left:6px;right:6px;bottom:max(6px,env(safe-area-inset-bottom,0px));top:18%;z-index:64;background:#0a171a;box-shadow:0 -10px 40px rgba(0,0,0,.6)}',
       '.flo.pk-open .flp-list{max-height:none;flex:1;min-height:0}.flc .flo-pkx{display:inline-block}.flo-keys{display:none!important}',
       '.fls-r{grid-template-columns:44px minmax(0,1fr) auto;grid-template-areas:"i n b" "i p b"}.fls-r .flp-i{grid-area:i;width:44px;height:16px}.fls-n{grid-area:n}.fls-p{grid-area:p;text-align:left}.fls-r>button{grid-area:b}.fls-n em{display:none}',
-      '.fla-det{grid-template-columns:minmax(0,110px) minmax(0,1fr)}.fla-desc{display:none}.fla-grid{grid-template-columns:repeat(auto-fill,minmax(92px,1fr))}}',
+      '.fla-det{grid-template-columns:minmax(0,110px) minmax(0,1fr)}.fla-desc,.fla-sig{display:none}.fla-grid{grid-template-columns:repeat(auto-fill,minmax(92px,1fr))}}',
       '@media (max-aspect-ratio:1/1){.flc.flc-3d .flc-panel{height:min(900px,76%)}}',
       '@media (prefers-reduced-motion:reduce){.flc-toast{transition:none}}'
     ].join('\n');
@@ -23235,7 +23310,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
         }
         var on2 = eq.pyl[selSlot] === w.id, inf = pickInfo(sel, w, s), nf = fitOpen(w, sts).length;
         rows += '<div class="flp-r' + (on2 ? ' on' : '') + '" data-q="' + esc(wQ(w)) + '"' + hid(w) + '><button class="flp-b" data-act="pick" data-id="' + w.id + '" data-key="pick-' + w.id + '"' + (on2 ? ' aria-pressed="true"' : '') + ' title="' + esc(w.desc || w.name) + '">' + wIco(w) +
-          '<span class="flp-n"><b>' + esc(shortName(w)) + '</b><small>' + (TYPE_CODE[storeType(w)] || '') + ' · ' + esc(wStats(w)) + '</small></span><span class="flp-k">' + esc(inf.txt) + '<br>' + kg(inf.kg) + '</span></button>' +
+          '<span class="flp-n"><b>' + esc(shortName(w)) + '</b><small>' + (TYPE_CODE[storeType(w)] || '') + ' · ' + esc(wStats(w)) + '</small></span><span class="flp-k">' + esc(inf.txt.replace(/^1 pod · /, '').replace(/ rounds$/, ' rds').replace(/ \((twin rail|rack)\)$/, '')) + '<br>' + kg(inf.kg) + '</span></button>' +
           (nf > 1 ? '<button class="flp-all" data-act="pickall" data-id="' + w.id + '" data-key="pall-' + w.id + '" title="Put ' + esc(shortName(w)) + ' on all ' + nf + ' open pylons where it fits">All ' + nf + '</button>' : '') + '</div>';
       });
       if (buy.length) rows += '<div class="flp-h">Buy now · loads on ' + esc(selSlot) + '</div>';
@@ -23411,7 +23486,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       var n = 0;
       h += '<div class="fla-grid" data-qbox="ac">' + show.map(function (x) {
         var fi = infos[x.id], st = acStateOf(x, fi), cu = x.id === P.ac, hit = qHit(acQtxt(x), acQ); if (hit) n++;
-        var line = cu ? '<span class="g">Flying</span>' : st === 'own' ? '<span class="g">Owned</span>' : st === 'lock' ? '<span>Level ' + fi.level + '</span>' : '<span class="' + (P.credits >= fi.price ? 'a' : 'r') + '">' + (fi.price >= 1e6 ? (fi.price / 1e6).toFixed(fi.price % 1e6 ? 1 : 0) + 'M' : Math.round(fi.price / 1000) + 'k') + ' cr</span>';
+        var line = cu ? '<span class="g">Flying</span>' : st === 'own' ? '<span class="g">Owned</span>' : st === 'lock' ? '<span>Level ' + fi.level + '</span>' : '<span class="' + (P.credits >= fi.price ? 'a' : 'r') + '">' + (!fi.price ? 'Free' : fi.price >= 1e6 ? (fi.price / 1e6).toFixed(fi.price % 1e6 ? 1 : 0) + 'M cr' : Math.round(fi.price / 1000) + 'k cr') + '</span>';
         return '<button class="fla-t ' + st + (cu ? ' cur' : '') + (x.id === acSel ? ' sel' : '') + '" data-act="acview" data-id="' + esc(x.id) + '" data-key="acv-' + esc(x.id) + '" data-q="' + esc(acQtxt(x)) + '" aria-pressed="' + (x.id === acSel) + '"' + (hit ? '' : ' hidden') + ' title="' + esc(x.name || x.id) + '">' +
           (HI ? HI.thumbHtml(x.id) : '') + '<b>' + esc(x.name || x.id) + '</b>' + line + '</button>';
       }).join('') + '<p class="flp-none"' + (n ? ' hidden' : '') + '>No jet here. Push All, or clear the search.</p></div>';
@@ -23790,7 +23865,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       landNear: landNear, inMap: inMap, hasKind: hasKind, difficulty: difficulty, W0: W0, isClient: isClient, mission: function () { return mission; },
       profile: function () { return P; }, save: save, emit: emitEv, on: on, spawnFighters: spawnFighters, chooseZone: chooseZone, brief: brief, broadcast: broadcast,
       grant: function (c, x, r) { return credit(c, x, r); }, fail: function (why) { failMission(why); },
-      lastType: function () { return lastType; }, mixAir: function () { return mix === 'air' || mix === 'airmost'; },
+      lastType: function () { return lastType; }, mixAir: function () { return mix === 'air' || mix === 'airmost'; }, mixNaval: function () { return mix === 'naval'; },
       forceNext: function () { if (mission) { mission.groups.forEach(despawn); mission = null; } oldGroups.forEach(despawn); oldGroups = []; if (!active) start(); setPhase('brief'); phaseT = 3.4; } }) : null;
     var api = {
       update: update, start: start, stop: stop, hud: hud, respawnPoint: respawnPoint, setMissionMix: setMissionMix, missionMix: function () { return mix; }, setDifficulty: setDifficulty, difficulty: function () { return diffId; }, stats: stats, loadout: loadout,
@@ -37431,6 +37506,69 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       } };
   })();
 
+  // ---- cargo ship (naval mission "ship convoy"): 120 m container ship, unarmed, sails its heading / the sea lanes, avoids land.
+  // Category 'sea': guns, rockets, bombs, AGMs and the Kh-35 hit it. Sinks slowly when killed.
+  var CARGOG = null;
+  function cargoGeo() {
+    if (CARGOG) return CARGOG;
+    var a = new Acc(), L = 120, B = 10, i, j, k, hull = lin(0x1f3448), red = lin(0x7a2a24), wh = lin(0xe4e4de), dk = lin(0x1c1e20), gr = lin(0x55595d), R = rng(55);
+    var bz = -L / 2 + 16, tip = -L / 2;
+    a.box(-B, B, -6, 7, bz, L / 2, hull); a.box(-B * 0.97, B * 0.97, -7.5, -5.9, bz + 1, L / 2 - 1, red);
+    var P = [[-B, 7, bz], [B, 7, bz], [0, 8.5, tip], [-B * 0.85, -6, bz], [B * 0.85, -6, bz], [0, -6, tip + 9]];
+    a.tri(P[0], P[2], P[1], dk); a.tri(P[0], P[3], P[2], hull); a.tri(P[3], P[5], P[2], hull); a.tri(P[1], P[2], P[4], hull); a.tri(P[4], P[2], P[5], hull); a.tri(P[3], P[4], P[5], red);
+    a.box(-B + 0.3, B - 0.3, 7, 7.4, bz, L / 2 - 1, gr);                                        // deck
+    var CC = [0xc8642a, 0x2a5c9a, 0x3f7f45, 0xa83226, 0x8a8f94, 0xe0d8c8, 0xd8a62a];
+    for (i = 0; i < 7; i++) for (j = 0; j < 6; j++) { var hgt = 1 + (R() * 3.2 | 0); for (k = 0; k < hgt; k++) { var c = lin(CC[(R() * CC.length) | 0]), x0 = -7.8 + j * 2.6, z0 = -40 + i * 12.6, y0 = 7.4 + k * 2.6; a.box(x0, x0 + 2.45, y0, y0 + 2.5, z0, z0 + 12.2, c); } }
+    a.box(-9, 9, 7.4, 21, 40, 50, wh); a.box(-9.05, 9.05, 18, 19.4, 40.2, 49.8, dk); a.box(-11, 11, 19.6, 20.4, 40, 43, wh);   // bridge + wings
+    a.box(-2.2, 2.2, 7.4, 27, 51, 55, gr); a.box(-2.25, 2.25, 23, 25, 50.95, 55.05, red);      // funnel
+    a.box(-0.3, 0.3, 7.4, 22, -48, -47.4, gr); a.box(-0.3, 0.3, 21, 32, 41, 41.6, gr);         // masts
+    return (CARGOG = { geo: a.build(), mat: new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.75, metalness: 0.15, flatShading: true }) });
+  }
+  function cargoSpawn(ent, opts, ctx) {
+    var kit = KIT(), d = kit.ensure(ent), w = ctx.world;
+    d.cat = 'cargo'; d.spd = 6 + Math.random() * 2;
+    var hd = opts.heading != null ? +opts.heading : Math.random() * 360; d.yaw = (Math.abs(hd) > 6.3 ? hd * DEG : hd * DEG);
+    var x = opts.e != null ? opts.e : ent.pos.x, z = opts.n != null ? -opts.n : ent.pos.z;
+    if (w && !(w.sampleH(x, -z) < -10)) { var ns = root.FL.navalSpot(w, x, -z, 0); if (ns) { x = ns.e; z = -ns.n; } }
+    ent.pos.set(x, 0, z); ent.vel.set(0, 0, 0); ent.q.setFromAxisAngle(UPV, -d.yaw); kit.syncGroup(ent);
+  }
+  function cargoThink(ent, dt, ctx) {
+    var kit = KIT(), d = ent.data; if (!d.cat) cargoSpawn(ent, {}, ctx);
+    var w = ctx.world, fx = Math.sin(d.yaw), fz = -Math.cos(d.yaw), la = d.spd * 30;
+    if (w) {
+      var hA = w.sampleH(ent.pos.x + fx * la, -(ent.pos.z + fz * la));
+      if (hA > -10 || (w.solidAt && w.solidAt(ent.pos.x + fx * la * 0.5, 10, ent.pos.z + fz * la * 0.5))) {   // land ahead: turn to the deeper side
+        var lx = Math.sin(d.yaw - 0.7), lz = -Math.cos(d.yaw - 0.7), rx = Math.sin(d.yaw + 0.7), rz = -Math.cos(d.yaw + 0.7);
+        var hl = w.sampleH(ent.pos.x + lx * la, -(ent.pos.z + lz * la)), hr = w.sampleH(ent.pos.x + rx * la, -(ent.pos.z + rz * la));
+        d.yaw += (hl < hr ? -1 : 1) * 0.05 * dt;
+      }
+      var nx = ent.pos.x + fx * d.spd * dt, nz = ent.pos.z + fz * d.spd * dt;
+      if (w.sampleH(nx, -nz) < -4) { ent.pos.x = nx; ent.pos.z = nz; ent.vel.set(fx * d.spd, 0, fz * d.spd); } else { ent.vel.set(0, 0, 0); d.yaw += 0.08 * dt; }
+    }
+    ent.pos.y = 0; ent.q.setFromAxisAngle(UPV, -d.yaw); kit.syncGroup(ent);
+  }
+  function buildCargo() {
+    var G = cargoGeo(), g = new T.Group(); g.name = 'cargoship';
+    var body = new T.Group(); g.add(body);
+    var m = new T.Mesh(G.geo, G.mat); m.castShadow = true; m.receiveShadow = true; body.add(m);
+    try { if (root.FL.ENEMY_MODELS && root.FL.ENEMY_MODELS.wake) root.FL.ENEMY_MODELS.wake(g, 120, 13); } catch (e) {}
+    var kit = KIT(), fire = kit && kit.fireSprite ? kit.fireSprite(g, 0, 12, 20, 24) : null, t0 = Math.random() * 10;
+    return { group: g, fire: fire,
+      update: function (dt) { t0 += dt; body.rotation.z = Math.sin(t0 * 0.5) * 0.012; body.rotation.x = Math.sin(t0 * 0.37) * 0.006; },
+      onDeath: function (ent) {
+        if (kit && kit.charGroup) kit.charGroup(g); if (kit && kit.boom) kit.boom(null, ent.pos, 2.4, false);
+        var t = 0, side = Math.random() < 0.5 ? -1 : 1;
+        return function (dt2) { t += dt2; g.position.y -= dt2 * (0.25 + t * 0.01); body.rotation.z += side * dt2 * 0.01; body.rotation.x -= dt2 * 0.004; if (fire) fire.visible = t < 30; if (kit && kit.puff && Math.random() < dt2 * 4) kit.puff(null, nv1.copy(g.position).setY(8), 18, 8, 0.1); return t < 45; };
+      },
+      dispose: function () {} };
+  }
+  (function defineCargo() {
+    var KS = root.FL.ENEMY_KINDS, U = root.FL.ENEMY_UTIL;
+    if (!KS || !U || !U.kit || !T || KS.cargoship) return;
+    KS.cargoship = { kind: 'cargoship', category: 'sea', label: 'Cargo ship', hp: 420, points: 900, lockRange: 14000, radius: 16, hitLen: 55, hitRad: 11, radarRange: 0,
+      killMsg: 'CARGO SHIP SUNK', needsBombs: false, build: buildCargo, spawn: cargoSpawn, think: cargoThink };
+  })();
+
   // ---- start point per map ('runway' | 'carrier' | 'air'), saved in localStorage; default = carrier on maps that have one
   root.FL.startPoint = {
     key: function (m) { return 'flk_start_' + (m || ''); },
@@ -38097,6 +38235,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     // ---- enemy raids on the friendly carrier (host / solo, during missions): bombers + escorts fly at the ship
     var raid = { next: 200 + Math.random() * 200, group: null, active: false, t: 0, n: 0, hits: 0 };
     function call(key, text) { if (opts.comms && opts.comms.say) { try { opts.comms.say(key, text, 3, 0); } catch (e) {} } say(text.replace(/^Overlord\. /, '').toUpperCase().slice(0, 60)); }
+    // campaign.js "fleet defense": an attack group to watch (it hits the carrier if it gets within 2.2 km)
+    root.FL.friendlyCarrierWatch = function (group) { if (!on || !group) return false; raid.group = group; raid.active = true; raid.t = 0; raid.hits = 0; raid.watch = true; return true; };
     function raidTick(dt, camp) {
       if (!combat || !combat.spawn || combat.isClient || st.crashed) return;
       var mission = camp ? camp.active : combat.active;
@@ -38123,7 +38263,8 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       var left = 0; try { left = combat.groupAlive(raid.group); } catch (er) { left = 0; }
       if (left === 0 && raid.t > 2) {
         raid.active = false;
-        if (!raid.hits) { try { combat.addScore(1500, 'CARRIER DEFENDED'); } catch (er) {} call('cvsafe', 'Overlord. Raid down. The carrier is safe. Good work.'); }
+        if (!raid.hits && !raid.watch) { try { combat.addScore(1500, 'CARRIER DEFENDED'); } catch (er) {} call('cvsafe', 'Overlord. Raid down. The carrier is safe. Good work.'); }
+        raid.watch = false;
         return;
       }
       var gp = null; try { gp = combat.groupPos ? combat.groupPos(raid.group) : null; } catch (er) { gp = null; }
@@ -38132,7 +38273,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
         if (fx && fx.explosion) for (var i = 0; i < 2; i++) { tv2.set(P.x + (Math.random() - 0.5) * 150, K.D + 2, P.z + (Math.random() - 0.5) * 150); if (fx.impact) fx.impact(Math.random() < 0.6 ? 'boat' : 'cookoff', tv2, { air: false, scale: 1.2 }); else fx.explosion(tv2, 1.4, { water: Math.random() < 0.6, air: false }); }
         if (raid.hits === 1) call('cvhit', 'Overlord. The carrier is hit! Kill those bombers.');
       }
-      if (raid.t > 240) raid.active = false;
+      if (raid.t > (raid.watch ? 900 : 240)) { raid.active = false; raid.watch = false; }
     }
 
     // ---- launch sequence on a spot: hold brake + boost -> blast deflector up, heat haze, 3-2-1, release (catapult shot or deck run)
@@ -39140,7 +39281,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
 (function () {
   'use strict';
   var FL = window.FL = window.FL || {};
-  var MIXN = { air: 'Air only', airmost: 'Mostly air', mixed: 'Mixed', ground: 'Mostly ground' };
+  var MIXN = { air: 'Air only', airmost: 'Mostly air', mixed: 'Mixed', ground: 'Mostly ground', naval: 'Naval' };
   var SAVE_KEY = 'flk_lobby', PREF_KEY = 'flk_lobby_pref';
 
   var CSS = '' +
@@ -41483,6 +41624,12 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
         if (use) { X.pending = { boss: use, arc: true, planned: bid }; return BOSS[use].type || 'xboss'; }
       }
       var t = def();
+      if (t === 'boss' && C.mixNaval && C.mixNaval()) t = 'seaboss';
+      if (t === 'seaboss') {                                        // naval mix / sea maps: Sea Monster, battlecruiser or carrier group on ANY sea map
+        var sb = ['ekranoplan', 'kirov', 'cbg'].filter(function (b) { return b !== X.lastSea && feasible(b); });
+        if (sb.length) { var pb = pick(sb); X.lastSea = pb; X.pending = { boss: pb, arc: false }; return BOSS[pb].type || 'xboss'; }
+        t = C.mixNaval && C.mixNaval() ? 'naval' : 'strike';
+      }
       if (t === 'boss') {                                           // arc bosses replace the old 'every 5th' boss
         var alt = C.mixAir && C.mixAir() ? ['cap', 'intercept', 'cap'] : ['strike', 'cap', 'convoy', 'sead', 'intercept'];
         t = pick(alt.filter(function (q) { return q !== C.lastType(); })) || 'strike';
@@ -43463,7 +43610,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
   }
 
   // ---- mission mix (solo / host choice; campaign runs it). Main screen + co-op lobby. Clients see the host's choice, locked.
-  var MIX_NAMES = { air: 'Air only', airmost: 'Mostly air', mixed: 'Mixed', ground: 'Mostly ground' }, hostMix = null;
+  var MIX_NAMES = { air: 'Air only', airmost: 'Mostly air', mixed: 'Mixed', ground: 'Mostly ground', naval: 'Naval' }, hostMix = null;
   function curMix() {
     if (campaign && campaign.missionMix) return campaign.missionMix();
     var v = 'mixed'; try { v = localStorage.getItem('flanker.missionMix') || 'mixed'; } catch (e) {} return MIX_NAMES[v] ? v : 'mixed';
@@ -43477,7 +43624,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
   function renderMix() {
     var lock = inClientRoom(), v = lock && hostMix ? hostMix : curMix(), nm = MIX_NAMES[v] || v;
     ['optMix', 'coMix'].forEach(function (id) { var el = $(id); el.value = v; el.disabled = lock; });
-    $('mixNote').textContent = lock ? 'The host selected: ' + nm + '.' : 'Select more air targets or more ground targets.';
+    $('mixNote').textContent = lock ? 'The host selected: ' + nm + '.' : v === 'naval' ? 'Ships, boat swarms, carriers and the Sea Monster. Sea maps.' : 'Select more air targets or more ground targets.';
     $('coMixNote').textContent = lock ? 'The host selected: ' + nm + '.' : (net && net.connected ? 'You select. All pilots fly the same missions.' : 'The host selects. All pilots fly the same missions.');
   }
   $('optMix').addEventListener('change', function (e) { setMix(e.target.value); });
@@ -45909,7 +46056,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793195673', updShown = false;
+  var BUILD = '1793197029', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
