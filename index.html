@@ -5563,7 +5563,7 @@ body.flk-cover > .xm-pop, body.flk-cover > .xm-ban, body.flk-cover > .xm-card { 
         buildJunk(pb, e, n, R() * 360, 1 + R() * 0.3); nj++;
       }
       // meshes
-      const mat = m2RockMat(ctx, 1.45); mat.side = THREE.FrontSide; mat.flatShading = true;
+      const mat = m2RockMat(ctx, 1.45); mat.flatShading = true;   // DoubleSide (kit default): the karst rings wind inward, FrontSide made the towers see-through
       const meshes = [], farAll = new Builder();
       for (const c of cells.values()) {
         const hm = new THREE.Mesh(c.hi.build(), mat); hm.castShadow = true; hm.receiveShadow = true; hm.name = 'karst'; hm.visible = false; ctx.add(hm);
@@ -18602,6 +18602,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       var pl = (ctx.players && ctx.players[0]) ? ctx.players[0].pos : V(0, 1000, 0), a = R(ctx) * TAU, d = RR(ctx, 14000, 20000);
       p = V(pl.x + Math.cos(a) * d, NaN, pl.z + Math.sin(a) * d);
     }
+    if (agl !== undefined && !isFinite(p.y)) { var us = unsolid(w, p.x, p.z, 15); p.x = us.x; p.z = us.z; }   // ground units: not inside rock
     if (!isFinite(p.y)) p.y = agl !== undefined ? gAt(w, p.x, p.z) + agl : alt;
     ent.pos.copy(p);
     return ent.pos;
@@ -19849,6 +19850,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
         if (hh < lo) lo = hh; if (hh > hi) hi = hh;
       }
       if (wet || !(h0 > 1.5)) continue;
+      if (inRock(w, cx, cz, r)) continue;                   // never inside a karst tower / spire
       // cliff edge: ground 2 r away drops (or rises) steeply
       var cliff = 0;
       for (j = 0; j < 8; j++) { var ab = j / 8 * TAU, he = hAt(w, cx + Math.cos(ab) * r * 2.2, cz + Math.sin(ab) * r * 2.2); if (Math.abs(he - h0) > Math.max(6, r * 0.45)) cliff++; }
@@ -19859,7 +19861,28 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
     return best;
   }
   function R0() { return Math.random(); }
-  FL.ENEMY_PLACE = { site: site, roadDist: roadDist, roadRoute: roadRoute };
+  // inside a rock solid (Ha Long karst towers, spires, arches)? -> nearest free ground on rings out to 1.5 km
+  function inRock(w, x, z, r) {
+    if (!w || typeof w.solidAt !== 'function') return false;
+    var h = hAt(w, x, z); if (!isFinite(h)) return false;
+    if (w.solidAt(x, h + 3, z) || w.solidAt(x, h + 12, z)) return true;
+    for (var j = 0; j < 6; j++) { var a = j / 6 * TAU; if (w.solidAt(x + Math.cos(a) * r, h + 4, z + Math.sin(a) * r)) return true; }
+    return false;
+  }
+  function unsolid(w, x, z, r, dryOnly) {
+    r = r || 20;
+    if (!inRock(w, x, z, r)) return { x: x, z: z, moved: false };
+    for (var ring = 1; ring <= 30; ring++) {
+      var d = ring * 50, nA = 8 + ring * 2;
+      for (var k = 0; k < nA; k++) {
+        var a = (k + ring * 0.37) / nA * TAU, cx = x + Math.cos(a) * d, cz = z + Math.sin(a) * d;
+        if (dryOnly && (!(hAt(w, cx, cz) > 1.5) || waterAt(w, cx, cz))) continue;
+        if (!inRock(w, cx, cz, r)) return { x: cx, z: cz, moved: true };
+      }
+    }
+    return { x: x, z: z, moved: false };
+  }
+  FL.ENEMY_PLACE = { site: site, roadDist: roadDist, roadRoute: roadRoute, inRock: inRock, unsolid: unsolid };
 
   // ======================================================================= paths over terrain (A* on a cost grid)
   function lowSpots(ctx, n, wantFlat) {
@@ -28296,6 +28319,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
           if (i > 0) { for (var k = 0; k < 20; k++) { var a = rand(0, TAU), r = rand(1500, 3000); sx = x0 + Math.cos(a) * r; sz = z0 + Math.sin(a) * r; if (!isWater(sx, sz)) break; } }
           var sst = FL.ENEMY_PLACE && !o.exact ? FL.ENEMY_PLACE.site(world, sx, sz, 600, 20, { road: 220 }) : null;   // flat, dry, off-road, not a cliff edge
           if (sst && sst.score < 300) { sx = sst.x; sz = sst.z; }
+          if (FL.ENEMY_PLACE && FL.ENEMY_PLACE.unsolid) { var usm = FL.ENEMY_PLACE.unsolid(world, sx, sz, 25); sx = usm.x; sz = usm.z; }   // never inside a karst tower
           t = buildSam(sx, sz, o.variant || 'site', g); if (o.shortRange) t.shortRange = true; ids.push(t.id);
         }
       } else if (kind === 'convoy') {
@@ -28306,6 +28330,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
           var stx = x0 + i * 140, stz = z0 + (i % 2) * 60, stS = null;
           if (FL.ENEMY_PLACE && !o.inCave && !o.exact && o.variant !== 'bridge') stS = FL.ENEMY_PLACE.site(world, stx, stz, 500, STRUCT[o.variant || 'bunker'] ? STRUCT[o.variant || 'bunker'].r * 1.2 : 30, { road: 160 });
           if (stS && stS.score < 300) { stx = stS.x; stz = stS.z; }
+          if (FL.ENEMY_PLACE && FL.ENEMY_PLACE.unsolid && !o.inCave) { var ust = FL.ENEMY_PLACE.unsolid(world, stx, stz, 25); stx = ust.x; stz = ust.z; }
           t = makeStructure(o.variant || 'bunker', stx, stz, hdg != null ? -hdg : rand(0, TAU), g); ids.push(t.id);
         }
       } else if (kind === 'boat') {
@@ -45297,7 +45322,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793191030', updShown = false;
+  var BUILD = '1793191527', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
