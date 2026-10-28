@@ -26668,6 +26668,43 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
       }
     };
     function regDef(kind) { var R = REG(); return R[kind] || null; }
+    // ---- enemy aircraft (and bosses) do not hide in clouds: 3 s inside a cloud (at once after spawn) -> climb or
+    //      descend to the nearest clear altitude, toward the altitude of their target first, so both sides can fight
+    var cldChk = 0, _cldP = new THREE.Vector3();
+    function clearAlt(p, prefY) {
+      var g = gAt(p.x, p.z) + 250, up = prefY >= p.y ? 1 : -1;
+      for (var k = 1; k <= 26; k++) for (var o = 0; o < 2; o++) {
+        var y = p.y + (o ? -up : up) * k * 150; if (y < g || y > 14000) continue;
+        _cldP.set(p.x, y, p.z); if (cloudAt(_cldP) < 0.1) { _cldP.set(p.x, y + (o ? -up : up) * 120, p.z); return cloudAt(_cldP) < 0.1 ? y + (o ? -up : up) * 120 : y; }
+      }
+      return null;
+    }
+    function escapeOne(e, h, chk) {
+      if (!e || !e.alive || !e.pos) return;
+      if (chk) {
+        var c = cloudAt(e.pos);
+        if (!e._cldSeen) { e._cldSeen = 1; if (c > 0.3) e._cldT = 3; }
+        else if (c > 0.3) e._cldT = (e._cldT || 0) + 1; else e._cldT = 0;
+        if (e._escY == null && e._cldT >= 3) {
+          var T = e.tp && e.tp.alive ? e.tp : nearestPT(e.pos), y = clearAlt(e.pos, T && T.aim ? T.aim.y : e.pos.y);
+          if (y != null) { e._escY = y; e._escT = 0; if (e.pAlt != null) e.pAlt = y; if (e.data && typeof e.data.alt === 'number') e.data.alt = y; }
+        }
+        if (e._escY != null && ((c < 0.1 && Math.abs(e.pos.y - e._escY) < 90) || (e._escT || 0) > 30)) { e._escY = null; e._cldT = 0; }
+      }
+      if (e._escY != null) {
+        e._escT = (e._escT || 0) + h;
+        var dy = e._escY - e.pos.y; e.pos.y += clamp(dy, -60 * h, 60 * h);
+        if (e.vel && dy * e.vel.y < 0) e.vel.y *= 0.9;              // stop the AI from pushing back into the cloud
+      }
+    }
+    function cloudEscape(h) {
+      if (!world.cloudDensity) return;
+      cldChk += h; var chk = cldChk >= 1; if (chk) cldChk = 0;
+      var i;
+      for (i = 0; i < bandits.length; i++) escapeOne(bandits[i], h, chk);
+      for (i = 0; i < helis.length; i++) escapeOne(helis[i], h, chk);
+      for (i = 0; i < regs.length; i++) if (regs[i].cat === 'air' && !regs[i].parent) escapeOne(regs[i], h, chk);
+    }
     function regDefaultLock(cat) { return cat === 'air' ? C.lockAir : C.lockGround; }
     function spawnReg(kind, o, parent) {
       var def = regDef(kind); if (!def) return null;
@@ -29153,6 +29190,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
         for (i = 0; i < structs.length; i++) updateStructure(structs[i], h);
         for (i = 0; i < boats.length; i++) updateBoat(boats[i], h);
         for (i = 0; i < regs.length; i++) { if (regs[i].alive) updateReg(regs[i], h); else updateRegHusk(regs[i], h); }
+        cloudEscape(h);
         updateFlak(h); updateBurns(h);
         updateFlares(h);
         for (i = 0; i < missiles.length; i++) if (missiles[i].alive) updateMissile(missiles[i], h);
@@ -45349,7 +45387,7 @@ FL.HANGAR_THUMBS = {"v":1,"ac":{"harrier":{"side":"data:image/webp;base64,UklGRt
   }
   // ---- update button: the page checks version.json; a new build shows a small button. Update = reload and go back
   //      into the same room (host re-opens the same code; clients rejoin) and into the air.
-  var BUILD = '1793191937', updShown = false;
+  var BUILD = '1793192025', updShown = false;
   function checkUpdate() {
     if (BUILD.indexOf('__') === 0 || updShown || location.protocol === 'file:') return;
     fetch('version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
